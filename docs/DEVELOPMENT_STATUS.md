@@ -145,6 +145,14 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - `9bbe7f3d`: tests for case-insensitive matching, retina precedence, path exclusion, corrupt sprites and visual-only archives.
 - **M7 IN PROGRESS:** Only hitcircle and hitcircleoverlay sprites are rendered so far; remaining enumerated assets are parsed but not rendered. Image alignment, tint semantics, @2x pixel density, animated sprites, complete skin.ini settings and real-browser visual parity are OPEN. CI pending for integration and tests.
 
+### M7 visual-skin follow-up (23 October 2026)
+
+- Prior full M7 checkpoint `bc07d7ec` passed both GitHub Actions workflows.
+- `3b7eb6d1`: draw custom cursor sprites from user .osk skins with fallback cursor and press feedback.
+- `43edafb1`: correct cursor press scaling so a 64-unit normalized custom cursor retains its intended size.
+- `e309fe54`: draw custom approach-circle sprites with timing, fade and Hidden mod handling, preserving graphics fallback.
+- **Verification:** new changes pushed to development branch; CI pending. Browser screenshot comparisons, custom cursor animation, skin.ini semantics and remaining slider/spinner sprite support are OPEN. M7 stays IN PROGRESS.
+
 ## Immediate next implementation work
 
 1. **Independent:** finish M3's calibrated HP drain/gain, no-drain-during-breaks and HP-zero failure checks. Maintain explicit stable parity uncertainty until real evidence exists.
