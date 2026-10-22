@@ -2,6 +2,8 @@
 
 Updated: 22 October 2026. The 12-milestone specification in `osu-render-chatgpt-prompt.md` is the acceptance contract. This checklist reflects **verified features**, not the existence of scaffolding or partial code.
 
+**Estimated project completion: ~25% by remaining engineering effort (rough planning judgement, not a measured or verified completion metric).** Large unresolved deliverables include exact real-replay parity, complete HP/score, hitsounds/audio, skins, video export and deployment acceptance. Only individual rows marked PASS have satisfied their named criteria.
+
 ## Milestone acceptance checklist
 
 | Milestone | Status | Verification and outstanding work |
@@ -16,7 +18,7 @@ Updated: 22 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 | M8 Player page | **IN PROGRESS** | Basic browsing, replay loading and controls exist. Settings, timeline enhancements, loading retries and mobile acceptance remain. |
 | M9 MP4 export | **OPEN** | No WebCodecs/offline audio export yet. |
 | M10 Lazer | **OPEN** | Legacy/stable only; lazer detection and rule set remain. |
-| M11 Hardening | **IN PROGRESS** | Added ZIP central-directory resource/path checks, CRC32, bounded replay frames, and streaming byte limits for .osz, .osr and .osu. Backend now checks a mirror ZIP's central directory before returning/caching it and tries later mirrors when corrupt. Negative-case tests pass; R2, a stateful mirror breaker, deeper decompression limits, security review and production load tests remain. |
+| M11 Hardening | **IN PROGRESS** | Added ZIP central-directory resource/path checks, CRC32, bounded replay frames, and streaming byte limits for .osz, .osr and .osu. Backend now checks a mirror ZIP's central directory and that it contains a .osu difficulty before returning/caching it; corrupt or irrelevant ZIPs trigger the next mirror. Negative-case tests pass; R2, a stateful mirror breaker, deeper decompression limits, security review and production load tests remain. |
 | M12 One Miss Merchants links | **OPEN** | Parameterized integration and INTEGRATION.md remain. |
 
 ## Verified recent commits
@@ -44,6 +46,7 @@ Updated: 22 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 - `6e47153`: added `npm run judge-check:strict`. It must check at least one real stable replay and fails otherwise; the ordinary `npm run judge-check` remains CI-friendly for missing optional fixtures.
 - `b45c27c`: completed 8 MiB streamed limits for .osu-only fallback text on browser and worker, with valid-text and oversized-input tests.
 - `26bf17e`: validate central-directory metadata in fetched mirror ZIPs before accepting response for caching; retry next provider if malformed; Worker-compatible UTF-8 validation. `1242e81` adds comprehensive corrupt-metadata tests. Both GitHub Actions checks passed on `1242e81`; this is only structural envelope validation, not full decompression/CRC/authenticity verification.
+- `1d38c1d`: reject and retry mirror archives with zero `.osu` difficulties. `5e35961` tests actual fallback behaviour, `b0b32d5` adds a negative envelope test. Both CI runs passed on the implementation commit. No claim of cryptographic authenticity or end-to-end download availability.
 
 GitHub Actions covers Node web+worker tests, TypeScript checks, web build and the ordinary no-fixture judge-check. The latest verified implementation head recorded here is `b45c27ca7d81758f5f3a95b1970740a9b765db14` (GitHub Actions push checks passed; PR check was still in progress when this line was written). This is **not proof of human-replay parity, browser audio quality, Windows EXE correctness or complete security**.
 
