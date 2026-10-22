@@ -46,6 +46,8 @@ interface Display {
   decor?: Graphics;
   ball?: Graphics;
   follow?: Graphics;
+  skinBall?: Sprite;
+  skinFollow?: Sprite;
   // spinners
   spinnerDisc?: Graphics;
   spinnerRing?: Graphics;
@@ -331,11 +333,28 @@ export class PlayfieldRenderer {
       d.ball.circle(0, 0, r * 0.8).fill({ color: o.comboColor }).stroke({ width: r * 0.12, color: 0xffffff });
       d.follow.visible = false;
       d.ball.visible = false;
+      if (this.skinTextures.sliderb) {
+        d.skinBall = new Sprite(this.skinTextures.sliderb);
+        d.skinBall.anchor.set(0.5);
+        d.skinBall.width = d.skinBall.height = r * 2;
+        d.skinBall.tint = o.comboColor;
+        d.skinBall.visible = false;
+      }
+      if (this.skinTextures.sliderfollowcircle) {
+        d.skinFollow = new Sprite(this.skinTextures.sliderfollowcircle);
+        d.skinFollow.anchor.set(0.5);
+        d.skinFollow.width = d.skinFollow.height = r * 4.8;
+        d.skinFollow.visible = false;
+      }
       root.addChild(d.body, d.decor);
     }
     d.head = this.makeCircle(o);
     root.addChild(d.head.root);
-    if (d.ball && d.follow) root.addChild(d.follow, d.ball);
+    if (d.ball && d.follow) {
+      root.addChild(d.follow, d.ball);
+      if (d.skinFollow) root.addChild(d.skinFollow);
+      if (d.skinBall) root.addChild(d.skinBall);
+    }
     d.approach = new Graphics();
     d.approach.circle(0, 0, r).stroke({ width: r * 0.08, color: o.comboColor });
     d.approach.position.set(o.x, o.y);
@@ -449,15 +468,20 @@ export class PlayfieldRenderer {
 
     // Ball and follow circle while the slider is running.
     const running = t >= s.start && t <= s.end;
-    d.ball!.visible = running;
+    d.ball!.visible = running && !d.skinBall;
+    if (d.skinBall) d.skinBall.visible = running;
     if (running) {
       const b = sliderBallAt(s, t);
       d.ball!.position.set(b.x, b.y);
       d.follow!.position.set(b.x, b.y);
+      if (d.skinBall) d.skinBall.position.set(b.x, b.y);
+      if (d.skinFollow) d.skinFollow.position.set(b.x, b.y);
       const tracking = j.tracking?.some(([a, e]) => t >= a && t <= e) ?? false;
-      d.follow!.visible = tracking;
-    } else if (t > s.end) {
+      d.follow!.visible = tracking && !d.skinFollow;
+      if (d.skinFollow) d.skinFollow.visible = tracking;
+    } else {
       d.follow!.visible = false;
+      if (d.skinFollow) d.skinFollow.visible = false;
     }
   }
 
