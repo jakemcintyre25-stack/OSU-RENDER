@@ -35,6 +35,10 @@ interface TimingSample {
   volume: number;
 }
 const names: Record<number, string> = { 1: 'normal', 2: 'soft', 3: 'drum' };
+const MAX_SAMPLE_FILE_BYTES = 8 * 1024 * 1024;
+const MAX_TOTAL_SAMPLES_BYTES = 64 * 1024 * 1024;
+const MAX_UNIQUE_SAMPLES = 256;
+const MAX_HITSOUND_EVENTS = 50_000;
 
 const int = (value: string | undefined, fallback = 0) => {
   if (value === undefined || value === '') return fallback;
@@ -135,16 +139,31 @@ export function planHitsounds(
     }
     return low ? timing[low - 1] : { t, set: metadataSet, index: 0, volume: 100 };
   };
+  let totalSamplesBytes = 0;
   const scheduleFile = (t: number, file: string, volume: number) => {
+    if (plan.events.length >= MAX_HITSOUND_EVENTS) { plan.unavailable++; return; }
     const resource = lookupSample(file);
-    if (!resource?.bytes) { plan.unavailable++; return; }
-    if (!plan.samples.has(resource.path)) plan.samples.set(resource.path, toBuffer(resource.bytes));
+    if (!resource?.bytes || resource.bytes.byteLength > MAX_SAMPLE_FILE_BYTES) {
+      plan.unavailable++;
+      return;
+    }
+    if (!plan.samples.has(resource.path)) {
+      if (plan.samples.size >= MAX_UNIQUE_SAMPLES ||
+          totalSamplesBytes + resource.bytes.byteLength > MAX_TOTAL_SAMPLES_BYTES) {
+        plan.unavailable++;
+        return;
+      }
+      plan.samples.set(resource.path, toBuffer(resource.bytes));
+      totalSamplesBytes += resource.bytes.byteLength;
+    }
     plan.events.push({ t, sample: resource.path, gain: Math.max(0, Math.min(1, volume / 100)) });
   };
   const scheduleHit = (t: number, bits: number, settings: SampleSettings, normalOverride = 0, addOverride = 0) => {
     const tp = activeSample(t);
-    const normal = normalOverride || settings.normal || tp.set || metadataSet;
-    const addition = addOverride || settings.addition || normal;
+    const normalChoice = normalOverride || settings.normal || tp.set || metadataSet;
+    const normal = names[normalChoice] ? normalChoice : metadataSet;
+    const addChoice = addOverride || settings.addition || normal;
+    const addition = names[addChoice] ? addChoice : normal;
     const sampleIndex = settings.index || tp.index;
     const volume = settings.volume || tp.volume;
     if (settings.filename) {
@@ -194,7 +213,8 @@ export function planHitsounds(
       const part = object.parts[k];
       if (part.kind === 'tick') {
         const tp = activeSample(part.t);
-        const sample = base.normal || tp.set || metadataSet;
+        const choice = base.normal || tp.set || metadataSet;
+        const sample = names[choice] ? choice : metadataSet;
         const suffix = (base.index || tp.index) > 1 ? String(base.index || tp.index) : '';
         scheduleFile(part.t, names[sample] + '-slidertick' + suffix + '.wav', base.volume || tp.volume);
       } else if (part.kind === 'repeat') {
