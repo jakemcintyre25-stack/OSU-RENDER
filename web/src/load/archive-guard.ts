@@ -28,8 +28,10 @@ function fail(message: string): never {
 
 function normalizePath(path: string): string {
   const normalized = path.replace(/\\/g, '/').replace(/^\.\//, '');
+  // ZIP directory entries end in '/'; that one terminal separator is valid.
+  const components = (normalized.endsWith('/') ? normalized.slice(0, -1) : normalized).split('/');
   if (!normalized || normalized.startsWith('/') || /^[a-z]:/i.test(normalized) ||
-      normalized.includes('\0') || normalized.split('/').some((p) => p === '..' || p === '' || p === '.')) {
+      normalized.includes('\0') || components.some((p) => p === '..' || p === '' || p === '.')) {
     return fail('unsafe entry path');
   }
   return normalized.toLowerCase();
