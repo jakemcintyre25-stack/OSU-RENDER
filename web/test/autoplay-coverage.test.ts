@@ -59,9 +59,9 @@ describe('autoplay integration without private fixtures', () => {
 
   it('keeps replay frames chronological when two 2B circles share an exact timestamp', () => {
     const header = osu.slice(0, osu.indexOf('[HitObjects]'));
-    const double = header + '[HitObjects]\\n'
-      + '100,100,1000,1,0,0:0:0:0:\\n'
-      + '200,200,1000,1,0,0:0:0:0:\\n';
+    const double = header + '[HitObjects]\n'
+      + '100,100,1000,1,0,0:0:0:0:\n'
+      + '200,200,1000,1,0,0:0:0:0:\n';
     const map = prepareMap(double);
     const frames = generateAutoplay(map);
     expect(map.objects).toHaveLength(2);
