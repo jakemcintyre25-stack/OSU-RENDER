@@ -117,6 +117,17 @@ describe('M5 beatmap-sourced hitsounds', () => {
     expect(planned.unavailable).toBeGreaterThan(0);
   });
 
+  it('excludes an oversized beatmap sample before allocating a Web Audio copy', () => {
+    const huge = new Uint8Array(8 * 1024 * 1024 + 1);
+    const osz = archive();
+    osz.files.set('folder/custom.wav', huge);
+    const map = prepareMap(chart);
+    const planned = planHitsounds(chart, map, judge(map, generateAutoplay(map)), osz, 'folder/diff.osu');
+    expect(planned.samples.has('folder/custom.wav')).toBe(false);
+    expect(planned.events.some(e => e.sample === 'folder/custom.wav')).toBe(false);
+    expect(planned.unavailable).toBeGreaterThan(0);
+  });
+
   it('does not fabricate an audio plan in bare-.osu fallback mode', () => {
     const map = prepareMap(chart);
     const plan = planHitsounds(chart, map, judge(map, generateAutoplay(map)), null);
