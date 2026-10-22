@@ -17,6 +17,11 @@ describe('mirror ZIP envelope robustness without decompression', () => {
     expect(() => validateMirrorZip(commented)).not.toThrow();
   });
 
+  it('rejects an otherwise valid ZIP with no .osu beatmap difficulty', () => {
+    expect(() => validateMirrorZip(storedZip(undefined, 'cover.jpg')))
+      .toThrow(/missing .*osu|no .*osu/i);
+  });
+
   it('rejects only the ZIP signature without a central directory', () => {
     expect(() => validateMirrorZip(new Uint8Array([0x50, 0x4b, 0x03, 0x04])))
       .toThrow(/Invalid ZIP/);
