@@ -69,6 +69,11 @@ describe('M5 beatmap-sourced hitsounds', () => {
     expect(planned.events.every((x) => planned.samples.has(x.sample))).toBe(true);
     expect(planned.samples.get('folder/custom.wav')?.byteLength).toBe(sample.length);
     expect(planned.events.some((x) => x.t === 3000)).toBe(true);
+    const slider = map.objects.find((o) => o.kind === 'slider')!;
+    if (slider.kind !== 'slider') throw new Error('Expected slider');
+    const tail = slider.parts.find((p) => p.kind === 'tail')!;
+    expect(tail.t).toBeLessThan(slider.end); // legacy leniency judgement
+    expect(planned.events.some((x) => x.t === slider.end && x.sample.endsWith('drum-hitclap3.wav'))).toBe(true);
     expect(planned.events.every((x, i, xs) => i === 0 || xs[i - 1].t <= x.t)).toBe(true);
   });
 
