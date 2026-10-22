@@ -33,7 +33,9 @@ export function generateAutoplay(map: PreparedMap): ReplayFrame[] {
 
     if (o.kind === 'circle') {
       push(o.start, target, key);
-      const release = Math.min(o.start + 50, (map.objects[i + 1]?.start ?? Infinity) - 1);
+      // An exactly simultaneous 2B object has no time for a -1ms release.
+      // Release on this timestamp instead of emitting a frame in the past.
+      const release = Math.max(o.start, Math.min(o.start + 50, (map.objects[i + 1]?.start ?? Infinity) - 1));
       push(release, target, 0);
       last = target;
       lastT = release;
