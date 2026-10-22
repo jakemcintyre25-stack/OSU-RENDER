@@ -84,10 +84,11 @@ export class Clock {
 
   pause() {
     if (!this.playing) return;
-    this.startMapTime = this.now() + this.offset;
+    const visualTime = this.now();
+    this.startMapTime = visualTime + this.offset;
     this.stopSource();
-    this.hitsounds.reset(this.now());
     this.playing = false;
+    this.hitsounds.reset(visualTime);
   }
 
   seek(mapTime: number) {
