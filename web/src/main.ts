@@ -1,6 +1,7 @@
 import './style.css';
 import { getRecent, getReplayFile, getBeatmapset, getOsuFile, lookupBeatmap, type RecentPlay } from './api';
 import { openOsz, type OszArchive } from './load/osz';
+import { assertLocalUploadSize } from './load/upload-limits';
 import { decodeReplay } from './load/replay';
 import { sessionFromReplay, sessionFromAutoplay, type Session } from './session';
 import { PlayfieldRenderer } from './render/renderer';
@@ -153,6 +154,7 @@ function wireDrop(dropId: string, inputId: string, onFile: (f: File) => void) {
 wireDrop('osr-drop', 'osr-input', async (file) => {
   try {
     loading('Reading replay…');
+    assertLocalUploadSize('osr', file.size);
     const bytes = new Uint8Array(await file.arrayBuffer());
     const replay = await decodeReplay(bytes);
     if (!replay.beatmapMD5) throw new Error('This replay has no beatmap reference');
@@ -187,6 +189,7 @@ const MOD_CHOICES = ['EZ', 'HR', 'HD', 'DT', 'NC', 'HT'];
 wireDrop('osk-drop', 'osk-input', async (file) => {
   try {
     loading('Checking skin archive…');
+    assertLocalUploadSize('osk', file.size);
     const archive = openOsz(new Uint8Array(await file.arrayBuffer()));
     const usable = [...archive.files.keys()].filter((name) =>
       /^(normal|soft|drum)-hit(?:normal|whistle|finish|clap)(?:[0-9]+)?\.(wav|mp3|ogg)$/i.test(name));
@@ -205,6 +208,7 @@ wireDrop('osk-drop', 'osk-input', async (file) => {
 wireDrop('osz-drop', 'osz-input', async (file) => {
   try {
     loading('Unpacking beatmap…');
+    assertLocalUploadSize('osz', file.size);
     localOsz = openOsz(new Uint8Array(await file.arrayBuffer()));
     loading(null);
     const std = localOsz.difficulties.filter((d) => d.mode === 0);
