@@ -185,6 +185,16 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - `e03e00b2`: additional BOM, comments, case-insensitive sections, input bounds and animation-count regression tests. CI pending.
 - **M7 IN PROGRESS:** SliderBallFrames is parsed but animated frame sequences are not implemented. No real browser visual parity or MP4 export. Do not mark PASS until CI and acceptance checks complete.
 
+### M9 video capture — independent implementation batch (23 October 2026)
+
+- Deferred real-browser skin screenshot comparisons and unavailable private osu!stable fixtures; no parity claims.
+- Fixed broken M7 BOM fixture and excessive-compression-ratio test interaction (`e9ae91b2`, `7b136cdf`), without weakening archive security checks.
+- `4bce4659`: browser MediaRecorder WebM capture with supported codec negotiation, 30 fps, 60-second duration limit, 256 MiB memory ceiling, explicit cancellation and safe filenames.
+- `05ebabea`, `425b25da`: player button and capture/download lifecycle; records the existing Pixi canvas and cancels on navigation. Video-only by design, **not MP4** and no synchronized audio.
+- `55a1be86`, `90513f5c`: capture boundary and filename tests, plus syntax correction.
+- `f8d84e55`: auto-save the recording at 59 seconds, before the hard 60-second safety stop.
+- **M9 IN PROGRESS:** CI on final batch pending. Browser encoder acceptance, synchronized audio, deterministic fixed-FPS offline rendering, full replay export, MP4 container/codec and download-quality tests are OPEN. This is a limited video-only capture, not a completed export milestone.
+
 ## Immediate next implementation work
 
 1. **Independent:** finish M3's calibrated HP drain/gain, no-drain-during-breaks and HP-zero failure checks. Maintain explicit stable parity uncertainty until real evidence exists.
