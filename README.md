@@ -31,6 +31,8 @@ npm run dev:worker      # API on http://localhost:8787 (needs worker/.dev.vars, 
 
 The `.osz` autoplay preview works with only `npm run dev` — no API needed.
 
+For custom hitsounds, drop a rights-cleared `.osk` file in **Optional skin hitsounds** on the homepage before opening a replay. Only the skin's WAV/MP3/OGG hitnormal/whistle/finish/clap samples and `LayeredHitSounds` setting are used; skin images/sprites, default bundled sounds and persistence are not implemented. Beatmap-provided samples take priority, and an uploaded skin is kept in browser memory for the current page session only. Oversized local uploads are rejected before reading their bytes.
+
 ### osu! API credentials
 
 Create an OAuth application at https://osu.ppy.sh/home/account/edit (any callback URL; it isn't used), then:
@@ -54,7 +56,7 @@ Done:
 
 - Worker: recent plays, replay download, beatmap mirrors with fallback, checksum lookup, edge caching, rate limit
 - Map prep: mods (EZ/HR/HD/DT/NC/HT), stacking, slider paths, ticks/repeats, combo colours
-- Playback: music-synced clock, seek, background + dim, volume
+- Playback: music-synced clock, seek, background + dim, volume, persisted sync offset, song-outro-aware timeline; beatmap-provided circle/slider/spinner-end hitsounds decoded/scheduled using Web Audio
 - Drawing: hit circles, approach circles, snaking slider bodies, reverse arrows, ticks, slider ball + follow circle, spinners, HD fades, cursor + trail, key overlay, combo/accuracy, 100/50/miss popups, miss markers on the timeline
 - Judgement v0: hit windows, note-lock, slider tracking, spinners, combo. Compared against the replay's own counts in the ⓘ panel
 - Autoplay generator (used for map preview and tests — judges 100% on the test map)
@@ -62,7 +64,7 @@ Done:
 Next (see the build plan):
 
 - Judgement to exact stable parity (slider leniency, 2B, spinner rpm, score V1, HP)
-- Hitsounds, DT/HT pitch-preserving time-stretch
+- Finish default/user skin graphics, continuous slider and spinner sounds, and pitch-preserving DT/HT time stretch; current hitsounds support real beatmap-provided samples plus optional user-selected .osk audio fallback
 - Default skin sprites + custom `.osk` skins, follow points, hit lighting
 - MP4 export with WebCodecs
 - Lazer score rules
@@ -74,6 +76,10 @@ No licence has been chosen for this code yet. Dependencies `osu-parsers`, `osu-c
 
 
 ## Judgement parity checks (M1)
+
+`npm run judge-check:strict` is the **real osu!stable parity acceptance command**; it exits nonzero if no compatible replay/map fixtures were checked. The ordinary `npm run judge-check` intentionally prints setup instructions and succeeds without fixtures in CI. Do not mistake that for proven replay parity.
+
+
 
 `npm run judge-check` compares each local legacy osu!standard replay's judgement results with the counts and maximum combo in its `.osr` header. The check looks for `fixtures/replays/*.osr` and the exact-MD5-matching `.osu` difficulty inside `fixtures/maps/*.osz`. Output includes a row for each replay, our counts versus the header, and a failure exit status on any discrepancy. Once Score V1 exists, the same table will also compare total score.
 
