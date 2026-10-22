@@ -67,7 +67,7 @@ function sampleSettings(value: string | undefined): SampleSettings {
 
 /**
  * Build actual sample events for circles and slider heads, repeats, tails and
- * ticks. Spinner spin/bonus, skin default samples and continuous slider
+ * ticks and spinner end hits. Spinner spin/bonus, skin default samples and continuous slider
  * sliding loops are explicitly not implemented here.
  *
  * Every event references a beatmap-archive file that exists. Object order and
@@ -194,8 +194,13 @@ export function planHitsounds(
     if (!Number.isFinite(parsedTime) || object.kind !== kind || Math.abs(parsedTime - object.start) > 0.001) {
       throw new Error('Hitsound preparation failed: prepared object differs from its .osu definition');
     }
-    if (kind === 'spinner') continue;
     const bits = int(row[4]);
+    if (kind === 'spinner') {
+      // osu!stable allows a spinner to carry a normal + addition hitsound
+      // at its end. Do not sound an unsuccessful spinner completion.
+      if (judged.result > 0) scheduleHit(object.end, bits, sampleSettings(row[6]));
+      continue;
+    }
     if (kind === 'circle') {
       if (judged.hitTime !== null) scheduleHit(judged.hitTime, bits, sampleSettings(row[5]), 0, 0, object.start);
       continue;
