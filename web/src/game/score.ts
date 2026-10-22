@@ -40,8 +40,8 @@ export function spinnerSpinPoints(spins: number, required: number): number {
   return Math.min(n, required) * 100 + Math.max(0, n - required) * 1100;
 }
 
-/** Flat slider part points (not multiplied). Heads carry no points of their own. */
+/** Flat stable slider-part points (not multiplied): 10 for a tick, 30 for head/repeat/tail. */
 export function sliderPartPoints(kind: 'head' | 'tick' | 'repeat' | 'tail'): number {
-  if (kind === 'head') return 0;
+  if (kind === 'head') return 30;
   return kind === 'tick' ? 10 : 30;
 }
