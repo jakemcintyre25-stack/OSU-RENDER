@@ -47,6 +47,47 @@ describe('M3 real judgement to explicitly calibrated HP timeline', () => {
     expect(trace.snapshots[0]).toEqual({ t: 650, hp: 100 });
     expect(trace.snapshots[1]).toEqual({ t: 650, hp: 90 });
   });
+  it('adds separately calibrated slider head, tick and tail HP changes from real judgements', () => {
+    const sliderMap: PreparedMap = {
+      ...map,
+      breaks: [],
+      firstObjectTime: 1000,
+      lastObjectTime: 1100,
+      objects: [{
+        index: 0, kind: 'slider', start: 1000, end: 1100, x: 100, y: 100,
+        comboNumber: 1, comboColor: 0xffffff, newCombo: true,
+        spans: 1, spanDuration: 100,
+        path: [{ x: 100, y: 100 }, { x: 200, y: 100 }],
+        parts: [
+          { t: 1050, x: 150, y: 100, kind: 'tick', span: 0 },
+          { t: 1090, x: 190, y: 100, kind: 'tail', span: 0 },
+        ],
+        pointAt(progress) { return { x: 100 + progress * 100, y: 100 }; },
+      }],
+    };
+    const frames: ReplayFrame[] = [
+      { t: 990, x: 100, y: 100, keys: 0 },
+      { t: 1000, x: 100, y: 100, keys: KEY.M1 },
+      { t: 1050, x: 150, y: 100, keys: KEY.M1 },
+      { t: 1060, x: 160, y: 100, keys: 0 },
+      { t: 1090, x: 190, y: 100, keys: 0 },
+      { t: 1100, x: 200, y: 100, keys: 0 },
+    ];
+    const judged = judge(sliderMap, frames);
+    expect(judged.objects[0].parts).toEqual([true, false]);
+    const nested = {
+      sliderHeadHit: 3, sliderHeadMiss: -3,
+      sliderTickHit: 5, sliderTickMiss: -5,
+      sliderRepeatHit: 7, sliderRepeatMiss: -7,
+      sliderTailHit: 11, sliderTailMiss: -11,
+    };
+    const trace = hpFromJudgement(sliderMap, judged,
+      { initial: 50, maximum: 100, drainPerMs: 0 }, { 0: 0, 50: 0, 100: 0, 300: 0 }, nested);
+    expect(trace.snapshots.at(-1)?.hp).toBe(47);
+    expect(trace.snapshots.some(s => s.t === 1050 && s.hp === 58)).toBe(true);
+    expect(() => hpFromJudgement(sliderMap, judged, calibration, gains,
+      { ...nested, sliderTailMiss: NaN })).toThrow(RangeError);
+  });
   it('rejects missing or invalid result gain calibration', () => {
     const result = judge(map, []);
     expect(() => hpFromJudgement(map, result, calibration, { ...gains, 300: NaN })).toThrow(RangeError);
