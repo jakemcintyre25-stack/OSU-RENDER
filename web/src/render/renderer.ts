@@ -7,7 +7,7 @@ import { scoreHudLabel } from './hud-score';
 import { cursorAt, KEY, type ReplayFrame } from '../load/replay';
 import { playfieldLayout, type PlayfieldLayout } from './layout';
 import { VisibleObjectIndex } from './visible-index';
-import type { VisualSkinKey } from './skin-visuals';
+import type { VisualSkinKey, VisualSkinConfig } from './skin-visuals';
 
 const HIT_FADE = 240; // ms for a hit circle to expand and fade after being hit
 const MISS_FADE = 120;
@@ -86,6 +86,10 @@ export class PlayfieldRenderer {
   private layout: PlayfieldLayout = { scale: 1, x: 0, y: 0 };
   private map: PreparedMap | null = null;
   private skinTextures: Partial<Record<VisualSkinKey, Texture>> = {};
+  private skinConfig: VisualSkinConfig = {
+    cursorRotate: true, cursorExpand: true, cursorCentre: true,
+    sliderBallFlip: true, sliderBallFrames: 1,
+  };
   private visibility: VisibleObjectIndex | null = null;
   private judgement: Judgement | null = null;
   private frames: ReplayFrame[] = [];
@@ -121,7 +125,8 @@ export class PlayfieldRenderer {
     this.relayout();
   }
 
-  setSkinVisuals(images: Partial<Record<VisualSkinKey, ImageBitmap | HTMLImageElement>>) {
+  setSkinVisuals(images: Partial<Record<VisualSkinKey, ImageBitmap | HTMLImageElement>>, config?: VisualSkinConfig) {
+    this.skinConfig = config ?? { cursorRotate: true, cursorExpand: true, cursorCentre: true, sliderBallFlip: true, sliderBallFrames: 1 };
     this.skinTextures = {};
     for (const [name, image] of Object.entries(images)) {
       this.skinTextures[name as VisualSkinKey] = Texture.from(image);
@@ -659,7 +664,8 @@ export class PlayfieldRenderer {
     const pressed = (c.keys & (KEY.M1 | KEY.M2)) !== 0;
     if (this.cursorSprite.visible) {
       this.cursorSprite.position.set(c.x, c.y);
-      const factor = pressed ? 1.12 : 1;
+      this.cursorSprite.rotation = this.skinConfig.cursorRotate ? Math.atan2(c.y - 192, c.x - 256) : 0;
+      const factor = pressed && this.skinConfig.cursorExpand ? 1.12 : 1;
       this.cursorSprite.scale.set(this.cursorBaseScale.x * factor, this.cursorBaseScale.y * factor);
     } else {
       g.circle(c.x, c.y, pressed ? 11 : 9.5).fill({ color: 0xffe08a, alpha: 0.95 }).stroke({ width: 2, color: 0xffffff });
