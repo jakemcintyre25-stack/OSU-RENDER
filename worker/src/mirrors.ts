@@ -11,6 +11,7 @@ export const MIRRORS: { name: string; url: (setId: string) => string }[] = [
 
 const ZIP_MAGIC = [0x50, 0x4b, 0x03, 0x04];
 const MAX_OSZ_BYTES = 150 * 1024 * 1024;
+const MAX_OSU_TEXT_BYTES = 8 * 1024 * 1024;
 
 /**
  * Bound a mirror download while consuming the stream. Content-Length alone is
@@ -91,7 +92,7 @@ export async function fetchBeatmapset(setId: string, fetchImpl: typeof fetch = f
 export async function fetchOsuFile(beatmapId: string, fetchImpl: typeof fetch = fetch): Promise<string> {
   const res = await fetchImpl(`https://osu.ppy.sh/osu/${beatmapId}`, { signal: AbortSignal.timeout(15000) });
   if (!res.ok) throw new HttpError(res.status === 404 ? 404 : 502, 'Could not download the .osu file');
-  const text = await res.text();
+  const text = new TextDecoder().decode(new Uint8Array(await readBoundedResponse(res, MAX_OSU_TEXT_BYTES)));
   if (!text.startsWith('osu file format')) throw new HttpError(404, 'osu! returned no beatmap for that ID');
   return text;
 }
