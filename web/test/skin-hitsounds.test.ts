@@ -85,6 +85,31 @@ describe('M5/M7 user-supplied .osk sample lookup', () => {
     ]);
   });
 
+  it('prefers indexed beatmap MP3 files to unindexed skin WAV, then fills missing layers', () => {
+    const map = mapArchive({
+      'map/normal-hitnormal3.mp3': audio,
+      'map/normal-hitwhistle3.ogg': audio,
+    });
+    const planned = plan(map, skinArchive());
+    expect(planned.events.map(e => e.sample)).toEqual([
+      'map/normal-hitnormal3.mp3',
+      'map/normal-hitwhistle3.ogg',
+    ]);
+    expect(planned.unavailable).toBe(0);
+  });
+
+  it('still uses the exact custom filename and never substitutes another audio format', () => {
+    const custom = chart.replace('0:0:0:0:', '0:0:0:0:custom.wav');
+    const osz = mapArchive({ 'map/custom.mp3': audio });
+    const prepared = prepareMap(custom);
+    const planned = planHitsounds(
+      custom, prepared, judge(prepared, generateAutoplay(prepared)),
+      osz, 'map/diff.osu', skinArchive({ 'custom.wav': audio }),
+    );
+    expect(planned.events).toEqual([]);
+    expect(planned.unavailable).toBe(1);
+  });
+
   it('does not look up explicitly named custom beatmap files in the skin', () => {
     const custom = chart.replace('0:0:0:0:', '0:0:0:0:special.wav');
     const map = prepareMap(custom);
