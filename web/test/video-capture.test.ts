@@ -12,7 +12,7 @@ describe('M9 browser video capture', () => {
     expect(MAX_CAPTURE_BYTES).toBe(256 * 1024 * 1024);
     expect(safeCaptureFilename('../x:<danger>?')).toBe('osu-replay-x-danger.webm');
     expect(safeCaptureFilename('***')).toBe('osu-replay-player.webm');
-    expect(safeCaptureFilename('A'.repeat(100)).toBe(`osu-replay-${'A'.repeat(48)}.webm`);
+    expect(safeCaptureFilename('A'.repeat(100))).toBe(`osu-replay-${'A'.repeat(48)}.webm`);
   });
   it('rejects invalid framerates before touching browser APIs', () => {
     const capture = new ReplayVideoCapture();
