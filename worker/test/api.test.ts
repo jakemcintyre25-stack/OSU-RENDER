@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import worker from '../src/index';
 import { resetTokenCache, toRecentPlay } from '../src/osu';
 import { fetchBeatmapset, fetchOsuFile, readBoundedResponse } from '../src/mirrors';
+import { resetMirrorHealth } from '../src/mirror-health';
 import { storedZip } from './zip-fixture';
 
 const env = { OSU_CLIENT_ID: '1', OSU_CLIENT_SECRET: 's', ASSETS: { fetch: async () => new Response('asset') } } as never;
@@ -39,6 +40,7 @@ const newFormatScore = {
 
 beforeEach(() => {
   resetTokenCache();
+  resetMirrorHealth();
   vi.unstubAllGlobals();
 });
 
