@@ -302,9 +302,11 @@ function buildEvents(map: PreparedMap, objects: ObjectJudgement[], w50: number):
       else raw.push({ t: Math.min(o.start + w50, o.end), kind: 'break' });
       o.parts.forEach((p, k) => {
         const got = j.parts?.[k];
-        // A missed tick, repeat or tail only lowers the slider's result (stable does not break combo
-        // on slider-part misses). Only a missed head or a whole-slider miss resets combo.
+        // stable: a missed tick or repeat is a slider break even when the overall
+        // slider judgement is 100/50 rather than MISS. A missed tail reduces
+        // accuracy but does NOT break combo. Its true event time is p.t.
         if (got) raw.push({ t: p.t, kind: 'combo+', flat: sliderPartPoints(p.kind) });
+        else if (p.kind !== 'tail') raw.push({ t: p.t, kind: 'break' });
       });
       raw.push({ t: j.resultTime, kind: 'result', result: j.result, x: o.parts.at(-1)?.x ?? o.x, y: o.parts.at(-1)?.y ?? o.y, slider: true });
     } else if (o.kind === 'spinner') {
