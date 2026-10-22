@@ -5,6 +5,7 @@
 import { BeatmapDecoder } from 'osu-parsers';
 import { StandardRuleset, Circle, Slider, Spinner, SliderTick, SliderRepeat, SliderTail } from 'osu-standard-stable';
 import { difficultyMultiplier } from './score';
+import { parseAudioLeadIn } from '../audio/lead-in';
 
 export interface Vec {
   x: number;
@@ -69,6 +70,8 @@ export interface PreparedMap {
   objects: HitObj[];
   comboColors: number[];
   audioFile: string | null;
+  /** Explicit silence preceding the audio timeline, from [General] AudioLeadIn. */
+  audioLeadIn: number;
   backgroundFile: string | null;
   breaks: { start: number; end: number }[];
   /** Map time at which the first object appears; playback starts a little before this. */
@@ -187,6 +190,7 @@ export function prepareMap(osuText: string, mods: string[] = []): PreparedMap {
     objects,
     comboColors,
     audioFile: parsed.general.audioFilename || null,
+    audioLeadIn: parseAudioLeadIn(osuText),
     backgroundFile: parsed.events.backgroundPath || null,
     breaks: (parsed.events.breaks ?? []).map((b) => ({ start: b.startTime, end: b.endTime })),
     firstObjectTime: objects[0]?.start ?? 0,
