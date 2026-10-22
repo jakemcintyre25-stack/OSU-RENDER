@@ -89,4 +89,34 @@ describe('M3 special-mod failure timeline', () => {
     expect(sd.failTime).toBeNull();
     expect(pf.failTime).toBe(1100);
   });
+  it('Sudden Death fails at a missed repeat nested-object timestamp', () => {
+    const object = slider();
+    object.parts[0].kind = 'repeat';
+    const judged = judge(base(['SD'], [object]), sliderFrames(true));
+    expect(judged.objects[0].parts).toEqual([false, true]);
+    expect(judged.failTime).toBe(1050);
+  });
+
+  it('Sudden Death fails on an unsuccessful spinner at its end time', () => {
+    const object = {
+      index: 0, kind: 'spinner' as const, start: 1000, end: 2500,
+      x: 256, y: 192, comboNumber: 1, comboColor: 0xffffff,
+      newCombo: true, spinsRequired: 4,
+    };
+    const judged = judge(base(['SD'], [object]), []);
+    expect(judged.objects[0].result).toBe(0);
+    expect(judged.failTime).toBe(2500);
+  });
+
+  it('an explicit early slider-head miss causes immediate SD failure', () => {
+    const frames: ReplayFrame[] = [
+      { t: 640, x: 100, y: 100, keys: 0 },
+      { t: 650, x: 100, y: 100, keys: KEY.M1 },
+      { t: 660, x: 100, y: 100, keys: 0 },
+    ];
+    const judged = judge(base(['SD'], [slider()]), frames);
+    expect(judged.objects[0].headMissTime).toBe(650);
+    expect(judged.failTime).toBe(650);
+  });
+
 });
