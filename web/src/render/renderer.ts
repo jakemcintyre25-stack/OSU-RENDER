@@ -37,6 +37,7 @@ interface Display {
   root: Container;
   head?: CircleParts;
   approach?: Graphics;
+  skinApproach?: Sprite;
   // sliders
   body?: Graphics;
   bodyAlpha?: AlphaFilter;
@@ -339,11 +340,21 @@ export class PlayfieldRenderer {
     d.approach.circle(0, 0, r).stroke({ width: r * 0.08, color: o.comboColor });
     d.approach.position.set(o.x, o.y);
     this.approachLayer.addChild(d.approach);
+    if (this.skinTextures.approachcircle) {
+      d.skinApproach = new Sprite(this.skinTextures.approachcircle);
+      d.skinApproach.anchor.set(0.5);
+      d.skinApproach.width = d.skinApproach.height = r * 2;
+      d.skinApproach.tint = o.comboColor;
+      d.skinApproach.position.set(o.x, o.y);
+      d.approach.visible = false;
+      this.approachLayer.addChild(d.skinApproach);
+    }
     return d;
   }
 
   private destroyDisplay(d: Display) {
     d.approach?.destroy();
+    d.skinApproach?.destroy();
     d.root.destroy({ children: true });
   }
 
@@ -380,11 +391,18 @@ export class PlayfieldRenderer {
     if (d.approach) {
       const showApproach = !map.hidden || o.index === 0;
       const until = j.hitTime ?? o.start;
-      d.approach.visible = showApproach && t < until;
-      if (d.approach.visible) {
+      const visible = showApproach && t < until;
+      d.approach.visible = visible && !d.skinApproach;
+      if (d.skinApproach) d.skinApproach.visible = visible;
+      if (visible) {
         const p = clamp01((t - appear) / map.preempt);
-        d.approach.scale.set(4 - 3 * p);
+        const factor = 4 - 3 * p;
+        d.approach.scale.set(factor);
         d.approach.alpha = 0.9 * clamp01((t - appear) / Math.min(map.fadeIn * 2, map.preempt));
+        if (d.skinApproach) {
+          d.skinApproach.width = d.skinApproach.height = map.radius * 2 * factor;
+          d.skinApproach.alpha = d.approach.alpha;
+        }
       }
     }
 
