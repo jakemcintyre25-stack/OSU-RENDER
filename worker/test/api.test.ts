@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import worker from '../src/index';
 import { resetTokenCache, toRecentPlay } from '../src/osu';
-import { fetchBeatmapset } from '../src/mirrors';
+import { fetchBeatmapset, readBoundedResponse } from '../src/mirrors';
 
 const env = { OSU_CLIENT_ID: '1', OSU_CLIENT_SECRET: 's', ASSETS: { fetch: async () => new Response('asset') } } as never;
 const ctx = { waitUntil() {}, passThroughOnException() {} } as never;
@@ -110,6 +110,38 @@ describe('replays', () => {
   it('rejects non-numeric IDs', async () => {
     mockFetch([]);
     expect((await call('/api/scores/abc/replay')).status).toBe(400);
+  });
+});
+
+describe('bounded mirror download streaming', () => {
+  it('rejects an oversized declared body without buffering it', async () => {
+    const response = new Response(new Uint8Array([1, 2]), {
+      headers: { 'Content-Length': '100' },
+    });
+    await expect(readBoundedResponse(response, 5)).rejects.toThrow(/too large/i);
+  });
+
+  it('stops a stream that grows beyond the limit without trusting Content-Length', async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2, 3]));
+        controller.enqueue(new Uint8Array([4, 5, 6]));
+        controller.close();
+      },
+    });
+    await expect(readBoundedResponse(new Response(stream), 5)).rejects.toThrow(/too large/i);
+  });
+
+  it('assembles a bounded stream byte-for-byte', async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([0x50, 0x4b]));
+        controller.enqueue(new Uint8Array([3, 4]));
+        controller.close();
+      },
+    });
+    expect([...new Uint8Array(await readBoundedResponse(new Response(stream), 4))])
+      .toEqual([0x50, 0x4b, 3, 4]);
   });
 });
 
