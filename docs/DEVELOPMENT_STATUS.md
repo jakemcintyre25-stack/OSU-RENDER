@@ -9,7 +9,7 @@ Updated: 22 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 | M1 Judgement harness | **PASS** | `npm run judge-check`, verbose diagnostics and CI implemented. Empty optional fixtures exit zero. Real replay fixtures stay local. |
 | M2 Stable judgement parity | **IN PROGRESS** | Slider follow/part timestamps, combo breaks, explicit early misses, spinner capped integration, 2B autoplay edge tested. Official strict rounded-error/truncated-OD window edges are implemented, but spinner velocity smoothing, stacked 2B/note-lock edge rules and **all real stable replay-header matches** remain unverified. |
 | M3 HP and fail | **IN PROGRESS** | Verified SD/PF failure timestamps from circle grades and slider-head/tick/repeat combo breaks, with NF precedence. Exact stable HP drain, hit gains, break pauses, HP timeline and HP-zero failure remain. |
-| M4 Score V1 | **IN PROGRESS** | Running ScoreV1, mod multipliers, slider/spinner part scoring implemented. Fixed 30-point slider heads and clamped difficulty multiplier to 2–6. Real header parity remains unverified; older M4 replay comparison values are stale. |
+| M4 Score V1 | **IN PROGRESS** | Running ScoreV1, mod multipliers, slider/spinner part scoring implemented. Fixed 30-point slider heads, clamped difficulty multiplier to 2–6, and normalized NC/DT and DC/HT speed-mod aliases. Real header parity remains unverified; older M4 replay comparison values are stale. |
 | M5 Audio timing and hitsounds | **OPEN** | Base Web Audio master clock exists, but map/user offset, hitsounds and pitch-preserving DT/HT still required. |
 | M6 Default skin and visual parity | **OPEN** | Basic Pixi renderer exists; sprite parity, shader, HUD, FL and effects remain. |
 | M7 Custom skins | **OPEN** | .osk and skin.ini support, IndexedDB and fallbacks remain. |
@@ -29,9 +29,10 @@ Updated: 22 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 - `20d0eca`: prevent backwards replay frames for two simultaneous 2B circles.
 - `9165d17`: clamp ScoreV1 difficulty multiplier to the specified 2–6 range.
 - `6a0bbc5`: replace the fitted 1ms window reduction with stable's officially documented rounded-error, truncated-window and strict-less-than judgement. Synthetic fractional-boundary tests pass.
-- `ba15f41`: expose SD/PF failTime on the event timeline, including missed slider ticks/repeats but not dropped tails; No Fail prevents failures. Six synthetic tests pass.
+- `ba15f41`: expose SD/PF failTime on the event timeline, including missed slider ticks/repeats but not dropped tails; No Fail prevents failures. Additional regression tests verify repeats, spinner misses and early head misses.
+- `e86ec6d`: avoid double score multiplication when speed-mod aliases appear together (NC+DT or DC+HT).
 
-The latest verified GitHub Actions head at the time of this update is `ba15f410d04d526d6033456d20fa34f45a5dbe2f`. Both push and pull-request CI runs passed the normal tests, typecheck, build and empty-fixture judge-check. This does **not** prove real-replay or desktop executable acceptance.
+The latest verified GitHub Actions head at the time of this update is `e86ec6d97178f62f8e9d7a37ce41d967276ddc86`. Both push and pull-request CI runs passed the normal tests, typecheck, build and empty-fixture judge-check. This does **not** prove real-replay or desktop executable acceptance.
 
 ## Immediate next implementation work
 
