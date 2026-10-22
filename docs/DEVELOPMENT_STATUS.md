@@ -177,6 +177,14 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - `e7633264`: regression coverage for boolean values, out-of-section overrides and malformed settings.
 - **M7 IN PROGRESS:** CursorCentre and slider options are parsed but not yet implemented; complete skin.ini parity, real browser sprite comparison and remaining skin assets are OPEN. Latest CI pending.
 
+### M7 CI repair and further skin.ini renderer support (23 October 2026)
+
+- `54c237dd` failed both CI workflows: skin.ini test fixture used literal backslash-n rather than newline escapes; 178 other tests passed, 12 intentionally skipped.
+- `2e96b78a`: repair skin.ini fixture; CI pending.
+- `685fdc45`: apply CursorCentre anchor and SliderBallFlip direction changes in the actual renderer, in addition to CursorRotate and CursorExpand.
+- `e03e00b2`: additional BOM, comments, case-insensitive sections, input bounds and animation-count regression tests. CI pending.
+- **M7 IN PROGRESS:** SliderBallFrames is parsed but animated frame sequences are not implemented. No real browser visual parity or MP4 export. Do not mark PASS until CI and acceptance checks complete.
+
 ## Immediate next implementation work
 
 1. **Independent:** finish M3's calibrated HP drain/gain, no-drain-during-breaks and HP-zero failure checks. Maintain explicit stable parity uncertainty until real evidence exists.
