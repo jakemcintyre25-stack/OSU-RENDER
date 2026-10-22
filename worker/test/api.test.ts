@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import worker from '../src/index';
 import { resetTokenCache, toRecentPlay } from '../src/osu';
 import { fetchBeatmapset, fetchOsuFile, readBoundedResponse } from '../src/mirrors';
+import { storedZip } from './zip-fixture';
 
 const env = { OSU_CLIENT_ID: '1', OSU_CLIENT_SECRET: 's', ASSETS: { fetch: async () => new Response('asset') } } as never;
 const ctx = { waitUntil() {}, passThroughOnException() {} } as never;
@@ -146,7 +147,7 @@ describe('bounded mirror download streaming', () => {
 });
 
 describe('beatmap mirrors', () => {
-  const zip = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 9, 9]);
+  const zip = storedZip();
   it('falls back to the next mirror when one fails or returns HTML', async () => {
     const calls: string[] = [];
     const f = (async (u: string) => {
@@ -158,6 +159,26 @@ describe('beatmap mirrors', () => {
     const out = await fetchBeatmapset('1', f);
     expect(out.mirror).toBe('osu.direct');
     expect(calls).toHaveLength(3);
+  });
+
+  it('falls back from a truncated signature-only response to a valid mirror ZIP', async () => {
+    const attempts: string[] = [];
+    const f = (async (u: string) => {
+      attempts.push(u);
+      if (u.includes('catboy')) return new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04, 9, 9]));
+      return new Response(zip);
+    }) as unknown as typeof fetch;
+    const out = await fetchBeatmapset('1', f);
+    expect(out.mirror).toBe('nerinyan');
+    expect(attempts).toHaveLength(2);
+    expect(new Uint8Array(out.body)).toEqual(zip);
+  });
+
+  it('rejects fake EOCD metadata and retries instead of reporting success', async () => {
+    const corrupted = zip.slice();
+    corrupted[corrupted.length - 6] ^= 0x01; // Central directory start offset in EOCD
+    const f = (async (u: string) => new Response(u.includes('catboy') ? corrupted : zip)) as unknown as typeof fetch;
+    expect((await fetchBeatmapset('1', f)).mirror).toBe('nerinyan');
   });
 
   it('errors with every mirror reason when all fail', async () => {
