@@ -37,13 +37,22 @@ describe('judge-check commands and comparison', () => {
     assert.equal(isLazerFixture('song.osr', { isLazer: true }), true);
   });
 
-  it('includes every object, map timestamp, and slider parts in verbose output', () => {
-    const rows = verboseRows({ objects: [{ kind: 'circle', start: 1040 }, { kind: 'slider', start: 61040 }] }, {
-      objects: [{ result: 300 }, { result: 100, parts: [true, false] }],
+  it('shows object times, slider parts, press offsets and spinner rotations in verbose output', () => {
+    const rows = verboseRows({ objects: [
+      { kind: 'circle', start: 1040 },
+      { kind: 'slider', start: 61040 },
+      { kind: 'spinner', start: 90000, spinsRequired: 8 },
+    ] }, {
+      objects: [
+        { result: 300, hitTime: 1072 },
+        { result: 100, parts: [true, false] },
+        { result: 100, spins: 6.375 },
+      ],
     });
-    assert.equal(rows.length, 2);
-    assert.match(rows[0], /0:01\.040.*circle.*300/);
+    assert.equal(rows.length, 3);
+    assert.match(rows[0], /0:01\.040.*circle.*300.*press=0:01\.072 delta=\+32ms/);
     assert.match(rows[1], /1:01\.040.*slider.*100.*✓×/);
+    assert.match(rows[2], /1:30\.000.*spinner.*100.*spins=6\.38\/8/);
   });
 });
 
