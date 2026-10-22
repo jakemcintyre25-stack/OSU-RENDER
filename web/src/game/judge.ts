@@ -55,9 +55,6 @@ export interface Judgement {
 }
 
 const MISS_WINDOW = 400;
-// PROVISIONAL (M2): 1 ms off the 300 window. Fitted to 10 real replays (see docs/M2-FINDINGS.md).
-// Replace with the exact stable rule once more replays confirm it.
-export const PROVISIONAL_WINDOW300_OFFSET_MS = 1;
 const FOLLOW_SCALE = 2.4;
 const PRESS_MASK = KEY.M1 | KEY.M2; // K1 sets M1 and K2 sets M2 in the replay bitfield
 
@@ -86,10 +83,12 @@ export function findPresses(frames: ReplayFrame[]): Press[] {
 }
 
 function headResult(offset: number, w: ReturnType<typeof hitWindows>): Hit {
-  const a = Math.abs(offset);
-  if (a <= w.w300) return 300;
-  if (a <= w.w100) return 100;
-  if (a <= w.w50) return 50;
+  // stable: round the measured error, truncate each OD window, and use strict <.
+  // At OD5, 49.4ms is a 300, 49.5ms is a 100, 99.5ms is a 50.
+  const a = Math.round(Math.abs(offset));
+  if (a < Math.trunc(w.w300)) return 300;
+  if (a < Math.trunc(w.w100)) return 100;
+  if (a < Math.trunc(w.w50)) return 50;
   return 0;
 }
 
@@ -98,7 +97,7 @@ export interface JudgeOptions {
   windowScale?: number;
   /** Multiplies the circle hit radius for head clicks. Experimental, default 1. */
   radiusScale?: number;
-  /** Milliseconds removed from the 300 window only (after scaling). Experimental, default 0. */
+  /** Optional experimental reduction of the 300 window before truncation, default 0. */
   window300Offset?: number;
   /** Count a click as on a circle if the cursor was within radius on the frame before or after the press. */
   pressPositionFrames?: boolean;
@@ -107,7 +106,7 @@ export interface JudgeOptions {
 export function judge(map: PreparedMap, frames: ReplayFrame[], options: JudgeOptions = {}): Judgement {
   const base = hitWindows(map.od);
   const ws = options.windowScale ?? 1;
-  const off = options.window300Offset ?? PROVISIONAL_WINDOW300_OFFSET_MS;
+  const off = options.window300Offset ?? 0;
   const w = { w300: Math.max(0, base.w300 * ws - off), w100: base.w100 * ws, w50: base.w50 * ws };
   const r = map.radius * (options.radiusScale ?? 1);
   const presses = findPresses(frames);
