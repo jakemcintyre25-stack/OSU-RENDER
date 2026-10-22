@@ -12,6 +12,7 @@ import { playbackEndTime } from './audio/timeline';
 import { initialPlaybackTime } from './audio/lead-in';
 import { PlaybackRequestGate, type PlaybackLease } from './playback-gate';
 import { checkedPlayerSpeed, effectivePlaybackRate } from './audio/speed';
+import { markerReviewTime } from './render/marker-review';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -413,10 +414,19 @@ function buildMarkers(s: Session) {
     ...s.judgement.events
       .filter((e) => e.result === 0 || e.result === 100)
       .map((e) => {
-        const i = document.createElement('i');
-        if (e.result === 100) i.className = 'm100';
-        i.style.left = `${(clamp(e.t, 0, end) / end) * 100}%`;
-        return i;
+        const marker = document.createElement('button');
+        marker.type = 'button';
+        marker.className = e.result === 100 ? 'marker m100' : 'marker miss';
+        marker.style.left = `${(clamp(e.t, 0, end) / end) * 100}%`;
+        const label = `${e.result === 100 ? '100' : 'Miss'} at ${fmt(e.t / s.map.rate)} — review 2 seconds earlier`;
+        marker.title = label;
+        marker.setAttribute('aria-label', label);
+        marker.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (clock && session === s) clock.seek(markerReviewTime(e.t));
+        });
+        return marker;
       }),
   );
 }
