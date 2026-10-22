@@ -7,6 +7,7 @@ import { scoreHudLabel } from './hud-score';
 import { cursorAt, KEY, type ReplayFrame } from '../load/replay';
 import { playfieldLayout, type PlayfieldLayout } from './layout';
 import { VisibleObjectIndex } from './visible-index';
+import type { VisualSkinKey } from './skin-visuals';
 
 const HIT_FADE = 240; // ms for a hit circle to expand and fade after being hit
 const MISS_FADE = 120;
@@ -27,6 +28,8 @@ interface CircleParts {
   root: Container;
   body: Graphics;
   number: Text;
+  skinBody?: Sprite;
+  skinOverlay?: Sprite;
 }
 
 interface Display {
@@ -72,6 +75,7 @@ export class PlayfieldRenderer {
   private judgementTexts = new Map<number, Text>();
   private layout: PlayfieldLayout = { scale: 1, x: 0, y: 0 };
   private map: PreparedMap | null = null;
+  private skinTextures: Partial<Record<VisualSkinKey, Texture>> = {};
   private visibility: VisibleObjectIndex | null = null;
   private judgement: Judgement | null = null;
   private frames: ReplayFrame[] = [];
@@ -96,6 +100,13 @@ export class PlayfieldRenderer {
     this.buildHud();
     this.app.renderer.on('resize', () => this.relayout());
     this.relayout();
+  }
+
+  setSkinVisuals(images: Partial<Record<VisualSkinKey, ImageBitmap | HTMLImageElement>>) {
+    this.skinTextures = {};
+    for (const [name, image] of Object.entries(images)) {
+      this.skinTextures[name as VisualSkinKey] = Texture.from(image);
+    }
   }
 
   setBackground(img: ImageBitmap | HTMLImageElement | null) {
@@ -253,8 +264,26 @@ export class PlayfieldRenderer {
     number.anchor.set(0.5);
     number.resolution = this.textResolution();
     root.addChild(body, number);
+    const bodyTexture = this.skinTextures.hitcircle;
+    const overlayTexture = this.skinTextures.hitcircleoverlay;
+    let skinBody: Sprite | undefined;
+    let skinOverlay: Sprite | undefined;
+    if (bodyTexture) {
+      skinBody = new Sprite(bodyTexture);
+      skinBody.anchor.set(0.5);
+      skinBody.width = skinBody.height = r * 2;
+      skinBody.tint = o.comboColor;
+      root.addChildAt(skinBody, 1);
+      body.visible = false;
+    }
+    if (overlayTexture) {
+      skinOverlay = new Sprite(overlayTexture);
+      skinOverlay.anchor.set(0.5);
+      skinOverlay.width = skinOverlay.height = r * 2;
+      root.addChildAt(skinOverlay, root.children.length - 1);
+    }
     root.position.set(o.x, o.y);
-    return { root, body, number };
+    return { root, body, number, skinBody, skinOverlay };
   }
 
   private createDisplay(o: HitObj): Display {
