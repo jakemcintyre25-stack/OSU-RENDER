@@ -87,6 +87,12 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - **IN PROGRESS:** This is the exact *time-domain* prerequisite for HP simulation; it does **not** supply osu!stable's HP drain coefficients, hit gain, break refill, or HP-zero fail. Those remain OPEN and require reference rules and acceptance.
 - Verification: GitHub Actions checks for `79884e49` pending; do not mark M3 complete on synthetic interval tests alone.
 
+### M3/M4 integration checkpoint (23 October 2026)
+
+- `62e5ba47`: Replace the real beatmap ScoreV1 density calculation's naïve sum of break lengths with the tested union/clipping of actual map breaks. This corrects overlapping/duplicated breaks without changing the existing first-to-last-start convention. Both CI workflows passed on this commit.
+- `e7e63ca3`: Add integration tests that parse actual `.osu` source text with overlapping breaks and compare the resulting difficulty multiplier with a merged equivalent. CI pending at time of entry.
+- **M3 IN PROGRESS:** Break-aware timing is wired into ScoreV1, not yet the HP meter. Reference HP drain/gain and HP-zero failure remain OPEN. **M4 IN PROGRESS:** ScoreV1 density break handling is improved; replay-header parity remains unverified.
+
 ## Immediate next implementation work
 
 1. **Independent:** finish M3's calibrated HP drain/gain, no-drain-during-breaks and HP-zero failure checks. Maintain explicit stable parity uncertainty until real evidence exists.
