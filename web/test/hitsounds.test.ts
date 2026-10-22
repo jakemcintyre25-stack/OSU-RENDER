@@ -5,6 +5,7 @@ import { openOsz } from '../src/load/osz';
 import { prepareMap } from '../src/game/prepare';
 import { generateAutoplay } from '../src/game/autoplay';
 import { judge } from '../src/game/judge';
+import { sessionFromAutoplay } from '../src/session';
 
 const chart = `osu file format v14
 
@@ -46,6 +47,7 @@ const archive = (osuText = chart) => openOsz(zipSync({
   'folder/custom.wav': sample,
   'folder/drum-hitwhistle3.wav': sample,
   'folder/drum-hitclap3.wav': sample,
+  'folder/song.mp3': new Uint8Array([7, 8, 9]),
 }));
 
 describe('M5 beatmap-sourced hitsounds', () => {
@@ -68,6 +70,16 @@ describe('M5 beatmap-sourced hitsounds', () => {
     expect(planned.samples.get('folder/custom.wav')?.byteLength).toBe(sample.length);
     expect(planned.events.some((x) => x.t === 3000)).toBe(true);
     expect(planned.events.every((x, i, xs) => i === 0 || xs[i - 1].t <= x.t)).toBe(true);
+  });
+
+  it('integrates real archive paths through autoplay session preparation', async () => {
+    const osz = archive();
+    const difficulty = osz.difficulties[0];
+    const session = await sessionFromAutoplay(osz, difficulty, []);
+    expect([...new Uint8Array(session.audio!)]).toEqual([7, 8, 9]);
+    expect(session.judgement.counts.c300).toBe(session.map.objects.length);
+    expect(session.hitsounds.events.length).toBeGreaterThan(4);
+    expect(session.hitsounds.samples.has('folder/custom.wav')).toBe(true);
   });
 
   it('silently excludes missing skin/default assets rather than synthesizing sound', () => {
