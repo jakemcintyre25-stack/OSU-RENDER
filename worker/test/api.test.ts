@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import worker from '../src/index';
 import { resetTokenCache, toRecentPlay } from '../src/osu';
-import { fetchBeatmapset, readBoundedResponse } from '../src/mirrors';
+import { fetchBeatmapset, fetchOsuFile, readBoundedResponse } from '../src/mirrors';
 
 const env = { OSU_CLIENT_ID: '1', OSU_CLIENT_SECRET: 's', ASSETS: { fetch: async () => new Response('asset') } } as never;
 const ctx = { waitUntil() {}, passThroughOnException() {} } as never;
@@ -169,6 +169,20 @@ describe('beatmap mirrors', () => {
     mockFetch([[/catboy\.best\/d\/1$/, () => new Response(zip)]]);
     const res = await call('/api/beatmapsets/1/download');
     expect(res.headers.get('X-Mirror')).toBe('catboy');
+  });
+});
+
+describe('bare .osu fallback download safety', () => {
+  it('accepts normal UTF-8 osu map text', async () => {
+    const f = (async () => new Response('osu file format v14\\n[General]\\nMode: 0')) as typeof fetch;
+    expect(await fetchOsuFile('1234', f)).toMatch(/^osu file format v14/);
+  });
+
+  it('rejects oversized declared bare-map downloads before buffering the body', async () => {
+    const f = (async () => new Response('osu file format v14', {
+      headers: { 'content-length': String(9 * 1024 * 1024) },
+    })) as typeof fetch;
+    await expect(fetchOsuFile('1234', f)).rejects.toThrow(/too large/i);
   });
 });
 
