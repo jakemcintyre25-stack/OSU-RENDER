@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { zipSync, strToU8 } from 'fflate';
 import { openOsz } from '../src/load/osz';
-import { visualSkinFiles, decodeVisualSkin } from '../src/render/skin-visuals';
+import { visualSkinFiles, decodeVisualSkin, visualSkinConfig } from '../src/render/skin-visuals';
 
 const png = (n: number) => new Uint8Array([137, 80, 78, 71, n]);
 const skin = (files: Record<string, Uint8Array>) => openOsz(zipSync(files));
@@ -32,6 +32,18 @@ describe('M7 .osk visual skin loading', () => {
     expect(calls).toEqual([1, 2]);
     expect(result.hitcircle).toBeUndefined();
     expect(result.cursor).toBeDefined();
+  });
+  it('parses known skin.ini options and ignores unsupported or malformed values', () => {
+    const archive = skin({ 'skin.ini': strToU8(
+      '[General]\\nCursorRotate: false\\nCursorExpand: 0\\nCursorCentre: true\\nSliderBallFlip: false\\nSliderBallFrames: 12\\n[Colours]\\nCursorRotate: true'
+    ) });
+    expect(visualSkinConfig(archive)).toEqual({
+      cursorRotate: false, cursorExpand: false, cursorCentre: true,
+      sliderBallFlip: false, sliderBallFrames: 12,
+    });
+    const invalid = skin({ 'skin.ini': strToU8('[General]\\nCursorRotate: banana\\nSliderBallFrames: 99999') });
+    expect(visualSkinConfig(invalid).cursorRotate).toBe(true);
+    expect(visualSkinConfig(invalid).sliderBallFrames).toBe(1);
   });
   it('supports visual-only archives with no chart or audio files', () => {
     const archive = skin({ 'hitcircle.png': png(9) });
