@@ -20,6 +20,22 @@ export interface ZipEntryInfo {
   path: string;
   compressedBytes: number;
   inflatedBytes: number;
+  /** Declared ZIP CRC32, checked against the actual uncompressed bytes. */
+  crc32: number;
+}
+
+const CRC32_TABLE = new Uint32Array(256);
+for (let n = 0; n < 256; n++) {
+  let v = n;
+  for (let i = 0; i < 8; i++) v = (v >>> 1) ^ ((v & 1) ? 0xedb88320 : 0);
+  CRC32_TABLE[n] = v >>> 0;
+}
+
+/** ZIP CRC32 is an integrity check, not authentication against a malicious author. */
+export function zipCrc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (const value of bytes) crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ value) & 255];
+  return (crc ^ 0xffffffff) >>> 0;
 }
 
 function fail(message: string): never {
@@ -74,6 +90,7 @@ export function inspectOszArchive(bytes: Uint8Array): ZipEntryInfo[] {
     if (pos + 46 > eocd || u32(pos) !== CENTRAL) fail('corrupt central directory');
     const flags = u16(pos + 8);
     const method = u16(pos + 10);
+    const crc32 = u32(pos + 16);
     const compressed = u32(pos + 20);
     const inflated = u32(pos + 24);
     const nameBytes = u16(pos + 28);
@@ -111,7 +128,7 @@ export function inspectOszArchive(bytes: Uint8Array): ZipEntryInfo[] {
     for (let j = 0; j < nameBytes; j++) {
       if (bytes[localOffset + 30 + j] !== bytes[pos + 46 + j]) fail('local and central names differ');
     }
-    inspected.push({ path, compressedBytes: compressed, inflatedBytes: inflated });
+    inspected.push({ path, compressedBytes: compressed, inflatedBytes: inflated, crc32 });
     pos = next;
   }
   if (pos !== eocd) fail('unexpected central directory trailing data');
