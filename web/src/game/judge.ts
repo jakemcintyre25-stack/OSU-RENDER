@@ -47,6 +47,9 @@ export interface Judgement {
 }
 
 const MISS_WINDOW = 400;
+// PROVISIONAL (M2): 1 ms off the 300 window. Fitted to 10 real replays (see docs/M2-FINDINGS.md).
+// Replace with the exact stable rule once more replays confirm it.
+export const PROVISIONAL_WINDOW300_OFFSET_MS = 1;
 const FOLLOW_SCALE = 2.4;
 const PRESS_MASK = KEY.M1 | KEY.M2; // K1 sets M1 and K2 sets M2 in the replay bitfield
 
@@ -78,9 +81,21 @@ function headResult(offset: number, w: ReturnType<typeof hitWindows>): Hit {
   return 0;
 }
 
-export function judge(map: PreparedMap, frames: ReplayFrame[]): Judgement {
-  const w = hitWindows(map.od);
-  const r = map.radius;
+export interface JudgeOptions {
+  /** Multiplies all three hit windows. Experimental: used by the M2 sweep, default 1. */
+  windowScale?: number;
+  /** Multiplies the circle hit radius for head clicks. Experimental, default 1. */
+  radiusScale?: number;
+  /** Milliseconds removed from the 300 window only (after scaling). Experimental, default 0. */
+  window300Offset?: number;
+}
+
+export function judge(map: PreparedMap, frames: ReplayFrame[], options: JudgeOptions = {}): Judgement {
+  const base = hitWindows(map.od);
+  const ws = options.windowScale ?? 1;
+  const off = options.window300Offset ?? PROVISIONAL_WINDOW300_OFFSET_MS;
+  const w = { w300: Math.max(0, base.w300 * ws - off), w100: base.w100 * ws, w50: base.w50 * ws };
+  const r = map.radius * (options.radiusScale ?? 1);
   const presses = findPresses(frames);
   const objects: ObjectJudgement[] = map.objects.map((o) => ({ result: 0, hitTime: null, resultTime: o.kind === 'circle' ? o.start + w.w50 : o.end }));
   const headDone: boolean[] = map.objects.map((o) => o.kind === 'spinner');
@@ -97,16 +112,22 @@ export function judge(map: PreparedMap, frames: ReplayFrame[]): Judgement {
       }
       first++;
     }
-    if (first >= map.objects.length) break;
-    const o = map.objects[first];
-    const offset = p.t - o.start;
-    if (offset < -MISS_WINDOW) continue; // far too early: ignored
-    if (Math.hypot(p.x - o.x, p.y - o.y) > r) continue; // not on the circle (note-locked objects behind it can't be hit)
-    const res = headResult(offset, w);
-    headDone[first] = true;
-    headHit[first] = res;
-    if (res > 0) objects[first].hitTime = p.t;
-    else objects[first].resultTime = p.t;
+    // A click goes to the earliest still-open object it lands on (inside its radius and window).
+    // A click that lands on nothing is wasted; it does not hit a later object (osu! behaviour).
+    for (let k = first; k < map.objects.length; k++) {
+      const o = map.objects[k];
+      if (o.start - MISS_WINDOW > p.t) break; // later objects can't be reached yet
+      if (headDone[k]) continue;
+      const offset = p.t - o.start;
+      if (offset > w.w50) continue; // too late for this object; it will expire
+      if (Math.hypot(p.x - o.x, p.y - o.y) > r) continue; // click missed this circle's area
+      const res = headResult(offset, w); // early clicks inside MISS_WINDOW count as a miss
+      headDone[k] = true;
+      headHit[k] = res;
+      if (res > 0) objects[k].hitTime = p.t;
+      else objects[k].resultTime = p.t;
+      break;
+    }
   }
   map.objects.forEach((o, i) => {
     if (!headDone[i]) headHit[i] = 0;
@@ -124,7 +145,7 @@ export function judge(map: PreparedMap, frames: ReplayFrame[]): Judgement {
     }
   });
 
-  return buildEvents(map, objects);
+  return buildEvents(map, objects, w.w50);
 }
 
 function judgeSlider(s: SliderObj, j: ObjectJudgement, head: Hit, frames: ReplayFrame[], r: number) {
@@ -184,19 +205,19 @@ function judgeSpinner(s: SpinnerObj, j: ObjectJudgement, frames: ReplayFrame[]) 
   j.resultTime = s.end;
 }
 
-function buildEvents(map: PreparedMap, objects: ObjectJudgement[]): Judgement {
+function buildEvents(map: PreparedMap, objects: ObjectJudgement[], w50: number): Judgement {
   type Raw = { t: number; kind: 'combo+' | 'break' | 'result'; result?: Hit; x?: number; y?: number; slider?: boolean };
   const raw: Raw[] = [];
   map.objects.forEach((o, i) => {
     const j = objects[i];
     if (o.kind === 'slider') {
       if (j.hitTime !== null) raw.push({ t: j.hitTime, kind: 'combo+' });
-      else raw.push({ t: Math.min(o.start + hitWindows(map.od).w50, o.end), kind: 'break' });
+      else raw.push({ t: Math.min(o.start + w50, o.end), kind: 'break' });
       o.parts.forEach((p, k) => {
         const got = j.parts?.[k];
-        // Missing the tail doesn't break combo in stable; missing ticks and repeats does.
+        // A missed tick, repeat or tail only lowers the slider's result (stable does not break combo
+        // on slider-part misses). Only a missed head or a whole-slider miss resets combo.
         if (got) raw.push({ t: p.t, kind: 'combo+' });
-        else if (p.kind !== 'tail') raw.push({ t: p.t, kind: 'break' });
       });
       raw.push({ t: j.resultTime, kind: 'result', result: j.result, x: o.parts.at(-1)?.x ?? o.x, y: o.parts.at(-1)?.y ?? o.y, slider: true });
     } else {
