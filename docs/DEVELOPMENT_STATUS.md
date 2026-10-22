@@ -161,6 +161,13 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - `ee6058c0`: custom cursor-trail sprites are drawn along replay positions, respecting the existing trail toggle. CI pending.
 - **M7 IN PROGRESS:** Full skin.ini interpretation, slider end/reverse arrow graphics, stable sprite alignment, @2x handling beyond size normalization, browser visual comparison and animation remain OPEN. No deployment or main-branch merge.
 
+### M7 reverse-arrow implementation (23 October 2026)
+
+- Prior `2edf4fcf` checkpoint passed both CI workflows.
+- `b2bdff72`: render .osk reverse-arrow sprites at active slider repeat endpoints, rotated to point into the return path; retain vector arrow fallback.
+- `c27b269a`: align custom reverse-arrow alpha with Hidden and slider fades.
+- **Verification:** CI pending on these new changes; no real-browser visual comparison. M7 remains IN PROGRESS. Next: fix any CI failures, add real renderer regression coverage and verify skin.ini and sprite geometry.
+
 ## Immediate next implementation work
 
 1. **Independent:** finish M3's calibrated HP drain/gain, no-drain-during-breaks and HP-zero failure checks. Maintain explicit stable parity uncertainty until real evidence exists.
