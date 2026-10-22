@@ -12,9 +12,9 @@ Updated: 23 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 | M2 Stable judgement parity | **IN PROGRESS** | Strict checksum matching rejects updated beatmaps with unchanged IDs; `.osu`-only fallback labels uncertainty. Strict parity mode fails when no stable replay is checked. Slider timing, combo breaks, hit-window edges and 2B autoplay have synthetic tests; exact real-replay parity, spinner smoothing and complex note-lock remain unverified. |
 | M3 HP and fail | **IN PROGRESS** | Verified SD/PF failure timestamps from circle grades and slider-head/tick/repeat combo breaks, with NF precedence. Exact stable HP drain, hit gains, break pauses, HP timeline and HP-zero failure remain. |
 | M4 Score V1 | **IN PROGRESS** | Running ScoreV1, mod multipliers, slider/spinner part scoring implemented. Fixed 30-point slider heads, clamped difficulty multiplier to 2–6, and normalized NC/DT and DC/HT speed-mod aliases. Real header parity remains unverified; older M4 replay comparison values are stale. |
-| M5 Audio timing and hitsounds | **IN PROGRESS** | Added actual beatmap-asset hitsound metadata resolution, judged circle/slider head/tick/repeat/tail cues, sample decoding and seek-safe Web Audio scheduling; tests cover real synthetic ZIPs and instrumented AudioContext timing. Default/user-skin sounds, slider loops/spinners, acoustic browser checks and pitch-preserving DT/HT remain open. See docs/M5-FINDINGS.md. |
+| M5 Audio timing and hitsounds | **IN PROGRESS** | Implemented beatmap and optional user-supplied .osk layered samples for circles/sliders and spinner completion, bounded decoding and seek-safe Web Audio scheduling. Synthetic ZIP and AudioContext tests pass. Bundled default sounds, continuous slider/spinner loops, acoustic real-browser parity and pitch-preserving DT/HT remain. See docs/M5-FINDINGS.md. |
 | M6 Default skin and visual parity | **OPEN** | Basic Pixi renderer exists; sprite parity, shader, HUD, FL and effects remain. |
-| M7 Custom skins | **OPEN** | .osk and skin.ini support, IndexedDB and fallbacks remain. |
+| M7 Custom skins | **IN PROGRESS** | Users can import an .osk ZIP from the homepage and use its actual WAV/MP3/OGG Normal/Soft/Drum audio files for hitsound fallback. No skin.ini layout, sprite replacement, persistence, visual skin integration, or default bundled sound set yet. |
 | M8 Player page | **IN PROGRESS** | Basic browsing, replay loading and controls exist; audio/visual Sync slider and music-outro-aware seek/end range now tested. Settings, mobile/browser acceptance, loading recovery and richer timeline remain. |
 | M9 MP4 export | **OPEN** | No WebCodecs/offline audio export yet. |
 | M10 Lazer | **OPEN** | Legacy/stable only; lazer detection and rule set remain. |
@@ -52,6 +52,8 @@ Updated: 23 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 - `ed5a847`: cap concurrent sample decoding, reject stale/disposed audio loads, and enforce active voice limits with instrumented AudioContext tests.
 - `77ec204`: keep music outros accessible beyond last hit object in player seek/timing controls.
 - `b9fc495`: verify Clock-to-hitsound node integration with pause/seek cleanup; both tests and typecheck passed on the push CI run (PR workflow acceptance tracked separately). Details and outstanding acoustic/browser acceptance: `docs/M5-FINDINGS.md`.
+- `d056cc7`: actual spinner-completion Normal/Finish/Clap samples conditional on judgement; tests cover success, miss and missing asset.
+- `ae50e1b`: load user .osk through homepage and apply unindexed skin audio in session playback, preserving map-asset priority and explicitly named sample behaviour. CI passed both workflows. `dbc7172` adds the session-level integration test.
 
 GitHub Actions covers Node web+worker tests, TypeScript checks, web build and the ordinary no-fixture judge-check. The latest verified code head recorded here is `b9fc495e547d139e0a2d693951f470795a8ce24f` (GitHub Actions push tests, TypeScript and build passed; see Actions for both push and PR conclusions). This is **not proof of human-replay parity, browser audio quality, Windows EXE correctness or complete security**.
 
