@@ -33,11 +33,15 @@ export function hpFromJudgement(
   for (const result of [0, 50, 100, 300] as const) {
     if (!Number.isFinite(gains[result])) throw new RangeError('Invalid HP result gain');
   }
-  if (nested && Object.values(nested).some(v => !Number.isFinite(v))) {
+  const nestedKeys: (keyof HpNestedGains)[] = [
+    'sliderHeadHit', 'sliderHeadMiss', 'sliderTickHit', 'sliderTickMiss',
+    'sliderRepeatHit', 'sliderRepeatMiss', 'sliderTailHit', 'sliderTailMiss',
+  ];
+  if (nested && nestedKeys.some(key => !Number.isFinite(nested[key]))) {
     throw new RangeError('Invalid nested slider HP gain');
   }
   const deltas = judgement.events
-    .filter((e): e is typeof e & { result: Hit } => e.result !== undefined)
+    .filter((e): e is typeof e & { result: Hit } => e.result !== undefined && !(nested && e.slider))
     .map(e => ({ t: e.t, amount: gains[e.result] }));
   if (nested) {
     for (const [i, obj] of map.objects.entries()) {
