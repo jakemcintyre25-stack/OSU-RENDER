@@ -244,6 +244,7 @@ async function startPlayer(s: Session) {
   }
   clock.rate = s.map.rate;
   clock.volume = Number(($('volume') as HTMLInputElement).value) / 100;
+  clock.offset = Number(($('sync-offset') as HTMLInputElement).value);
   clock.onEnded = () => updatePlayButton();
   if (!renderer) {
     renderer = new PlayfieldRenderer();
@@ -357,6 +358,16 @@ $('volume').addEventListener('input', (e) => {
   if (clock) clock.volume = Number((e.target as HTMLInputElement).value) / 100;
   store.set('volume', (e.target as HTMLInputElement).value);
 });
+const syncOffset = $('sync-offset') as HTMLInputElement;
+const showOffset = () => {
+  const value = Number(syncOffset.value);
+  $('sync-offset-label').textContent = `${value > 0 ? '+' : ''}${value}ms`;
+};
+syncOffset.addEventListener('input', () => {
+  if (clock) clock.offset = Number(syncOffset.value);
+  store.set('sync-offset', syncOffset.value);
+  showOffset();
+});
 
 document.addEventListener('keydown', (e) => {
   if ($('player').hidden || (e.target as HTMLElement).tagName === 'INPUT' && (e.target as HTMLInputElement).type !== 'range') return;
@@ -375,6 +386,12 @@ for (const id of ['dim', 'volume']) {
   const v = store.get(id);
   if (v !== null) ($(id) as HTMLInputElement).value = v;
 }
+const savedOffset = Number(store.get('sync-offset') ?? 0);
+if (Number.isFinite(savedOffset)) {
+  // Clamp legacy/out-of-range saved preferences rather than trusting storage.
+  syncOffset.value = String(Math.max(-250, Math.min(250, Math.round(savedOffset / 5) * 5)));
+}
+showOffset();
 const savedUser = store.get('username');
 if (savedUser) ($('username') as HTMLInputElement).value = savedUser;
 
