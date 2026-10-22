@@ -1,9 +1,12 @@
 // The music is the master clock: every frame asks "what map time is it?" and draws that.
-// With no audio (e.g. the .osu-only fallback), a silent clock runs off performance.now().
+// With no audio (e.g. .osu-only fallback), AudioContext still runs as a silent clock.
+import { HitSoundPlayer } from './sample-player';
+import type { HitSoundPlan } from './hitsounds';
 
 export class Clock {
   private ctx: AudioContext;
   private gain: GainNode;
+  private hitsounds: HitSoundPlayer;
   private buffer: AudioBuffer | null = null;
   private source: AudioBufferSourceNode | null = null;
   /** Map time (ms) when playback last (re)started. */
@@ -22,11 +25,29 @@ export class Clock {
     this.ctx = new AudioContext();
     this.gain = this.ctx.createGain();
     this.gain.connect(this.ctx.destination);
+    this.hitsounds = new HitSoundPlayer(this.ctx, this.gain);
   }
 
   async load(data: ArrayBuffer | null) {
     this.buffer = data ? await this.ctx.decodeAudioData(data.slice(0)) : null;
     this.duration = this.buffer ? this.buffer.duration * 1000 : 0;
+  }
+
+  /** Decode beatmap-provided samples on the same audio device as the music. */
+  async loadHitsounds(plan: HitSoundPlan): Promise<{ loaded: number; failed: number }> {
+    return this.hitsounds.load(plan);
+  }
+
+  /** Queue samples a short distance ahead of the AudioContext's master time. */
+  scheduleHitsounds() {
+    if (this.playing) this.hitsounds.schedule(this.startMapTime, this.startCtxTime, this.rate, this.offset);
+  }
+
+  /** Update user sync offset and discard previously queued cues at the old offset. */
+  setOffset(milliseconds: number) {
+    if (!Number.isFinite(milliseconds)) return;
+    this.offset = milliseconds;
+    this.hitsounds.reset(this.now());
   }
 
   get hasAudio() {
@@ -56,6 +77,7 @@ export class Clock {
     if (this.playing) return;
     if (this.ctx.state === 'suspended') await this.ctx.resume();
     this.startCtxTime = this.ctx.currentTime + 0.05;
+    this.hitsounds.reset(this.startMapTime - this.offset);
     this.startSource(this.startMapTime);
     this.playing = true;
   }
@@ -64,6 +86,7 @@ export class Clock {
     if (!this.playing) return;
     this.startMapTime = this.now() + this.offset;
     this.stopSource();
+    this.hitsounds.reset(this.now());
     this.playing = false;
   }
 
@@ -74,6 +97,7 @@ export class Clock {
     // The public seek argument is visual/map time; the stored position is
     // audio time, which runs offset milliseconds ahead of the visuals.
     this.startMapTime = mapTime + this.offset;
+    this.hitsounds.reset(mapTime);
     if (was) void this.play();
   }
 
@@ -84,6 +108,7 @@ export class Clock {
     this.playing = false;
     this.rate = rate;
     this.startMapTime = t;
+    this.hitsounds.reset(this.startMapTime - this.offset);
     if (was) void this.play();
   }
 
@@ -118,6 +143,7 @@ export class Clock {
 
   dispose() {
     this.stopSource();
+    this.hitsounds.dispose();
     void this.ctx.close();
   }
 }
