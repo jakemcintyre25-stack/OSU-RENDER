@@ -81,6 +81,12 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - **IN PROGRESS:** Both commits are pushed to `development/m2-slider-tracking`; GitHub Actions must be checked before marking this checkpoint verified. The prior `05363632` checkpoint passed both push and PR workflows.
 - **OPEN:** Independent production memory/load profiling, globally coordinated provider breaker and real upstream network acceptance.
 
+### M3 HP timeline groundwork (23 October 2026)
+
+- `0d6029d2`, `79884e49`: Implement and test break-excluded, nonoverlapping active HP time intervals with sorted/overlapping breaks, clipping, and invalid timestamp rejection.
+- **IN PROGRESS:** This is the exact *time-domain* prerequisite for HP simulation; it does **not** supply osu!stable's HP drain coefficients, hit gain, break refill, or HP-zero fail. Those remain OPEN and require reference rules and acceptance.
+- Verification: GitHub Actions checks for `79884e49` pending; do not mark M3 complete on synthetic interval tests alone.
+
 ## Immediate next implementation work
 
 1. **Independent:** finish M3's calibrated HP drain/gain, no-drain-during-breaks and HP-zero failure checks. Maintain explicit stable parity uncertainty until real evidence exists.
