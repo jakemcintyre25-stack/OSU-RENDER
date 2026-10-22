@@ -15,6 +15,8 @@ export class Clock {
   /** AudioContext time (s) when playback last (re)started. */
   private startCtxTime = 0;
   private playing = false;
+  private generation = 0;
+  private disposed = false;
   /** Playback speed (1.5 for DT). v1 changes pitch too; time-stretch is a Phase 4 item. */
   rate = 1;
   /** User offset in ms; positive = visuals later. */
@@ -82,8 +84,12 @@ export class Clock {
   }
 
   async play() {
-    if (this.playing) return;
+    if (this.playing || this.disposed) return;
+    const generation = this.generation;
     if (this.ctx.state === 'suspended') await this.ctx.resume();
+    // Closing, seeking, or changing speed while resume() was pending must
+    // not allow an older continuation to start its abandoned audio source.
+    if (this.disposed || generation !== this.generation || this.playing) return;
     this.startCtxTime = this.ctx.currentTime + 0.05;
     this.hitsounds.reset(this.startMapTime - this.offset);
     this.startSource(this.startMapTime);
@@ -91,6 +97,7 @@ export class Clock {
   }
 
   pause() {
+    this.generation++;
     if (!this.playing) return;
     const visualTime = this.now();
     this.startMapTime = visualTime + this.offset;
@@ -100,6 +107,7 @@ export class Clock {
   }
 
   seek(mapTime: number) {
+    this.generation++;
     const was = this.playing;
     this.stopSource();
     this.playing = false;
@@ -111,6 +119,7 @@ export class Clock {
   }
 
   setRate(rate: number) {
+    this.generation++;
     const t = this.playing ? this.now() + this.offset : this.startMapTime;
     const was = this.playing;
     this.stopSource();
@@ -151,6 +160,9 @@ export class Clock {
   }
 
   dispose() {
+    this.generation++;
+    this.disposed = true;
+    this.playing = false;
     this.stopSource();
     this.hitsounds.dispose();
     void this.ctx.close();
