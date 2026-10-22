@@ -12,6 +12,9 @@ describe('judge-check commands and comparison', () => {
   it('accepts the regular and verbose commands only', () => {
     assert.deepEqual(parseArgs([]), { verbose: null });
     assert.deepEqual(parseArgs(['--verbose', 'fixtures/replays/map.osr']), { verbose: 'map.osr' });
+    assert.deepEqual(parseArgs(['--require-fixtures']), { verbose: null, requireFixtures: true });
+    assert.deepEqual(parseArgs(['--require-fixtures', '--verbose', 'map.osr']), { verbose: 'map.osr', requireFixtures: true });
+    assert.throws(() => parseArgs(['--require-fixtures', '--require-fixtures']), /Usage/);
     assert.throws(() => parseArgs(['--verbose']), /Usage/);
     assert.throws(() => parseArgs(['--verbose', 'map.osz']), /Usage/);
   });
@@ -66,6 +69,40 @@ describe('judge-check fixture handling', () => {
       await mkdir(join(tmp, 'replays'));
       await writeFile(join(tmp, 'replays', 'sample.osr'), 'sample');
       assert.equal(await runJudgeCheck([], { fixturesRoot: tmp, write: (s) => lines.push(s) }), 0);
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('fails a strict acceptance run when replay or map fixtures are missing', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'osu-judge-strict-'));
+    try {
+      const errors = [];
+      const code = await runJudgeCheck(['--require-fixtures'], {
+        fixturesRoot: tmp,
+        write: () => {},
+        warn: (message) => errors.push(message),
+      });
+      assert.equal(code, 2);
+      assert.match(errors.join(' '), /no .*fixture|strict.*fixture/i);
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses to pass strict mode if every available replay was skipped as lazer', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'osu-judge-strict-lazer-'));
+    try {
+      await mkdir(join(tmp, 'replays'));
+      await mkdir(join(tmp, 'maps'));
+      await writeFile(join(tmp, 'replays', 'play.lazer.osr'), 'mock');
+      await writeFile(join(tmp, 'maps', 'beatmap.osz'), 'mock');
+      const engine = { openOsz: () => ({ difficulties: [] }) };
+      const code = await runJudgeCheck(['--require-fixtures'], {
+        fixturesRoot: tmp, engine,
+        write: () => {}, warn: () => {},
+      });
+      assert.equal(code, 2);
     } finally {
       await rm(tmp, { recursive: true, force: true });
     }
