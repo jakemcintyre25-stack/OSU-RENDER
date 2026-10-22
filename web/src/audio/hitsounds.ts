@@ -130,8 +130,17 @@ export function planHitsounds(
     // Beatmap-relative: a map in "folder/diff.osu" looks for "folder/sample.wav".
     const qualified = safePath(directory + path);
     if (!qualified) return null;
-    const beatmapBytes = archive ? findFile(archive, qualified) : null;
-    if (beatmapBytes) return { path: qualified, bytes: beatmapBytes };
+    // Automatically generated chart sample names can be .wav, .mp3 or .ogg.
+    // Prefer every chart-provided encoding before falling back to a user skin.
+    // Explicitly named custom samples must match the filename verbatim.
+    const formats = allowSkin && /\.(?:wav|mp3|ogg)$/i.test(qualified)
+      ? ['wav', 'mp3', 'ogg'] : [];
+    const beatmapNames = [qualified, ...formats.map((ext) =>
+      qualified.replace(/\.(?:wav|mp3|ogg)$/i, '.' + ext))];
+    for (const name of new Set(beatmapNames)) {
+      const bytes = archive ? findFile(archive, name) : null;
+      if (bytes) return { path: name, bytes };
+    }
     if (!allowSkin || !skinArchive) return null;
 
     // A user's skin provides unindexed samples, regardless of the chart's
