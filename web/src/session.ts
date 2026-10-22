@@ -32,7 +32,7 @@ function toArrayBuffer(b: Uint8Array): ArrayBuffer {
   return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
 }
 
-export async function sessionFromReplay(replayBytes: Uint8Array, osz: OszArchive | null, osuFallback: string | null, beatmapId?: number): Promise<Session> {
+export async function sessionFromReplay(replayBytes: Uint8Array, osz: OszArchive | null, osuFallback: string | null, beatmapId?: number, skinArchive: OszArchive | null = null): Promise<Session> {
   const replay = await decodeReplay(replayBytes);
   const warnings: string[] = [];
   if (replay.rulesetId !== 0) throw new Error('This replay is not osu!standard — only standard is supported for now');
@@ -56,19 +56,20 @@ export async function sessionFromReplay(replayBytes: Uint8Array, osz: OszArchive
     warnings.push('The .osu-only fallback has not been verified against the replay MD5; judgement and timing may differ.');
   }
   const map = prepareMap(osuText, replay.mods);
-  const s = await finish(map, replay.frames, osz, replay.player || 'Player', warnings, osuText, diff?.fileName ?? '');
+  const s = await finish(map, replay.frames, osz, replay.player || 'Player', warnings, osuText, diff?.fileName ?? '', skinArchive);
   s.replay = replay;
   return s;
 }
 
-export async function sessionFromAutoplay(osz: OszArchive, diff: Difficulty, mods: string[]): Promise<Session> {
+export async function sessionFromAutoplay(osz: OszArchive, diff: Difficulty, mods: string[], skinArchive: OszArchive | null = null): Promise<Session> {
   const map = prepareMap(diff.text, mods);
-  return finish(map, generateAutoplay(map), osz, 'osu! (autoplay)', [], diff.text, diff.fileName);
+  return finish(map, generateAutoplay(map), osz, 'osu! (autoplay)', [], diff.text, diff.fileName, skinArchive);
 }
 
 async function finish(
   map: PreparedMap, frames: ReplayFrame[], osz: OszArchive | null,
   player: string, warnings: string[], osuText: string, beatmapPath: string,
+  skinArchive: OszArchive | null,
 ): Promise<Session> {
   const directory = beatmapPath.replace(/\\/g, '/').replace(/[^/]*$/, '');
   const asset = (name: string | null) => osz && name
@@ -79,9 +80,9 @@ async function finish(
   const background = await decodeImage(asset(map.backgroundFile));
   const judgement = judge(map, frames);
   let hitsounds: HitSoundPlan = { events: [], samples: new Map(), unavailable: 0 };
-  if (osz) {
+  if (osz || skinArchive) {
     try {
-      hitsounds = planHitsounds(osuText, map, judgement, osz, beatmapPath);
+      hitsounds = planHitsounds(osuText, map, judgement, osz, beatmapPath, skinArchive);
     } catch (error) {
       // A sample planner must not make the user's replay inaccessible.
       warnings.push('Beatmap-provided hitsounds could not be mapped safely: ' + (error as Error).message);
