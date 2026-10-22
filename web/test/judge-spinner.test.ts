@@ -72,6 +72,16 @@ describe('spinner rotation accumulation and RPM limit', () => {
     expect(rotations(frames)).toBeLessThan(5.1);
   });
 
+  it('passes accumulated spins and bonus points into ScoreV1 after a reversal', () => {
+    const normal = judge(spinnerMap(), spinFrames((s) => s * 4.6));
+    const reversing = judge(spinnerMap(), spinFrames((s) => s <= 1 ? s * 4.6 : 4.6 - (s - 1) * 4.6));
+    expect(reversing.objects[0].result).toBe(300);
+    expect(reversing.totalScore).toBe(normal.totalScore);
+    expect(reversing.totalScore).toBeGreaterThan(300);
+    expect(reversing.events.at(-1)?.score).toBe(reversing.totalScore);
+    expect(reversing.scoring.some((event) => event.flat > 0)).toBe(true);
+  });
+
   it('retains the defined 300/100/50/miss spinner thresholds', () => {
     const result = (rps: number) => judge(spinnerMap(), spinFrames((s) => s * rps)).objects[0].result;
     expect(result(5)).toBe(300);
