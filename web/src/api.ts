@@ -78,27 +78,27 @@ export async function getRecent(user: string): Promise<{ user: { id: number; use
   return res.json();
 }
 
-export async function getReplayFile(scoreId: number): Promise<Uint8Array> {
-  const res = await fetch(`/api/scores/${scoreId}/replay`);
+export async function getReplayFile(scoreId: number, signal?: AbortSignal): Promise<Uint8Array> {
+  const res = await fetch(`/api/scores/${scoreId}/replay`, { signal });
   if (!res.ok) throw await errorFrom(res);
   return readLimitedResponse(res, MAX_REPLAY_DOWNLOAD_BYTES);
 }
 
 /** Downloads a beatmapset with bounded memory; callbacks report 0..1 or -1. */
-export async function getBeatmapset(setId: number, onProgress?: (p: number) => void): Promise<Uint8Array> {
-  const res = await fetch(`/api/beatmapsets/${setId}/download`);
+export async function getBeatmapset(setId: number, onProgress?: (p: number) => void, signal?: AbortSignal): Promise<Uint8Array> {
+  const res = await fetch(`/api/beatmapsets/${setId}/download`, { signal });
   if (!res.ok) throw await errorFrom(res);
   return readLimitedResponse(res, MAX_BEATMAPSET_DOWNLOAD_BYTES, onProgress);
 }
 
-export async function getOsuFile(beatmapId: number): Promise<string> {
-  const res = await fetch(`/api/beatmaps/${beatmapId}/osu`);
+export async function getOsuFile(beatmapId: number, signal?: AbortSignal): Promise<string> {
+  const res = await fetch(`/api/beatmaps/${beatmapId}/osu`, { signal });
   if (!res.ok) throw await errorFrom(res);
   return new TextDecoder().decode(await readLimitedResponse(res, MAX_OSU_TEXT_BYTES));
 }
 
-export async function lookupBeatmap(md5: string): Promise<{ beatmapId: number; beatmapsetId: number }> {
-  const res = await fetch(`/api/beatmaps/lookup?checksum=${md5}`);
+export async function lookupBeatmap(md5: string, signal?: AbortSignal): Promise<{ beatmapId: number; beatmapsetId: number }> {
+  const res = await fetch(`/api/beatmaps/lookup?checksum=${md5}`, { signal });
   if (!res.ok) throw await errorFrom(res);
   return res.json();
 }
