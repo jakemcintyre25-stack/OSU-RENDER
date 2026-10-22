@@ -49,10 +49,20 @@ but the mods bitmask has no ScoreV2 flag (bit 29), so that is not the explanatio
 check whether these replays use a different ruleset, build or difficulty than the map we
 matched by MD5.
 
+## Slider-head ScoreV1 correction (22 October 2026)
+
+The earlier implementation accidentally awarded **zero** flat points for a successfully hit slider head. Stable grants **30 flat points** for the head (plus 10 for each tick and 30 for each repeat/tail), independently of the slider's final 300/100/50 judgement.
+
+- Fixed `sliderPartPoints('head')` to return 30 in commit `27c3485`.
+- Added fixture-independent helper and full slider-judgement tests, including the running score at the head timestamp.
+- GitHub Actions tests, typecheck, build, and empty-fixture judge-check pass for the correction.
+- **The score comparison tables above are historical** and predate this fix; these scores have not been recomputed against real replay files.
+- The previous observation of near-exact scores differing by ~6,140 to ~8,740 points may reflect hundreds of omitted 30-point slider heads, but this explanation still needs replay-by-replay verification.
+
 ## Open items
 
 - Explain the NM and 3f4e99ff gap above before calling M4 done.
-- Residual −0.006% on exact-count replays: probably per-hit rounding or spinner points. Check
+- Residual −0.006% on exact-count replays (historical, before slider-head fix): recompute with updated head points; then check
   whether stable floors the total or each part.
 - Judge count errors (M2) now dominate the score error on near-match replays.
 - HP (M3) is still not implemented.
