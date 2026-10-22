@@ -30,6 +30,10 @@ export interface HpTrace {
   snapshots: HpSnapshot[];
   /** First time HP reaches zero, including during drain between events. */
   zeroTime: number | null;
+  /** Normalized drain-active intervals retained for deterministic seeking. */
+  activeIntervals: ReadonlyArray<readonly [number, number]>;
+  /** Drain coefficient used to construct this trace. */
+  drainPerMs: number;
 }
 
 export function simulateHp(
@@ -45,7 +49,7 @@ export function simulateHp(
     throw new RangeError('Invalid HP calibration');
   }
   // Validate time and break boundaries even when there are no events.
-  activeDrainMilliseconds(start, end, breaks);
+  const activeIntervals = activeDrainIntervals(start, end, breaks);
   const changes = deltas.map((delta, i) => {
     if (!Number.isFinite(delta.t) || !Number.isFinite(delta.amount) ||
         delta.t < start || delta.t > end) throw new RangeError('Invalid HP event');
@@ -62,7 +66,7 @@ export function simulateHp(
       // Solve for the exact crossing inside the union of active intervals,
       // never counting time inside a beatmap break.
       let remaining = hp / drainPerMs;
-      const active = activeIntervalsWithin(t, change.t, breaks);
+      const active = activeDrainIntervals(t, change.t, breaks);
       for (const [a, b] of active) {
         if (remaining <= b - a) {
           zeroTime = a + remaining;
@@ -77,10 +81,32 @@ export function simulateHp(
     snapshots.push({ t, hp });
     if (zeroTime === null && hp === 0) zeroTime = t;
   }
-  return { snapshots, zeroTime };
+  return { snapshots, zeroTime, activeIntervals, drainPerMs };
 }
 
-function activeIntervalsWithin(start: number, end: number, breaks: ReadonlyArray<{ start: number; end: number }>) {
-  // Import kept here as an explicit named dependency, not an approximation.
-  return activeDrainIntervals(start, end, breaks);
+
+/** HP at arbitrary map time, including between judgement events and during
+ * breaks. Same-timestamp events are applied in original deterministic order.
+ * Seeking does not mutate the trace.
+ */
+export function hpAt(trace: HpTrace, t: number): number {
+  if (!Number.isFinite(t)) throw new RangeError('Invalid HP query timestamp');
+  const samples = trace.snapshots;
+  if (samples.length === 0) throw new RangeError('Empty HP trace');
+  if (t < samples[0].t) return samples[0].hp;
+  let lo = 0;
+  let hi = samples.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (samples[mid].t <= t) lo = mid + 1;
+    else hi = mid;
+  }
+  const sample = samples[lo - 1];
+  const until = Math.min(t, samples[samples.length - 1].t);
+  let elapsed = 0;
+  for (const [a, b] of trace.activeIntervals) {
+    if (a >= until) break;
+    elapsed += Math.max(0, Math.min(until, b) - Math.max(sample.t, a));
+  }
+  return Math.max(0, sample.hp - elapsed * trace.drainPerMs);
 }
