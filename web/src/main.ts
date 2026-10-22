@@ -366,8 +366,9 @@ function fillInfo(s: Session) {
       <tr><th></th><th>Renderer</th>${h ? '<th>osu!</th>' : ''}</tr>
       ${row('300', c.c300, h?.count300)}${row('100', c.c100, h?.count100)}${row('50', c.c50, h?.count50)}${row('Miss', c.miss, h?.countMiss)}
       ${row('Max combo', s.judgement.maxCombo, h?.maxCombo)}
+      ${row('Score V1 (calculated)', s.judgement.totalScore, h?.totalScore)}
     </table>
-    ${h ? '<p>Yellow numbers differ from what osu! recorded — the judgement engine is still being matched to stable.</p>' : ''}`;
+    ${h ? '<p>Highlighted values differ from the osu!stable replay header. Scores are reconstructed and not yet proven exact.</p>' : '<p>Calculated Score V1 is provisional until validated against real replay headers.</p>'}`;
 }
 
 $('playpause').addEventListener('click', () => void togglePlay());
