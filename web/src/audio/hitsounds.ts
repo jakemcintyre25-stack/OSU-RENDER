@@ -85,6 +85,10 @@ export function planHitsounds(
 ): HitSoundPlan {
   const plan: HitSoundPlan = { events: [], samples: new Map(), unavailable: 0 };
   if (!archive && !skinArchive) return plan;
+  const skinIni = skinArchive?.files.get('skin.ini');
+  const ini = skinIni ? new TextDecoder().decode(skinIni) : '';
+  // The osu! default skin configuration layers hitnormal onto additions.
+  const layeredHitSounds = !/^\s*LayeredHitSounds\s*:\s*(?:0|false)\s*$/im.test(ini);
   const directory = beatmapPath.replace(/\\/g, '/').replace(/[^/]*$/, '');
   const timing: TimingSample[] = [];
   const objects: string[][] = [];
@@ -192,8 +196,12 @@ export function planHitsounds(
       return;
     }
     const suffix = sampleIndex > 1 ? String(sampleIndex) : '';
-    // osu!stable uses a normal layer by default, even with additions.
-    scheduleFile(t, names[normal] + '-hitnormal' + suffix + '.wav', volume);
+    // LayeredHitSounds defaults to true. When a user skin disables it,
+    // don't force normal onto a note with only whistle/finish/clap additions.
+    // A bare hitSound=0 must still play the default normal sample.
+    if (layeredHitSounds || (bits & 1) !== 0 || (bits & 14) === 0) {
+      scheduleFile(t, names[normal] + '-hitnormal' + suffix + '.wav', volume);
+    }
     for (const [mask, hit] of [[2, 'whistle'], [4, 'finish'], [8, 'clap']] as const) {
       if ((bits & mask) !== 0) scheduleFile(t, names[addition] + '-hit' + hit + suffix + '.wav', volume);
     }
