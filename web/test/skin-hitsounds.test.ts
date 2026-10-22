@@ -58,7 +58,7 @@ describe('M5/M7 user-supplied .osk sample lookup', () => {
   });
 
   it('respects LayeredHitSounds=0 in skin.ini without suppressing explicit normal notes', () => {
-    const skin = skinArchive({ 'skin.ini': strToU8('[General]\\nLayeredHitSounds: 0\\n') });
+    const skin = skinArchive({ 'skin.ini': strToU8('[General]\nLayeredHitSounds: 0\n') });
     const result = plan(mapArchive(), skin);
     expect(result.events.map(e => e.sample)).toEqual(['skin:normal-hitwhistle.wav']);
 
@@ -72,7 +72,7 @@ describe('M5/M7 user-supplied .osk sample lookup', () => {
   });
 
   it('preserves layering for explicit LayeredHitSounds=1 and absent setting', () => {
-    const enabled = skinArchive({ 'skin.ini': strToU8('[General]\\nLayeredHitSounds: 1\\n') });
+    const enabled = skinArchive({ 'skin.ini': strToU8('[General]\nLayeredHitSounds: 1\n') });
     expect(plan(mapArchive(), enabled).events).toHaveLength(2);
     expect(plan().events).toHaveLength(2);
   });
