@@ -52,6 +52,24 @@ function mapWithSlider(): PreparedMap {
 }
 
 describe('stable slider tracking (synthetic replay)', () => {
+  it('awards a 30-point slider head in running ScoreV1 and final total', () => {
+    const frames: ReplayFrame[] = [
+      { t: 990, x: 100, y: 100, keys: 0 },
+      { t: 1000, x: 100, y: 100, keys: KEY.M1 },
+      { t: 1050, x: 150, y: 100, keys: KEY.M1 },
+      { t: 1090, x: 190, y: 100, keys: KEY.M1 },
+      { t: 1100, x: 200, y: 100, keys: 0 },
+    ];
+    const judged = judge(mapWithSlider(), frames);
+    expect(judged.objects[0].result).toBe(300);
+    const atHead = judged.events.find((e) => e.t === 1000);
+    expect(atHead?.score).toBe(30);
+    expect(judged.scoring.find((e) => e.t === 1000)?.flat).toBe(30);
+    // 30 head + 10 tick + 30 tail + 300 slider + 48 combo bonus.
+    expect(judged.totalScore).toBe(418);
+    expect(judged.events.at(-1)?.score).toBe(418);
+  });
+
   it('does not start tracking inside 2.4r when outside the initial r', () => {
     const frames: ReplayFrame[] = [
       { t: 990, x: 120, y: 100, keys: 0 },
