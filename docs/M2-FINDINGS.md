@@ -121,3 +121,17 @@ The previous assertion that missed ticks and repeats preserve combo contradicted
 The earlier `5053251` observation (header max combo 986, claimed missed tick) is **unresolved**, not evidence that stable ignores slider breaks. The source replay's slider-part inference needs to be revisited; replay headers only provide aggregate counts. The earlier sweep/table above predates this correction and must **not** be treated as current results. Rerun `npm run judge-check` and `node scripts/sweep-judge.mjs` on the local, non-committed fixture set before claiming parity.
 
 **Current milestone status:** M2 remains in progress, M3 HP is not implemented, and M4 ScoreV1 has been partly implemented on `main` but still has mismatches.
+
+---
+
+## M2 correction: exact timing-window boundary implementation
+
+The earlier fitted `PROVISIONAL_WINDOW300_OFFSET_MS = 1` has been removed in `6a0bbc5`. It was an empirical workaround, **not** the stable rule.
+
+The official osu!standard judgement documentation specifies: **round the hit error**, **truncate each OD-based window to an integer**, and require **rounded error < truncated window**:
+
+https://osu.ppy.sh/wiki/en/Gameplay/Judgement/osu%21
+
+The judge now implements that rule for 300/100/50. For OD5, the 300 window is 50ms: `49.4ms` is a 300, whereas `49.5ms` is a 100. Synthetic tests also cover fractional OD windows, 100/50 edges and the optional experimental offset override. GitHub Actions passed.
+
+This corrects the known boundary algorithm without claiming all real human replay header counts are now exact; the local fixture set must be re-run, and the earlier comparison tables above are historical.
