@@ -1,39 +1,36 @@
-# M5 — Beatmap hitsound playback: implementation and acceptance evidence
+# M5 — Sound / audio timing: implemented subset and acceptance evidence
 
-Updated 23 October 2026. **Status: IN PROGRESS (subset implemented and unit/integration verified).** The full milestone is **not** complete.
+Updated 23 October 2026. **Status: IN PROGRESS, not full osu!stable audio parity.** Verified tests demonstrate event extraction, scheduling and integration under synthetic sample files and instrumented Web Audio. They are not real-device listening tests.
 
-## Working implementation
+## Implemented
 
-- `web/src/audio/hitsounds.ts` parses the selected .osu difficulty's General, TimingPoints and HitObjects sections. It resolves Normal/Soft/Drum samples, indexed filenames, hitnormal + whistle/finish/clap layers, custom hitSample filenames, slider edge samples and tick samples.
-- Events are conditional on **the replay judge's actual successful hits**: misses do not emit normal hit samples; slider repeats, ticks and tail events follow the judged collection flags. Audio samples are played at the recorded press time; head metadata uses the chart object's timing section. Stable's slider-tail leniency check is distinct from its audible end-edge time.
-- Files are read from the **actual .osz archive**, respecting a difficulty's containing subfolder. The session also finds song/background assets relative to that directory.
-- The `HitSoundPlayer` decodes real sample bytes with the same Web Audio context as music; its 250ms lookahead uses the music clock, mod rate and visual synchronization offset. Playback seeks, pauses, rate changes and disposal cancel pending sounds; past events are not replayed.
-- Guardrails include max 8 MiB/sample, 64 MiB total sound data, 256 unique clips, 50,000 scheduled events, at most four concurrent decoder operations, and 48 simultaneously active voices.
-- Missing beatmap samples can now be resolved from an optional **user-loaded .osk skin archive**. Only actual root-level Normal/Soft/Drum hitnormal/whistle/finish/clap audio files are supported (WAV/MP3/OGG); indexed beatmap sample takes precedence, a skin's unindexed version is used only for absent chart samples. Explicit custom filenames do not fall back to a skin. The skin.ini `LayeredHitSounds` setting is respected for combining normal/addition layers. No third-party sound files are bundled.
-- If decoding fails or assets are missing, playback of the replay and music continues. Missing bundled defaults are **not** silently replaced by fabricated samples. A warning is shown.
+- The .osu file's General/TimingPoints/HitObjects sample metadata is used for real Normal, Soft, Drum, addition layers, sample numbers, volumes and custom filenames.
+- Judged successful circles, slider heads, ticks/repeats and physical tail edges produce sample events. Successful spinner completion emits genuine .osu samples; failed spinner completion does not. The slider's early tail judgement timestamp is distinct from the audible end edge.
+- For indexed auto-generated samples, the beatmap's WAV, MP3 and OGG encodings are checked **before** any skin fallback. Explicit custom sample filenames match exactly and never silently substitute another extension.
+- Real chart/skin `sliderslide` and `sliderwhistle` clips now loop **only over actual judge tracking intervals**. A seek into an existing interval resumes its loop at the appropriate clip phase and aligns with the music source's 50ms startup scheduling lead-in. Loop voice nodes stop at the tracked interval boundary.
+- The selected map's `[General] AudioLeadIn` is parsed with an explicit operational input ceiling and honored at playback start. Existing synthetic PreparedMap fixtures can omit this optional field; actual prepared beatmaps set it.
+- An optional user-imported .osk supplies real root-level WAV/MP3/OGG hit sounds and slider loops when absent from the map. Limited `skin.ini` `LayeredHitSounds` is applied. No default skin sounds, skins, replays or beatmaps are distributed in this repository.
+- The music Web Audio clock schedules sample voices using a 250ms lookahead, applies DT/HT playback rates and visual sync offsets, and cancels abandoned sounds after pause, seek, speed change and disposal. Four-concurrent-decode, 48-live-voice, unique-sample and byte/event bounds limit resource use.
 
-## Functional/robustness/integration verification
+## Verification passes
 
-- `web/test/hitsounds.test.ts`: actual compressed synthetic .osz loaded via `openOsz`, full `prepareMap` → `generateAutoplay` → `judge` → hitsound plan, sample-set and volume transitions, custom filenames, nested archive path, malformed/oversized samples, missed-object suppression and overlap-safe timing point lookup.
-- `web/test/sample-player.test.ts`: instrumented AudioContext play scheduling, bounded lookahead, seek cancellation, DT-rate and sync offset calculations, missing/undecodable data, per-source voice limits, bounded concurrent decoding and cancellation of stale async loads.
-- `web/test/hitsounds-spinner.test.ts`: actual layered .osu spinner-end sound, no sound on misses and no fabricated missing layers.
-- `web/test/skin-hitsounds.test.ts`: real .osk ZIP loading, indexed beatmap priority over skin, filename override protection, MP3 fallback, .osu-only mode, skin.ini LayeredHitSounds on/off and integration through sessionFromAutoplay.
-- `web/test/audio-clock.test.ts`: integration through the actual `Clock` API, AudioContext start-time, pause, seek and disposal checks.
-- `web/test/timeline.test.ts`: preserve audio outro, silent maps and safe bounds for missing/invalid duration.
-- GitHub Actions on `b9fc495e547d139e0a2d693951f470795a8ce24f`: regular automated suites, TypeScript and Vite build passed on push; check the current PR workflow conclusion before accepting branch integration.
-- These tests use valid ZIP containers with **synthetic sample bytes** and instrumented AudioContext decoders. They do **not** establish a successful real-browser playback of actual licensed WAV/MP3 samples or exact reproduction of osu!stable audio.
+**Functional:** `web/test/hitsounds.test.ts`, `hitsounds-spinner.test.ts`, `skin-hitsounds.test.ts` and `skin-assets.test.ts` cover decoded .osu metadata, physical ZIP archives, sample precedence, dropped objects, spinner completion, user skin inputs and session/judge coupling. `slider-loops.test.ts` covers judge tracking range planning and real looping source schedule/stop/seek phases.
 
-## Not yet implemented or accepted
+**Robustness:** `sample-player.test.ts` checks errors, missing clips, voice ceilings, async decoder cancellation and lookahead behaviour. `lead-in.test.ts` checks invalid, nonfinite or unbounded AudioLeadIn values; `upload-limits.test.ts` limits untrusted local reads. `skin-hitsounds.test.ts` covers incorrect filenames, skin.ini options and format variants.
 
-- Bundled default skin sound resources (no licensed default assets included), complete user-skin.ini customization beyond LayeredHitSounds, hitsound routing from nested skin subfolders and persistent .osk loading. User-provided .osk **audio only** works; visual skin graphics are still M7 OPEN.
-- Continuous tracking-dependent slider slide/whistle loops, spinner spin/bonus sound effects, and storyboard hitsounds (successful spinner completion samples are now supported).
-- Full inherited timing point/sample edge behaviour on complex real beatmaps, sound pan, audio normalization, and skin.ini sound options.
-- Pitch-preserving audio time stretch at DT/HT rates (current source playbackRate changes pitch).
-- Browser/device acoustic timing acceptance, headset latency compensation, real beatmap/audio test fixtures and offline MP4 audio mix integration.
+**Integration:** `audio-clock.test.ts` instruments the production Clock API and seek/pause cleanup; `web/src/main.ts` loads the real session hitsound plan and all effects through that clock. CI runs web/worker tests, TypeScript typechecks, Vite build and the CI-friendly judgement harness. These tests **do not demonstrate audible browser/device output** because their sample byte arrays are synthetic and AudioContext is instrumented.
 
-## Next actions
+## Still OPEN or unverified
 
-1. Run a rights-cleared real .osz with varied custom hitsounds in a real browser and compare event/time/audio output against osu!stable while capturing discrepancies.
-2. Extend the existing user-selected .osk audio lookup to full skin.ini semantics, audio overrides and visual skin rendering, without copying licensed assets into the repository. Decide legally distributable default hit sound sources.
-3. Add continuous slider tracking audio and spinner hit sounds from actual asset sources, preserving judgement/clock coupling.
-4. Continue M2 exact real replay parity, M3 HP/fail and M4 ScoreV1 separately. Do not mark M5 complete because these foundations compile.
+- A licence-approved set of distributable default skin samples; complete user skin.ini sound options, visual skin sprites and persistence.
+- Spinner spinning/bonus sounds beyond spinner completion; slider tracking exact audible parity on varied real osu!stable replays, sound panning, volume weighting, fade behaviour and sample timestamp edge cases.
+- Pitch-preserving DT/HT time stretching. The current `AudioBufferSourceNode.playbackRate` changes pitch along with playback speed; 0.25×–2× viewer speed has the same limitation.
+- Real browser/Windows audio latency, decode support, MP3 padding/acoustic sync, skin visual integration and offline MP4 audio mix.
+- Real osu! API replay access and real private fixture parity. The normal CI-friendly judgement check is not proof of real parity.
+
+## Next independent tasks
+
+1. Add default skin sample lookup only when licensing and attribution can be satisfied; do not commit copyrighted media without authorization.
+2. Complete user skin visuals/remaining sound semantics and spinner loops with sound input grounded in actual replay/chart data.
+3. Continue independent M3 HP/fail and M4 exact ScoreV1 test coverage, plus M2 real-replay validation when exact-MD5 private fixtures are available.
+4. Run headphone/browser listening comparisons with genuine legal .osz/.osk resources once accessible; record acoustic discrepancies rather than calling M5 PASS from synthetic CI.
