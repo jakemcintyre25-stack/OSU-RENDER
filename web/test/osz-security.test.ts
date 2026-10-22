@@ -84,6 +84,24 @@ describe('untrusted .osz archive guard and integration', () => {
     expect(() => inspect(bytes.subarray(0, bytes.length - 2))).toThrow(/missing ZIP end record/);
   });
 
+  it('rejects an archive whose declared CRC32 does not match extracted bytes', () => {
+    const bytes = archive({ 'map.osu': osu });
+    const pos = centralOffset(bytes);
+    const view = new DataView(bytes.buffer);
+    view.setUint32(pos + 16, view.getUint32(pos + 16, true) ^ 0xffffffff, true);
+    expect(() => openOsz(bytes)).toThrow(/CRC32 mismatch/);
+  });
+
+  it('detects a changed stored file even when its ZIP lengths still match', () => {
+    const bytes = zipSync({ 'map.osu': [osu, { level: 0 }] });
+    const view = new DataView(bytes.buffer);
+    const localLength = view.getUint16(26, true);
+    const localExtra = view.getUint16(28, true);
+    const payload = 30 + localLength + localExtra;
+    bytes[payload + 1] ^= 0x10;
+    expect(() => openOsz(bytes)).toThrow(/CRC32 mismatch/);
+  });
+
   it('rejects unsupported compression and inconsistent stored sizes', () => {
     const bytes = archive({ 'a.osu': osu });
     const pos = centralOffset(bytes);
