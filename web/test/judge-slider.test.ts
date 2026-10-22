@@ -95,4 +95,60 @@ describe('stable slider tracking (synthetic replay)', () => {
     expect(result.parts).toEqual([true, true]);
     expect(result.result).toBe(300);
   });
+  it('breaks combo on a missed tick without marking the whole slider a miss', () => {
+    const frames: ReplayFrame[] = [
+      { t: 990, x: 100, y: 100, keys: 0 },
+      { t: 1000, x: 100, y: 100, keys: KEY.M1 },
+      { t: 1048, x: 148, y: 100, keys: KEY.M1 },
+      { t: 1050, x: 150, y: 100, keys: 0 },
+      { t: 1060, x: 160, y: 100, keys: KEY.M1 },
+      { t: 1090, x: 190, y: 100, keys: KEY.M1 },
+      { t: 1100, x: 200, y: 100, keys: 0 },
+    ];
+    const judged = judge(mapWithSlider(), frames);
+    expect(judged.objects[0].parts).toEqual([false, true]);
+    expect(judged.objects[0].result).toBe(100); // a slider break, not an overall MISS
+    expect(judged.events.find((e) => e.t === 1050)?.combo).toBe(0);
+    expect(judged.events.find((e) => e.t === 1090)?.combo).toBe(1);
+    expect(judged.maxCombo).toBe(1);
+    expect(judged.counts.miss).toBe(0);
+  });
+
+  it('breaks combo on a missed repeat as well as a missed tick', () => {
+    const map = mapWithSlider();
+    (map.objects[0] as SliderObj).parts[0].kind = 'repeat';
+    const frames: ReplayFrame[] = [
+      { t: 990, x: 100, y: 100, keys: 0 },
+      { t: 1000, x: 100, y: 100, keys: KEY.M1 },
+      { t: 1048, x: 148, y: 100, keys: KEY.M1 },
+      { t: 1050, x: 150, y: 100, keys: 0 },
+      { t: 1060, x: 160, y: 100, keys: KEY.M1 },
+      { t: 1090, x: 190, y: 100, keys: KEY.M1 },
+      { t: 1100, x: 200, y: 100, keys: 0 },
+    ];
+    const judged = judge(map, frames);
+    expect(judged.objects[0].parts).toEqual([false, true]);
+    expect(judged.events.find((e) => e.t === 1050)?.combo).toBe(0);
+    expect(judged.events.find((e) => e.t === 1090)?.combo).toBe(1);
+    expect(judged.maxCombo).toBe(1);
+  });
+
+  it('preserves combo when only the slider tail is missed', () => {
+    const frames: ReplayFrame[] = [
+      { t: 990, x: 100, y: 100, keys: 0 },
+      { t: 1000, x: 100, y: 100, keys: KEY.M1 },
+      { t: 1050, x: 150, y: 100, keys: KEY.M1 },
+      { t: 1080, x: 180, y: 100, keys: 0 },
+      { t: 1090, x: 190, y: 100, keys: 0 },
+      { t: 1100, x: 200, y: 100, keys: 0 },
+    ];
+    const judged = judge(mapWithSlider(), frames);
+    expect(judged.objects[0].parts).toEqual([true, false]);
+    expect(judged.objects[0].result).toBe(100);
+    expect(judged.events.find((e) => e.t === 1050)?.combo).toBe(2);
+    expect(judged.events.some((e) => e.t === 1090)).toBe(false);
+    expect(judged.events.at(-1)?.combo).toBe(2);
+    expect(judged.maxCombo).toBe(2);
+  });
+
 });
