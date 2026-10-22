@@ -123,12 +123,17 @@ export function planHitsounds(
     if (!qualified) return null;
     return { path: qualified, bytes: findFile(archive, qualified) };
   };
-  let pos = 0;
   const activeSample = (t: number): TimingSample => {
-    while (pos + 1 < timing.length && timing[pos + 1].t <= t) pos++;
-    const effective = timing[pos];
-    if (!effective || t < effective.t) return { t, set: metadataSet, index: 0, volume: 100 };
-    return effective;
+    // Overlapping objects can request sounds out of chronological order.
+    // Use a binary search instead of a monotonic cursor into timing sections.
+    let low = 0;
+    let high = timing.length;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      if (timing[mid].t <= t) low = mid + 1;
+      else high = mid;
+    }
+    return low ? timing[low - 1] : { t, set: metadataSet, index: 0, volume: 100 };
   };
   const scheduleFile = (t: number, file: string, volume: number) => {
     const resource = lookupSample(file);
