@@ -71,7 +71,7 @@ export interface PreparedMap {
   comboColors: number[];
   audioFile: string | null;
   /** Explicit silence preceding the audio timeline, from [General] AudioLeadIn. */
-  audioLeadIn: number;
+  audioLeadIn?: number;
   backgroundFile: string | null;
   breaks: { start: number; end: number }[];
   /** Map time at which the first object appears; playback starts a little before this. */
