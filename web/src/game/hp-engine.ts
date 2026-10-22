@@ -1,4 +1,4 @@
-import { activeDrainIntervals, activeDrainMilliseconds } from './hp-timeline';
+import { activeDrainIntervals } from './hp-timeline';
 
 /** A deterministic HP timeline driven by explicitly supplied calibration.
  *
@@ -36,6 +36,31 @@ export interface HpTrace {
   drainPerMs: number;
 }
 
+/** Index of active drain intervals: cumulative time lookup is O(log breaks). */
+function drainIndex(intervals: ReadonlyArray<readonly [number, number]>) {
+  const ends: number[] = [];
+  const totals: number[] = [];
+  let sum = 0;
+  for (const [a, b] of intervals) {
+    sum += b - a;
+    ends.push(b);
+    totals.push(sum);
+  }
+  const before = (t: number): number => {
+    let lo = 0;
+    let hi = ends.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (ends[mid] <= t) lo = mid + 1;
+      else hi = mid;
+    }
+    if (lo === ends.length) return sum;
+    const [a, b] = intervals[lo];
+    return (lo ? totals[lo - 1] : 0) + Math.max(0, Math.min(t, b) - a);
+  };
+  return (start: number, end: number) => Math.max(0, before(end) - before(start));
+}
+
 export function simulateHp(
   start: number,
   end: number,
@@ -50,6 +75,7 @@ export function simulateHp(
   }
   // Validate time and break boundaries even when there are no events.
   const activeIntervals = activeDrainIntervals(start, end, breaks);
+  const drainBetween = drainIndex(activeIntervals);
   const changes = deltas.map((delta, i) => {
     if (!Number.isFinite(delta.t) || !Number.isFinite(delta.amount) ||
         delta.t < start || delta.t > end) throw new RangeError('Invalid HP event');
@@ -60,7 +86,7 @@ export function simulateHp(
   let zeroTime: number | null = initial === 0 ? start : null;
   const snapshots: HpSnapshot[] = [{ t, hp }];
   for (const change of [...changes, { t: end, amount: 0, index: changes.length }]) {
-    const elapsed = activeDrainMilliseconds(t, change.t, breaks);
+    const elapsed = drainBetween(t, change.t);
     const drained = elapsed * drainPerMs;
     if (zeroTime === null && drainPerMs > 0 && drained >= hp) {
       // Solve for the exact crossing inside the union of active intervals,
@@ -103,10 +129,6 @@ export function hpAt(trace: HpTrace, t: number): number {
   }
   const sample = samples[lo - 1];
   const until = Math.min(t, samples[samples.length - 1].t);
-  let elapsed = 0;
-  for (const [a, b] of trace.activeIntervals) {
-    if (a >= until) break;
-    elapsed += Math.max(0, Math.min(until, b) - Math.max(sample.t, a));
-  }
+  const elapsed = drainIndex(trace.activeIntervals)(sample.t, until);
   return Math.max(0, sample.hp - elapsed * trace.drainPerMs);
 }
