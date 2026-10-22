@@ -50,10 +50,28 @@ function singleHit(at: number): ReplayFrame[] {
 }
 
 describe('stable hit windows, early clicks and note-lock', () => {
-  it('accounts for the provisional 1ms 300-window adjustment', () => {
-    // OD 5 has a ±50ms 300 window, with the provisional 1ms adjustment applied.
+  it('matches stable integer 300-window edges using strict window comparison', () => {
+    // Stable rounds the error and requires error < trunc(80 - 6 * OD).
     expect(judge(circleMap(), singleHit(1049)).objects[0].result).toBe(300);
     expect(judge(circleMap(), singleHit(1050)).objects[0].result).toBe(100);
+  });
+
+  it('rounds fractional hit errors and truncates all three hit windows', () => {
+    expect(judge(circleMap(), singleHit(1049.4)).objects[0].result).toBe(300);
+    expect(judge(circleMap(), singleHit(1049.5)).objects[0].result).toBe(100);
+    expect(judge(circleMap(), singleHit(1099.4)).objects[0].result).toBe(100);
+    expect(judge(circleMap(), singleHit(1099.5)).objects[0].result).toBe(50);
+    expect(judge(circleMap(), singleHit(1149.4)).objects[0].result).toBe(50);
+    expect(judge(circleMap(), singleHit(1149.5)).objects[0].result).toBe(0);
+  });
+
+  it('truncates OD-derived fractional window sizes before checking rounded error', () => {
+    const fractional = circleMap();
+    fractional.od = 5.3; // raw 300 window 48.2ms → truncated 48ms
+    expect(judge(fractional, singleHit(1047.4)).objects[0].result).toBe(300);
+    expect(judge(fractional, singleHit(1047.5)).objects[0].result).toBe(100);
+    // The existing comparison sweep override is still available.
+    expect(judge(circleMap(), singleHit(1048), { window300Offset: 2 }).objects[0].result).toBe(100);
   });
 
   it('ignores presses earlier than -400ms, but a click at -400ms misses', () => {
