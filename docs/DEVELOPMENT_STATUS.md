@@ -153,6 +153,14 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - `e309fe54`: draw custom approach-circle sprites with timing, fade and Hidden mod handling, preserving graphics fallback.
 - **Verification:** new changes pushed to development branch; CI pending. Browser screenshot comparisons, custom cursor animation, skin.ini semantics and remaining slider/spinner sprite support are OPEN. M7 stays IN PROGRESS.
 
+### M7 extended sprite-rendering batch (23 October 2026)
+
+- Previous checkpoint `9fab8bda` passed both CI workflows.
+- `efb8ec05`: custom slider-ball and tracking-follow sprites are now drawn during real slider playback; both CI workflows passed.
+- `64cc06ec`: custom spinner-circle and spinner-approach sprites are drawn with replay cursor rotation and timing. CI pending.
+- `ee6058c0`: custom cursor-trail sprites are drawn along replay positions, respecting the existing trail toggle. CI pending.
+- **M7 IN PROGRESS:** Full skin.ini interpretation, slider end/reverse arrow graphics, stable sprite alignment, @2x handling beyond size normalization, browser visual comparison and animation remain OPEN. No deployment or main-branch merge.
+
 ## Immediate next implementation work
 
 1. **Independent:** finish M3's calibrated HP drain/gain, no-drain-during-breaks and HP-zero failure checks. Maintain explicit stable parity uncertainty until real evidence exists.
