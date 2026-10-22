@@ -323,6 +323,7 @@ async function startPlayer(s: Session, scoreId: number | null = null, lease = pl
     if (s.hitsounds.unavailable > 0) s.warnings.push('Some hitsounds are unavailable from this beatmap and your selected skin; bundled defaults are not included.');
     playerClock.rate = effectivePlaybackRate(s.map.rate, Number(($('playback-speed') as HTMLSelectElement).value));
     playerClock.volume = Number(($('volume') as HTMLInputElement).value) / 100;
+    playerClock.effectsVolume = Number(($('effects-volume') as HTMLInputElement).value) / 100;
     playerClock.offset = Number(($('sync-offset') as HTMLInputElement).value);
     playerClock.onEnded = () => { if (active()) updatePlayButton(); };
     if (!renderer) {
@@ -477,6 +478,11 @@ $('volume').addEventListener('input', (e) => {
   if (clock) clock.volume = Number((e.target as HTMLInputElement).value) / 100;
   store.set('volume', (e.target as HTMLInputElement).value);
 });
+$('effects-volume').addEventListener('input', (e) => {
+  const value = Number((e.target as HTMLInputElement).value) / 100;
+  if (clock) clock.effectsVolume = value;
+  store.set('effects-volume', (e.target as HTMLInputElement).value);
+});
 $('playback-speed').addEventListener('change', (e) => {
   const speed = checkedPlayerSpeed(Number((e.target as HTMLSelectElement).value));
   if (clock && session) clock.setRate(effectivePlaybackRate(session.map.rate, speed));
@@ -506,7 +512,7 @@ document.addEventListener('keydown', (e) => {
 
 // ------------------------------------------------------------------ startup
 
-for (const id of ['dim', 'volume']) {
+for (const id of ['dim', 'volume', 'effects-volume']) {
   const v = store.get(id);
   if (v !== null) ($(id) as HTMLInputElement).value = v;
 }
