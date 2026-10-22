@@ -41,10 +41,15 @@ export class Clock {
     this.gain.gain.value = v;
   }
 
-  /** Current map time in ms. */
+  /** Current visual map time in ms, including user audio/visual offset. */
   now(): number {
-    if (!this.playing) return this.startMapTime;
-    return this.startMapTime + (this.ctx.currentTime - this.startCtxTime) * 1000 * this.rate - this.offset;
+    // startMapTime is the AUDIO timeline position. Apply the visual offset
+    // consistently while stopped and running, including seek/pause boundaries.
+    if (!this.playing) return this.startMapTime - this.offset;
+    // The Web Audio source is scheduled 50ms in the future. Do not let that
+    // scheduling lead-in rewind the visible map timeline.
+    const elapsed = Math.max(0, this.ctx.currentTime - this.startCtxTime);
+    return this.startMapTime + elapsed * 1000 * this.rate - this.offset;
   }
 
   async play() {
@@ -66,7 +71,9 @@ export class Clock {
     const was = this.playing;
     this.stopSource();
     this.playing = false;
-    this.startMapTime = mapTime;
+    // The public seek argument is visual/map time; the stored position is
+    // audio time, which runs offset milliseconds ahead of the visuals.
+    this.startMapTime = mapTime + this.offset;
     if (was) void this.play();
   }
 
