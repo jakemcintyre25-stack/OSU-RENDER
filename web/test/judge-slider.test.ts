@@ -151,4 +151,18 @@ describe('stable slider tracking (synthetic replay)', () => {
     expect(judged.maxCombo).toBe(2);
   });
 
+  it('records an early slider-head miss at the click time, not the slider end', () => {
+    const frames: ReplayFrame[] = [
+      { t: 640, x: 100, y: 100, keys: 0 },
+      { t: 650, x: 100, y: 100, keys: KEY.M1 }, // 350 ms early: inside the 400 ms miss window
+      { t: 660, x: 100, y: 100, keys: 0 },
+    ];
+    const judged = judge(mapWithSlider(), frames);
+    expect(judged.objects[0].hitTime).toBeNull();
+    expect(judged.objects[0].result).toBe(0);
+    expect(judged.objects[0].resultTime).toBe(1100); // slider overall result is still at the end
+    expect(judged.events[0]?.t).toBe(650); // but the head combo break occurred on press
+    expect(judged.events[0]?.combo).toBe(0);
+  });
+
 });
