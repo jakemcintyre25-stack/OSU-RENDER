@@ -5,6 +5,7 @@ import { assertLocalUploadSize } from './load/upload-limits';
 import { decodeReplay } from './load/replay';
 import { sessionFromReplay, sessionFromAutoplay, type Session } from './session';
 import { PlayfieldRenderer } from './render/renderer';
+import { decodeVisualSkin, visualSkinFiles } from './render/skin-visuals';
 import { Clock } from './audio/clock';
 import { supportedSkinAudioFiles } from './audio/skin-assets';
 import { parseLaunchTarget, scoreShareUrl, userShareUrl } from './launch';
@@ -229,12 +230,14 @@ wireDrop('osk-drop', 'osk-input', async (file) => {
     assertLocalUploadSize('osk', file.size);
     const archive = openOsz(new Uint8Array(await file.arrayBuffer()));
     const usable = supportedSkinAudioFiles(archive);
-    if (!usable.length) throw new Error('This skin contains no supported hitsound audio files.');
+    // Visual-only .osk archives are valid: their sprites are used by the renderer.
+    const visualCount = Object.keys(visualSkinFiles(archive)).length;
+    if (!usable.length && !visualCount) throw new Error('This skin contains no supported audio or visual files.');
     localSkin = archive;
-    $('osk-status').textContent = `${file.name}: ${usable.length} available hitsound files. The next replay will use these for missing beatmap sounds.`;
+    $('osk-status').textContent = `${file.name}: ${usable.length} hitsound files and ${visualCount} visual sprites. The next replay will use supported assets.`;
     $('osk-drop').querySelector('span')!.textContent = file.name;
     loading(null);
-    toast('Skin hitsounds loaded for the next replay.', true);
+    toast('Supported skin assets loaded for the next replay.', true);
   } catch (error) {
     loading(null);
     toast((error as Error).message);
@@ -341,6 +344,14 @@ async function startPlayer(s: Session, scoreId: number | null = null, lease = pl
     renderer.options.backgroundDim = Number(($('dim') as HTMLInputElement).value) / 100;
     renderer.options.showCursorTrail = ($('cursor-trail') as HTMLInputElement).checked;
     renderer.options.showKeyOverlay = ($('key-overlay') as HTMLInputElement).checked;
+    // Decode local skin sprites once for this session, after renderer init.
+    // The request gate prevents stale async skin decoding from replacing a newer replay.
+    const visuals = localSkin
+      ? await decodeVisualSkin(localSkin, async bytes =>
+          createImageBitmap(new Blob([Uint8Array.from(bytes)], { type: 'image/png' })))
+      : {};
+    if (!active() || !renderer) return;
+    renderer.setSkinVisuals(visuals);
     renderer.setBackground(s.background);
     renderer.load(s.map, s.frames, s.judgement, { player: s.player });
     playerClock.seek(initialPlaybackTime(s.map.firstObjectTime, s.map.audioLeadIn));
