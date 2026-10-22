@@ -1,0 +1,41 @@
+import { describe, expect, it } from 'vitest';
+import { zipSync, strToU8 } from 'fflate';
+import { openOsz } from '../src/load/osz';
+import { visualSkinFiles, decodeVisualSkin } from '../src/render/skin-visuals';
+
+const png = (n: number) => new Uint8Array([137, 80, 78, 71, n]);
+const skin = (files: Record<string, Uint8Array>) => openOsz(zipSync(files));
+
+describe('M7 .osk visual skin loading', () => {
+  it('resolves supported root assets case-insensitively with @2x preference', () => {
+    const archive = skin({
+      'HitCircle.PNG': png(1), 'hitcircle@2x.png': png(2),
+      'hitcircleoverlay.png': png(3), 'cursor.png': png(4),
+      'nested/sliderb.png': png(5), 'arbitrary.png': png(6),
+      'skin.ini': strToU8('[General]\nName: Custom'),
+    });
+    const files = visualSkinFiles(archive);
+    expect([...files.hitcircle!]).toEqual([...png(2)]);
+    expect([...files.hitcircleoverlay!]).toEqual([...png(3)]);
+    expect([...files.cursor!]).toEqual([...png(4)]);
+    expect(files.sliderb).toBeUndefined();
+    expect(Object.keys(files)).toHaveLength(3);
+  });
+  it('isolates broken image decoding without losing valid assets', async () => {
+    const archive = skin({ 'hitcircle.png': png(1), 'cursor.png': png(2) });
+    const calls: number[] = [];
+    const result = await decodeVisualSkin(archive, async bytes => {
+      calls.push(bytes[4]);
+      if (bytes[4] === 1) throw new Error('corrupt PNG');
+      return { width: 32, height: 32 } as HTMLImageElement;
+    });
+    expect(calls).toEqual([1, 2]);
+    expect(result.hitcircle).toBeUndefined();
+    expect(result.cursor).toBeDefined();
+  });
+  it('supports visual-only archives with no chart or audio files', () => {
+    const archive = skin({ 'hitcircle.png': png(9) });
+    expect(archive.difficulties).toHaveLength(0);
+    expect(Object.keys(visualSkinFiles(archive))).toEqual(['hitcircle']);
+  });
+});
