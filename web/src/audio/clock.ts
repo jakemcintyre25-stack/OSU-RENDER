@@ -17,6 +17,7 @@ export class Clock {
   private playing = false;
   private generation = 0;
   private disposed = false;
+  private resumePromise: Promise<void> | null = null;
   /** Playback speed (1.5 for DT). v1 changes pitch too; time-stretch is a Phase 4 item. */
   rate = 1;
   /** User offset in ms; positive = visuals later. */
@@ -86,7 +87,14 @@ export class Clock {
   async play() {
     if (this.playing || this.disposed) return;
     const generation = this.generation;
-    if (this.ctx.state === 'suspended') await this.ctx.resume();
+    if (this.ctx.state === 'suspended') {
+      // One resume promise for concurrent user clicks: two suspended starts
+      // must not create two independently resolving playback continuations.
+      if (!this.resumePromise) {
+        this.resumePromise = this.ctx.resume().finally(() => { this.resumePromise = null; });
+      }
+      await this.resumePromise;
+    }
     // Closing, seeking, or changing speed while resume() was pending must
     // not allow an older continuation to start its abandoned audio source.
     if (this.disposed || generation !== this.generation || this.playing) return;
