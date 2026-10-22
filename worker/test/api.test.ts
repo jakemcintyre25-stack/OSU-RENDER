@@ -110,6 +110,34 @@ describe('replays', () => {
     expect(((await res.json()) as { error: string }).error).toMatch(/no replay/);
   });
 
+  it('rejects replay bodies whose Content-Length exceeds the Worker ceiling', async () => {
+    mockFetch([
+      tokenRoute,
+      [/\/scores\/4567\/download$/, () => new Response(new Uint8Array([1, 2]), {
+        headers: { 'Content-Length': String(65 * 1024 * 1024) },
+      })],
+    ]);
+    const result = await call('/api/scores/4567/replay');
+    expect(result.status).toBe(502);
+    expect(((await result.json()) as { error: string }).error).toMatch(/too large/i);
+  });
+
+  it('rejects streaming replay overruns even if the source underreports Content-Length', async () => {
+    mockFetch([
+      tokenRoute,
+      [/\/scores\/4567\/download$/, () => new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(63 * 1024 * 1024));
+          controller.enqueue(new Uint8Array(2 * 1024 * 1024));
+          controller.close();
+        },
+      }), { headers: { 'Content-Length': '5' } })],
+    ]);
+    const result = await call('/api/scores/4567/replay');
+    expect(result.status).toBe(502);
+    expect(((await result.json()) as { error: string }).error).toMatch(/too large/i);
+  });
+
   it('rejects non-numeric IDs', async () => {
     mockFetch([]);
     expect((await call('/api/scores/abc/replay')).status).toBe(400);
