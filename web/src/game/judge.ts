@@ -18,6 +18,8 @@ export interface ObjectJudgement {
   result: Hit;
   /** When the head was hit (circles, slider heads); null if missed. */
   hitTime: number | null;
+  /** When a slider-head was explicitly clicked too early to hit; separate from final resultTime. */
+  headMissTime?: number;
   /** When the final result is decided (head miss time for circles, end for sliders/spinners). */
   resultTime: number;
   /** Slider only: whether each part (in SliderObj.parts order) was collected. */
@@ -138,7 +140,10 @@ export function judge(map: PreparedMap, frames: ReplayFrame[], options: JudgeOpt
       headDone[k] = true;
       headHit[k] = res;
       if (res > 0) objects[k].hitTime = p.t;
-      else objects[k].resultTime = p.t;
+      else {
+        objects[k].resultTime = p.t;
+        if (o.kind === 'slider') objects[k].headMissTime = p.t;
+      }
       break;
     }
   }
@@ -299,7 +304,7 @@ function buildEvents(map: PreparedMap, objects: ObjectJudgement[], w50: number):
     const j = objects[i];
     if (o.kind === 'slider') {
       if (j.hitTime !== null) raw.push({ t: j.hitTime, kind: 'combo+', flat: sliderPartPoints('head') });
-      else raw.push({ t: Math.min(o.start + w50, o.end), kind: 'break' });
+      else raw.push({ t: j.headMissTime ?? Math.min(o.start + w50, o.end), kind: 'break' });
       o.parts.forEach((p, k) => {
         const got = j.parts?.[k];
         // stable: a missed tick or repeat is a slider break even when the overall
