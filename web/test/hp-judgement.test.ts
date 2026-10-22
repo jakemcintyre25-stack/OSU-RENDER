@@ -84,9 +84,17 @@ describe('M3 real judgement to explicitly calibrated HP timeline', () => {
     const trace = hpFromJudgement(sliderMap, judged,
       { initial: 50, maximum: 100, drainPerMs: 0 }, { 0: 0, 50: 0, 100: 0, 300: 0 }, nested);
     expect(trace.snapshots.at(-1)?.hp).toBe(47);
+    // The slider's final 100/50/300 accuracy result must not grant another
+    // HP gain on top of its independently judged head and nested parts.
+    const finalGain = { 0: 100, 50: 100, 100: 100, 300: 100 };
+    const noDouble = hpFromJudgement(sliderMap, judged,
+      { initial: 50, maximum: 1000, drainPerMs: 0 }, finalGain, nested);
+    expect(noDouble.snapshots.at(-1)?.hp).toBe(47);
     expect(trace.snapshots.some(s => s.t === 1050 && s.hp === 58)).toBe(true);
     expect(() => hpFromJudgement(sliderMap, judged, calibration, gains,
       { ...nested, sliderTailMiss: NaN })).toThrow(RangeError);
+    expect(() => hpFromJudgement(sliderMap, judged, calibration, gains,
+      { ...nested, sliderTickMiss: undefined } as unknown as typeof nested)).toThrow(RangeError);
   });
   it('rejects missing or invalid result gain calibration', () => {
     const result = judge(map, []);
