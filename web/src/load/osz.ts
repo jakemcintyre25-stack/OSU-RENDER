@@ -1,6 +1,6 @@
 import { unzipSync, strFromU8 } from 'fflate';
 import { md5 } from 'js-md5';
-import { inspectOszArchive } from './archive-guard';
+import { inspectOszArchive, zipCrc32 } from './archive-guard';
 
 export interface Difficulty {
   fileName: string;
@@ -32,10 +32,13 @@ export function openOsz(data: Uint8Array): OszArchive {
   const files = new Map<string, Uint8Array>();
   const difficulties: Difficulty[] = [];
   for (const entry of entries) {
-    const { path: name, inflatedBytes } = entry;
+    const { path: name, inflatedBytes, crc32 } = entry;
     const bytes = raw[name];
     if (!bytes || bytes.byteLength !== inflatedBytes) {
       throw new Error('Invalid beatmap archive: extracted content disagrees with ZIP directory');
+    }
+    if (zipCrc32(bytes) !== crc32) {
+      throw new Error('Invalid beatmap archive: CRC32 mismatch for ' + name);
     }
     if (name.endsWith('/') || name.includes('__MACOSX')) continue;
     files.set(norm(name), bytes);
