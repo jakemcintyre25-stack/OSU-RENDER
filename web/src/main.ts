@@ -13,6 +13,7 @@ import { initialPlaybackTime } from './audio/lead-in';
 import { PlaybackRequestGate, type PlaybackLease } from './playback-gate';
 import { checkedPlayerSpeed, effectivePlaybackRate } from './audio/speed';
 import { markerReviewTime } from './render/marker-review';
+import { storedToggle } from './render/preferences';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -338,6 +339,8 @@ async function startPlayer(s: Session, scoreId: number | null = null, lease = pl
     if (rendererInit) await rendererInit;
     if (!active() || !renderer) return;
     renderer.options.backgroundDim = Number(($('dim') as HTMLInputElement).value) / 100;
+    renderer.options.showCursorTrail = ($('cursor-trail') as HTMLInputElement).checked;
+    renderer.options.showKeyOverlay = ($('key-overlay') as HTMLInputElement).checked;
     renderer.setBackground(s.background);
     renderer.load(s.map, s.frames, s.judgement, { player: s.player });
     playerClock.seek(initialPlaybackTime(s.map.firstObjectTime, s.map.audioLeadIn));
@@ -483,6 +486,16 @@ $('effects-volume').addEventListener('input', (e) => {
   if (clock) clock.effectsVolume = value;
   store.set('effects-volume', (e.target as HTMLInputElement).value);
 });
+for (const [control, option] of [
+  ['cursor-trail', 'showCursorTrail'],
+  ['key-overlay', 'showKeyOverlay'],
+] as const) {
+  ($(control) as HTMLInputElement).addEventListener('change', (e) => {
+    const visible = (e.target as HTMLInputElement).checked;
+    if (renderer) renderer.options[option] = visible;
+    store.set(control, String(visible));
+  });
+}
 $('playback-speed').addEventListener('change', (e) => {
   const speed = checkedPlayerSpeed(Number((e.target as HTMLSelectElement).value));
   if (clock && session) clock.setRate(effectivePlaybackRate(session.map.rate, speed));
@@ -515,6 +528,9 @@ document.addEventListener('keydown', (e) => {
 for (const id of ['dim', 'volume', 'effects-volume']) {
   const v = store.get(id);
   if (v !== null) ($(id) as HTMLInputElement).value = v;
+}
+for (const control of ['cursor-trail', 'key-overlay']) {
+  ($(control) as HTMLInputElement).checked = storedToggle(store.get(control));
 }
 const savedOffset = Number(store.get('sync-offset') ?? 0);
 if (Number.isFinite(savedOffset)) {
