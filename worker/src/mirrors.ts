@@ -2,6 +2,7 @@
 // so full beatmapsets (audio, background, hitsounds) come from community mirrors.
 
 import { HttpError } from './osu';
+import { validateMirrorZip } from './zip-envelope';
 
 export const MIRRORS: { name: string; url: (setId: string) => string }[] = [
   { name: 'catboy', url: (id) => `https://catboy.best/d/${id}` },
@@ -9,7 +10,7 @@ export const MIRRORS: { name: string; url: (setId: string) => string }[] = [
   { name: 'osu.direct', url: (id) => `https://osu.direct/api/d/${id}` },
 ];
 
-const ZIP_MAGIC = [0x50, 0x4b, 0x03, 0x04];
+
 const MAX_OSZ_BYTES = 150 * 1024 * 1024;
 const MAX_OSU_TEXT_BYTES = 8 * 1024 * 1024;
 
@@ -75,11 +76,9 @@ export async function fetchBeatmapset(setId: string, fetchImpl: typeof fetch = f
         continue;
       }
       const body = await readBoundedResponse(res, MAX_OSZ_BYTES);
-      const head = new Uint8Array(body, 0, Math.min(4, body.byteLength));
-      if (!ZIP_MAGIC.every((b, i) => head[i] === b)) {
-        errors.push(`${m.name}: not a zip`);
-        continue;
-      }
+      // A PK header is not enough. Check the central directory before returning
+      // success, otherwise malformed downloads are cached and block fallbacks.
+      validateMirrorZip(new Uint8Array(body));
       return { body, mirror: m.name };
     } catch (e) {
       errors.push(`${m.name}: ${(e as Error).message}`);
