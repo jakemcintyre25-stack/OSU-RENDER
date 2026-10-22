@@ -35,6 +35,7 @@ export function validateMirrorZip(bytes: Uint8Array): void {
   let offset = centralOffset;
   let totalInflated = 0;
   const names = new Set<string>();
+  let osuDifficulties = 0;
   // Cloudflare Workers TextDecoder typings do not expose the browser's fatal option.
   // Reject the decoder replacement character instead of accepting ambiguous paths.
   const decoder = new TextDecoder();
@@ -73,6 +74,7 @@ export function validateMirrorZip(bytes: Uint8Array): void {
       invalid('unsafe or duplicate archive name');
     }
     names.add(normalized);
+    if (normalized.endsWith('.osu')) osuDifficulties++;
     if (local + 30 > centralOffset || u32(local) !== 0x04034b50) invalid('missing local header');
     const localNameLength = u16(local + 26);
     const localExtraLength = u16(local + 28);
@@ -87,4 +89,5 @@ export function validateMirrorZip(bytes: Uint8Array): void {
     offset = next;
   }
   if (offset !== eocd) invalid('unexpected central directory trailing data');
+  if (osuDifficulties === 0) invalid('missing .osu beatmap difficulty');
 }
