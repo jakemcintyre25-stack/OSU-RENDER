@@ -20,6 +20,13 @@ describe('ScoreV1 helpers', () => {
     expect(modMultiplier(['DT'])).toBe(1.12);
   });
 
+  it('treats NC as DT and DC as HT without stacking alias multipliers', () => {
+    expect(modMultiplier(['NC', 'DT'])).toBeCloseTo(1.12);
+    expect(modMultiplier(['HT', 'DC'])).toBeCloseTo(0.3);
+    expect(modMultiplier(['DC'])).toBeCloseTo(0.3);
+    expect(modMultiplier(['HD', 'NC', 'DT'])).toBeCloseTo(1.06 * 1.12);
+  });
+
   it('slider parts are flat: ticks 10, heads, repeats and tails 30', () => {
     expect(sliderPartPoints('tick')).toBe(10);
     expect(sliderPartPoints('repeat')).toBe(30);
