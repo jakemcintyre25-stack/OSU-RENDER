@@ -122,6 +122,7 @@ $('user-form').addEventListener('submit', (e) => {
 });
 
 const videoCapture = new ReplayVideoCapture();
+let captureAutoStop: ReturnType<typeof setTimeout> | null = null;
 function captureButton() {
   const button = $('capture-video') as HTMLButtonElement;
   button.disabled = !session || !renderer;
@@ -130,6 +131,8 @@ function captureButton() {
 
 async function toggleCapture() {
   if (videoCapture.active) {
+    if (captureAutoStop) clearTimeout(captureAutoStop);
+    captureAutoStop = null;
     try {
       const { blob } = await videoCapture.stop();
       const url = URL.createObjectURL(blob);
@@ -149,6 +152,8 @@ async function toggleCapture() {
   if (!renderer || !session) return;
   try {
     videoCapture.start(renderer.app.canvas);
+    // Save before the encoder's hard 60-second safety stop.
+    captureAutoStop = setTimeout(() => { if (videoCapture.active) void toggleCapture(); }, 59_000);
     captureButton();
     toast('Recording video only, maximum 60 seconds. Press Stop recording to save.');
   } catch (error) {
@@ -428,6 +433,8 @@ const clamp = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);
 const endTime = () => session ? playbackEndTime(session.map.lastObjectTime, clock?.duration ?? 0) : 1;
 
 function stopPlayer() {
+  if (captureAutoStop) clearTimeout(captureAutoStop);
+  captureAutoStop = null;
   videoCapture.cancel();
   activeScoreId = null;
   ($('share-score') as HTMLButtonElement).disabled = true;
