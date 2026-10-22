@@ -11,6 +11,7 @@ import { parseLaunchTarget, scoreShareUrl, userShareUrl } from './launch';
 import { playbackEndTime } from './audio/timeline';
 import { initialPlaybackTime } from './audio/lead-in';
 import { PlaybackRequestGate, type PlaybackLease } from './playback-gate';
+import { checkedPlayerSpeed, effectivePlaybackRate } from './audio/speed';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -319,7 +320,7 @@ async function startPlayer(s: Session, scoreId: number | null = null, lease = pl
     if (!active()) return;
     if (samples.failed > 0) s.warnings.push(`${samples.failed} beatmap hitsound files could not be decoded by this browser.`);
     if (s.hitsounds.unavailable > 0) s.warnings.push('Some hitsounds are unavailable from this beatmap and your selected skin; bundled defaults are not included.');
-    playerClock.rate = s.map.rate;
+    playerClock.rate = effectivePlaybackRate(s.map.rate, Number(($('playback-speed') as HTMLSelectElement).value));
     playerClock.volume = Number(($('volume') as HTMLInputElement).value) / 100;
     playerClock.offset = Number(($('sync-offset') as HTMLInputElement).value);
     playerClock.onEnded = () => { if (active()) updatePlayButton(); };
@@ -399,7 +400,7 @@ async function togglePlay() {
   if (!clock) return;
   if (clock.isPlaying) clock.pause();
   else {
-    if (clock.now() > endTime()) clock.seek(Math.min(0, (session?.map.firstObjectTime ?? 0) - 1500));
+    if (clock.now() > endTime()) clock.seek(initialPlaybackTime(session?.map.firstObjectTime ?? 0, session?.map.audioLeadIn));
     await clock.play();
   }
   updatePlayButton();
@@ -466,6 +467,11 @@ $('volume').addEventListener('input', (e) => {
   if (clock) clock.volume = Number((e.target as HTMLInputElement).value) / 100;
   store.set('volume', (e.target as HTMLInputElement).value);
 });
+$('playback-speed').addEventListener('change', (e) => {
+  const speed = checkedPlayerSpeed(Number((e.target as HTMLSelectElement).value));
+  if (clock && session) clock.setRate(effectivePlaybackRate(session.map.rate, speed));
+  store.set('playback-speed', String(speed));
+});
 const syncOffset = $('sync-offset') as HTMLInputElement;
 const showOffset = () => {
   const value = Number(syncOffset.value);
@@ -500,6 +506,8 @@ if (Number.isFinite(savedOffset)) {
   syncOffset.value = String(Math.max(-250, Math.min(250, Math.round(savedOffset / 5) * 5)));
 }
 showOffset();
+const speedChoice = checkedPlayerSpeed(Number(store.get('playback-speed') ?? 1));
+($('playback-speed') as HTMLSelectElement).value = String(speedChoice);
 const savedUser = store.get('username');
 if (savedUser) ($('username') as HTMLInputElement).value = savedUser;
 
