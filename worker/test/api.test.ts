@@ -181,6 +181,17 @@ describe('beatmap mirrors', () => {
     expect((await fetchBeatmapset('1', f)).mirror).toBe('nerinyan');
   });
 
+  it('retries when a ZIP contains no .osu difficulty', async () => {
+    const bad = storedZip(undefined, 'cover.jpg');
+    const attempts: string[] = [];
+    const f = (async (u: string) => {
+      attempts.push(u);
+      return new Response(u.includes('catboy') ? bad : zip);
+    }) as unknown as typeof fetch;
+    expect((await fetchBeatmapset('123', f)).mirror).toBe('nerinyan');
+    expect(attempts).toHaveLength(2);
+  });
+
   it('errors with every mirror reason when all fail', async () => {
     const f = (async () => new Response('', { status: 500 })) as unknown as typeof fetch;
     await expect(fetchBeatmapset('1', f)).rejects.toThrow(/catboy: HTTP 500.*nerinyan.*osu.direct/);
