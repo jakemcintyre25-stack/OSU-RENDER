@@ -106,6 +106,14 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - `4bf812af`: real slider judgement integration regression test for a collected tick and missed tail, expected HP trace, and invalid nested calibration rejection. CI pending; do not mark PASS until both workflows succeed.
 - **M3 IN PROGRESS:** These are explicit calibration inputs, not validated osu!stable coefficients. Slider HP result mapping, reference replay parity, break recovery and HP-zero gameplay failure remain OPEN.
 
+### M3 nested HP correctness follow-up (23 October 2026)
+
+- **Verified:** Both GitHub Actions workflows passed at `970c44b3`, including nested slider HP source and its first integration test.
+- `c7a7c229`: Tag slider final judgement events so HP can distinguish the accuracy result from head/tick/repeat/tail events.
+- `caff96b9`: Suppress duplicate slider final-result HP gains when nested calibration is active, and require every explicit nested coefficient to be finite (including missing keys).
+- `473add18`: Add real-judgement regression tests for double-counting and omitted calibration values. CI must pass before this follow-up is considered verified.
+- **Still IN PROGRESS:** Real osu!stable HP coefficient reference, break recovery, spinner HP events, HP-zero failure and authorized replay parity. No unvalidated calibration has been enabled in the player.
+
 ## Immediate next implementation work
 
 1. **Independent:** finish M3's calibrated HP drain/gain, no-drain-during-breaks and HP-zero failure checks. Maintain explicit stable parity uncertainty until real evidence exists.
