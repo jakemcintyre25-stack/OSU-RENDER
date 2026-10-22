@@ -31,7 +31,7 @@ npm run dev:worker      # API on http://localhost:8787 (needs worker/.dev.vars, 
 
 The `.osz` autoplay preview works with only `npm run dev` — no API needed.
 
-For custom hitsounds, drop a rights-cleared `.osk` file in **Optional skin hitsounds** on the homepage before opening a replay. Only the skin's WAV/MP3/OGG hitnormal/whistle/finish/clap samples and `LayeredHitSounds` setting are used; skin images/sprites, default bundled sounds and persistence are not implemented. Beatmap-provided samples take priority, and an uploaded skin is kept in browser memory for the current page session only. Oversized local uploads are rejected before reading their bytes.
+For custom hitsounds, drop a rights-cleared `.osk` file in **Optional skin hitsounds** before opening a replay. Its WAV/MP3/OGG hitnormal/whistle/finish/clap and slider slide/whistle sounds can be used, with the `LayeredHitSounds` setting. Skin images/sprites, default bundled sounds and persistence are not implemented. Beatmap-provided samples take priority, and an uploaded skin is kept in browser memory for the current page session only. Oversized local uploads are rejected before reading their bytes.
 
 ### osu! API credentials
 
@@ -50,13 +50,15 @@ cd worker && npx wrangler secret put OSU_CLIENT_ID && npx wrangler secret put OS
 npm run deploy          # builds web/ and deploys the Worker with the site attached
 ```
 
+The player also supports clicking miss/100 timeline markers to jump two seconds before the event. A new replay selection cancels older downloads and prevents stale asynchronous results from replacing the current player. These controls are covered by automated tests but still need real-browser/mobile acceptance.
+
 ## Status
 
 Done:
 
 - Worker: recent plays, replay download, beatmap mirrors with fallback, checksum lookup, edge caching, rate limit
 - Map prep: mods (EZ/HR/HD/DT/NC/HT), stacking, slider paths, ticks/repeats, combo colours
-- Playback: music-synced clock, seek, background + dim, volume, persisted sync offset, song-outro-aware timeline; beatmap-provided circle/slider/spinner-end hitsounds decoded/scheduled using Web Audio
+- Playback: music-synced clock, song-outro-aware seek, AudioLeadIn, independent music/FX volumes, persisted sync offset and 0.25×–2× viewer speed; beatmap and user-.osk circle/slider/spinner-end sounds plus judged slider tracking loops use Web Audio
 - Drawing: hit circles, approach circles, snaking slider bodies, reverse arrows, ticks, slider ball + follow circle, spinners, HD fades, cursor + trail, key overlay, combo/accuracy, 100/50/miss popups, miss markers on the timeline
 - Judgement v0: hit windows, note-lock, slider tracking, spinners, combo. Compared against the replay's own counts in the ⓘ panel
 - Autoplay generator (used for map preview and tests — judges 100% on the test map)
@@ -64,11 +66,11 @@ Done:
 Next (see the build plan):
 
 - Judgement to exact stable parity (slider leniency, 2B, spinner rpm, score V1, HP)
-- Finish default/user skin graphics, continuous slider and spinner sounds, and pitch-preserving DT/HT time stretch; current hitsounds support real beatmap-provided samples plus optional user-selected .osk audio fallback
+- Finish default/user skin graphics, spinner rotation/bonus sounds, and pitch-preserving DT/HT time stretch. Slider loops already exist for recorded tracking sections but still require real-browser acoustic acceptance
 - Default skin sprites + custom `.osk` skins, follow points, hit lighting
 - MP4 export with WebCodecs
 - Lazer score rules
-- Hook into One Miss Merchants (sign-in, profile links)
+- Complete One Miss Merchants profile/match links (the renderer-side `?user=<osu ID>` and `?score=<score ID>` routes and Share replay button are implemented; see `docs/INTEGRATION.md`)
 
 ## Licences
 
