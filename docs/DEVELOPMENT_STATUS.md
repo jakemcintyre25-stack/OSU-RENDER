@@ -11,15 +11,15 @@ Updated: 23 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 | M1 Judgement harness | **PASS** | `npm run judge-check`, verbose diagnostics and CI implemented. Empty optional fixtures exit zero. Real replay fixtures stay local. |
 | M2 Stable judgement parity | **IN PROGRESS** | Strict checksum matching rejects updated beatmaps with unchanged IDs; `.osu`-only fallback labels uncertainty. Strict parity mode fails when no stable replay is checked. Slider timing, combo breaks, hit-window edges and 2B autoplay have synthetic tests; exact real-replay parity, spinner smoothing and complex note-lock remain unverified. |
 | M3 HP and fail | **IN PROGRESS** | Verified SD/PF failure timestamps from circle grades and slider-head/tick/repeat combo breaks, with NF precedence. Exact stable HP drain, hit gains, break pauses, HP timeline and HP-zero failure remain. |
-| M4 Score V1 | **IN PROGRESS** | Running ScoreV1, mod multipliers, slider/spinner part scoring implemented. Fixed 30-point slider heads, clamped difficulty multiplier to 2–6, and normalized NC/DT and DC/HT speed-mod aliases. Real header parity remains unverified; older M4 replay comparison values are stale. |
-| M5 Audio timing and hitsounds | **IN PROGRESS** | Implemented beatmap and optional user-supplied .osk layered samples for circles/sliders and spinner completion, bounded decoding and seek-safe Web Audio scheduling; honors LayeredHitSounds in the chosen skin. Synthetic ZIP and AudioContext tests pass. Bundled defaults, slider/spinner loops, acoustic real-browser parity and pitch-preserving DT/HT remain. See docs/M5-FINDINGS.md. |
+| M4 Score V1 | **IN PROGRESS** | Running ScoreV1, mod multipliers and slider/spinner part scoring exist; HUD now displays calculated score and details panel compares against the replay header. It is labelled provisional. Real header parity remains unverified. |
+| M5 Audio timing and hitsounds | **IN PROGRESS** | Chart and optional user .osk hitsounds, successful spinner completion and **actual tracked slider slide/whistle loops** use a shared seek-safe Web Audio clock. AudioLeadIn and WAV/MP3/OGG map-before-skin precedence are tested. Browser acoustic parity, spinner rotation/bonus sounds, bundled defaults and pitch-preserving DT/HT remain. See docs/M5-FINDINGS.md. |
 | M6 Default skin and visual parity | **OPEN** | Basic Pixi renderer exists; sprite parity, shader, HUD, FL and effects remain. |
-| M7 Custom skins | **IN PROGRESS** | Users can import an .osk ZIP from the homepage for actual WAV/MP3/OGG Normal/Soft/Drum hitsounds, including the LayeredHitSounds skin.ini setting. No skin.ini visual layout, sprite replacement, persistence, full visual skin integration or default bundled sound set yet. |
-| M8 Player page | **IN PROGRESS** | Basic browsing, replay loading and controls exist; audio/visual Sync slider and music-outro-aware seek/end range now tested. Settings, mobile/browser acceptance, loading recovery and richer timeline remain. |
+| M7 Custom skins | **IN PROGRESS** | Optional .osk WAV/MP3/OGG hitsounds and slider loops are recognized in root-level archive entries; LayeredHitSounds honored. Visual skin.ini layout, sprites, persistence and default licensed sound set remain OPEN. |
+| M8 Player page | **IN PROGRESS** | Working basic controls plus calculated-score HUD, Sync and 0.25×–2× persisted viewer speed, audio-outro timeline, share-link button and latest-request-wins cancellation across replay lookup/decode/start. Unit, API abort and build checks pass. Browser/device/mobile acceptance and richer interactive timeline remain. |
 | M9 MP4 export | **OPEN** | No WebCodecs/offline audio export yet. |
 | M10 Lazer | **OPEN** | Legacy/stable only; lazer detection and rule set remain. |
 | M11 Hardening | **IN PROGRESS** | Added ZIP central-directory resource/path checks, CRC32, bounded replay frames, streaming byte limits for .osz/.osr/.osu, and browser pre-read size caps for local .osr/.osz/.osk uploads. Backend checks mirror ZIP contents and retries invalid archives. Negative-case tests pass; R2, a stateful mirror breaker, deeper decompression limits, security review and production load tests remain. |
-| M12 One Miss Merchants links | **OPEN** | Parameterized integration and INTEGRATION.md remain. |
+| M12 One Miss Merchants links | **IN PROGRESS** | Validated `?user=<osu ID>` auto-list and `?score=<score ID>` playback, canonical copy-link action, documented OMM read-only external-link contract in docs/INTEGRATION.md. OMM-side profile/match links, actual hostname, API/live-browser acceptance and rollback work remain OPEN. |
 
 ## Verified recent commits
 
@@ -56,17 +56,25 @@ Updated: 23 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 - `ae50e1b`: load user .osk through homepage and apply unindexed skin audio in session playback, preserving map-asset priority and explicitly named sample behaviour. CI passed both workflows. `dbc7172` adds the session-level integration test.
 - `f778ca7`: reject oversized local .osr/.osz/.osk files before File.arrayBuffer() allocation. `d568635` tests file-type ceilings and invalid size metadata; both implementation workflows passed.
 - `06b4140`, `5321845`: implement and test skin.ini LayeredHitSounds=0/1 to respect normal/addition layer selection; implementation CI passed both workflows.
+- `f4d76e7`, `20dd797`: looping chart/skin sliderslide and sliderwhistle samples follow judged tracking intervals; fix mid-slider seek alignment to Web Audio start, both workflows pass. `c954d60` accepts .osk files that contain only slider audio.
+- `1bfe12c`: check indexed WAV/MP3/OGG inside beatmap before skin; exact custom filenames remain strict.
+- `8b65e9f`, `c899315`: reconstructed running ScoreV1 HUD and replay header comparison (explicitly provisional) with seek and formatting tests.
+- `0e733f1`: enable validated `?user` and `?score` deep links and Share replay control, both GitHub Actions workflows passed. See `docs/INTEGRATION.md` for OMM-side unfinished contract.
+- `a513431`: parse and use real AudioLeadIn while retaining compatibility with test maps; both workflows passed after fixing negative-zero and optional-property cases.
+- `c77741e`, `c53da26`: latest-request-wins cancellation over web score/replay/map API, avoiding stale player takeover; gate and fetch signal tests pass.
+- `5d264ee`: persistent viewer speed selector (0.25×–2×), combined multiplicatively with DT/HT map rate; both GitHub Actions checks pass.
 
-GitHub Actions covers Node web+worker tests, TypeScript checks, web build and the ordinary no-fixture judge-check. The latest verified code head recorded here is `b9fc495e547d139e0a2d693951f470795a8ce24f` (GitHub Actions push tests, TypeScript and build passed; see Actions for both push and PR conclusions). This is **not proof of human-replay parity, browser audio quality, Windows EXE correctness or complete security**.
+GitHub Actions covers Node web+worker tests, TypeScript checks, web build and the ordinary no-fixture judge-check. Latest verified implementation checkpoint to check in Actions: `5d264ee17a2d0400332959925b5111d04a05ec64` (both push and PR workflows successful). Later documentation-only commits remain subject to their own workflow results. This is **not proof of human-replay parity, browser audio quality, Windows EXE correctness or complete security**.
 
 The critical real-data acceptance command is now `npm run judge-check:strict` after placing exact-MD5-matched real files in gitignored `fixtures/replays/` and `fixtures/maps/`. It deliberately fails in normal CI without those private fixtures.
 
 ## Immediate next implementation work
 
-1. Run `npm run judge-check:strict` and `npm run judge-check -- --require-fixtures --verbose <replay.osr>` using the local exact-MD5-matched real osu!stable replay fixture set (not committed); resolve count/combo mismatches before marking M2 PASS.
-2. Validate the now documented-and-unit-tested strict rounded-error 300/100/50 windows against the real replay set; independently establish exact stable spinner velocity/RPM smoothing.
-3. Run the optional all-difficulties Renatus autoplay acceptance test locally and fix any map-specific issues.
-4. Complete M3's exact stable HP drain/gain and no-drain-during-break algorithm (failTime for SD/PF/NF is already verified). Then complete M4 ScoreV1 header parity and the audio/skin/export milestones.
+1. **Independent:** finish M3's calibrated HP drain/gain, no-drain-during-breaks and HP-zero failure checks. Maintain explicit stable parity uncertainty until real evidence exists.
+2. **Independent:** fill out M8 timeline marker interactions, additional tested controls, and M5/M7 sound/skin semantics without distributing copyrighted samples.
+3. **Requires local rights-cleared fixtures:** run `npm run judge-check:strict` on exact-MD5-matched real osu!stable `.osr`/`.osz` pairs and the optional all-difficulties Renatus autoplay test. Resolve counts/combo/score parity before declaring M2/M4 PASS.
+4. **Requires integration environment:** run a real-browser/audio and Windows standalone EXE smoke test; establish the separate renderer hostname and OMM profile/match link contract. OMM-side deployment/merges remain unauthorized and are not prerequisites for independent work.
+5. Open beyond those: default/custom visual skin parity, DT/HT pitch-preserving stretch, full video/audio MP4 export, lazer rules and production hardening.
 
 ## GitHub recovery and safety
 
