@@ -15,46 +15,9 @@ export const MIRRORS: { name: string; url: (setId: string) => string }[] = [
 const MAX_OSZ_BYTES = 150 * 1024 * 1024;
 const MAX_OSU_TEXT_BYTES = 8 * 1024 * 1024;
 
-/**
- * Bound a mirror download while consuming the stream. Content-Length alone is
- * not an enforcement mechanism: mirrors may omit it or send fewer bytes there
- * than in the actual body. Never accumulate beyond maxBytes.
- */
-export async function readBoundedResponse(response: Response, maxBytes: number): Promise<ArrayBuffer> {
-  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
-    throw new Error('Invalid download byte limit');
-  }
-  const declared = Number(response.headers.get('content-length') ?? 0);
-  if (Number.isFinite(declared) && declared > maxBytes) {
-    throw new Error('Download too large (declared length)');
-  }
-  if (!response.body) throw new Error('Download has no readable body');
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (!value) continue;
-      total += value.byteLength;
-      if (total > maxBytes) {
-        await reader.cancel().catch(() => {});
-        throw new Error('Download too large (streamed length)');
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return bytes.buffer;
-}
+// Existing module contract re-exports the shared bounded-stream helper.
+export { readBoundedResponse } from './bounded-stream';
+import { readBoundedResponse } from './bounded-stream';
 
 
 /** Tries each mirror in turn and returns the first response that is really a zip. */
