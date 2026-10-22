@@ -23,10 +23,8 @@ export interface CaptureResult {
 
 export class ReplayVideoCapture {
   private recorder: MediaRecorder | null = null;
-  private stream: MediaStream | null = null;
   private chunks: Blob[] = [];
   private bytes = 0;
-  private startedAt = 0;
   private timeout: ReturnType<typeof setTimeout> | null = null;
   private resolve: ((result: CaptureResult) => void) | null = null;
   private reject: ((error: Error) => void) | null = null;
@@ -46,11 +44,9 @@ export class ReplayVideoCapture {
     try {
       const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5_000_000 });
       this.recorder = recorder;
-      this.stream = stream;
       this.chunks = [];
       this.bytes = 0;
       this.failed = null;
-      this.startedAt = Date.now();
       this.promise = new Promise<CaptureResult>((resolve, reject) => {
         this.resolve = resolve;
         this.reject = reject;
@@ -78,7 +74,6 @@ export class ReplayVideoCapture {
         else if (!result.size) this.reject?.(new Error('Capture produced no video frames'));
         else this.resolve?.({ blob: result, mime });
         this.recorder = null;
-        this.stream = null;
         this.chunks = [];
         this.resolve = null;
         this.reject = null;
@@ -89,7 +84,6 @@ export class ReplayVideoCapture {
     } catch (error) {
       stream.getTracks().forEach(track => track.stop());
       this.recorder = null;
-      this.stream = null;
       this.promise = null;
       throw error;
     }
