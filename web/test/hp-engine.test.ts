@@ -66,6 +66,23 @@ describe('M3 calibrated HP timeline mechanics (not stable coefficients)', () => 
     expect(hpAt(trace, 70)).toBe(0);
     expect(trace.zeroTime).toBe(70);
   });
+  it('matches direct interval arithmetic across many breaks and event timestamps', () => {
+    const breaks = Array.from({ length: 120 }, (_, i) => ({
+      start: i * 100 + 25, end: i * 100 + 75,
+    }));
+    const deltas = Array.from({ length: 300 }, (_, i) => ({
+      t: i * 40, amount: i % 3 === 0 ? 1 : 0,
+    }));
+    const trace = simulateHp(0, 12000, breaks, deltas, {
+      initial: 500, maximum: 1000, drainPerMs: 0.01,
+    });
+    for (let t = 0; t <= 12000; t += 137) {
+      const elapsed = t - breaks.reduce((sum, b) =>
+        sum + Math.max(0, Math.min(t, b.end) - Math.min(t, b.start)), 0);
+      const gains = deltas.filter(d => d.t <= t).reduce((sum, d) => sum + d.amount, 0);
+      expect(hpAt(trace, t)).toBeCloseTo(500 - elapsed * 0.01 + gains, 7);
+    }
+  });
   it('validates calibration, event timestamps and break ranges', () => {
     expect(() => simulateHp(0, 10, [], [], { initial: 101, maximum: 100, drainPerMs: 1 })).toThrow(RangeError);
     expect(() => simulateHp(0, 10, [], [], { initial: 10, maximum: 100, drainPerMs: NaN })).toThrow(RangeError);
