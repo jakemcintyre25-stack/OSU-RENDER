@@ -114,6 +114,12 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - `473add18`: Add real-judgement regression tests for double-counting and omitted calibration values. CI must pass before this follow-up is considered verified.
 - **Still IN PROGRESS:** Real osu!stable HP coefficient reference, break recovery, spinner HP events, HP-zero failure and authorized replay parity. No unvalidated calibration has been enabled in the player.
 
+### M3 HP seeking support (23 October 2026)
+
+- Previous checkpoint `d72023d0` verified: both GitHub Actions workflows passed, including slider HP double-counting regressions.
+- `1ea4fd45`, `5ae764a3`: add `hpAt(trace, mapTime)` to query deterministic HP between judgement events, on break intervals, and after simultaneous event deltas; HP traces now preserve normalized active drain intervals and calibration rate. Regression tests cover seeking backward, overlapping breaks, zero crossings, bounds, and invalid times. CI pending for these changes.
+- **M3 IN PROGRESS:** Seekable HP is an internal engine, not a reference-validated stable HP meter. Coefficients, break recovery, spinner events, and HP-zero failure remain OPEN.
+
 ## Immediate next implementation work
 
 1. **Independent:** finish M3's calibrated HP drain/gain, no-drain-during-breaks and HP-zero failure checks. Maintain explicit stable parity uncertainty until real evidence exists.
