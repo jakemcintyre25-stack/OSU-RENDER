@@ -6,6 +6,7 @@ import { eventAt } from '../game/judge';
 import { scoreHudLabel } from './hud-score';
 import { cursorAt, KEY, type ReplayFrame } from '../load/replay';
 import { playfieldLayout, type PlayfieldLayout } from './layout';
+import { VisibleObjectIndex } from './visible-index';
 
 const HIT_FADE = 240; // ms for a hit circle to expand and fade after being hit
 const MISS_FADE = 120;
@@ -71,6 +72,7 @@ export class PlayfieldRenderer {
   private judgementTexts = new Map<number, Text>();
   private layout: PlayfieldLayout = { scale: 1, x: 0, y: 0 };
   private map: PreparedMap | null = null;
+  private visibility: VisibleObjectIndex | null = null;
   private judgement: Judgement | null = null;
   private frames: ReplayFrame[] = [];
   private frameHint = 0;
@@ -104,6 +106,7 @@ export class PlayfieldRenderer {
   load(map: PreparedMap, frames: ReplayFrame[], judgement: Judgement, meta: { player: string }) {
     this.clearObjects();
     this.map = map;
+    this.visibility = new VisibleObjectIndex(map.objects);
     this.frames = frames;
     this.judgement = judgement;
     this.frameHint = 0;
@@ -209,7 +212,10 @@ export class PlayfieldRenderer {
     }
     this.bg.alpha = 1 - this.options.backgroundDim;
     const keep = new Set<number>();
-    for (const o of map.objects) {
+    // Conservative indexed window: the exact per-judgement fade logic below
+    // still decides which candidates are drawn.
+    const candidates = this.visibility?.at(t, map.preempt, SLIDER_FADE + HIT_FADE + 400) ?? [];
+    for (const o of candidates) {
       const appear = o.start - map.preempt;
       const gone = o.end + (o.kind === 'circle' ? HIT_FADE + 40 : SLIDER_FADE + HIT_FADE);
       const j = this.judgement.objects[o.index];
