@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { simulateHp } from '../src/game/hp-engine';
+import { hpAt, simulateHp } from '../src/game/hp-engine';
 
 const calibration = { initial: 100, maximum: 100, drainPerMs: 1 };
 
@@ -40,6 +40,31 @@ describe('M3 calibrated HP timeline mechanics (not stable coefficients)', () => 
     ], { initial: 30, maximum: 100, drainPerMs: 0 });
     expect(trace.snapshots.map(s => s.hp)).toEqual([30, 100, 0, 20, 20]);
     expect(trace.zeroTime).toBe(10);
+  });
+  it('seeks between events, freezes during breaks, and applies simultaneous gains', () => {
+    const trace = simulateHp(0, 100, [{ start: 20, end: 60 }], [
+      { t: 70, amount: 10 },
+      { t: 70, amount: -3 },
+    ], { initial: 100, maximum: 100, drainPerMs: 1 });
+    expect(hpAt(trace, -10)).toBe(100);
+    expect(hpAt(trace, 10)).toBe(90);
+    expect(hpAt(trace, 30)).toBe(80);
+    expect(hpAt(trace, 55)).toBe(80);
+    expect(hpAt(trace, 65)).toBe(75);
+    expect(hpAt(trace, 70)).toBe(77);
+    expect(hpAt(trace, 80)).toBe(67);
+    expect(hpAt(trace, 120)).toBe(47);
+    expect(hpAt(trace, 10)).toBe(90);
+    expect(() => hpAt(trace, NaN)).toThrow(RangeError);
+  });
+  it('seeks accurately through overlapping breaks and HP-zero crossings', () => {
+    const trace = simulateHp(0, 100, [
+      { start: 20, end: 45 }, { start: 30, end: 60 },
+    ], [], { initial: 30, maximum: 100, drainPerMs: 1 });
+    expect(hpAt(trace, 40)).toBe(10);
+    expect(hpAt(trace, 60)).toBe(10);
+    expect(hpAt(trace, 70)).toBe(0);
+    expect(trace.zeroTime).toBe(70);
   });
   it('validates calibration, event timestamps and break ranges', () => {
     expect(() => simulateHp(0, 10, [], [], { initial: 101, maximum: 100, drainPerMs: 1 })).toThrow(RangeError);
