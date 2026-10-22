@@ -71,3 +71,19 @@ Next (see the build plan):
 ## Licences
 
 No licence has been chosen for this code yet. Dependencies `osu-parsers`, `osu-classes`, `osu-standard-stable`, `pixi.js` and `fflate` are MIT. The test map in `fixtures/` comes from the osu! repository's test resources and is not redistributed here.
+
+
+## Judgement parity checks (M1)
+
+`npm run judge-check` compares each local legacy osu!standard replay's judgement results with the counts and maximum combo in its `.osr` header. The check looks for `fixtures/replays/*.osr` and the exact-MD5-matching `.osu` difficulty inside `fixtures/maps/*.osz`. Output includes a row for each replay, our counts versus the header, and a failure exit status on any discrepancy. Once Score V1 exists, the same table will also compare total score.
+
+```bash
+npm run judge-check
+npm run judge-check -- --verbose example.osr
+```
+
+Verbose output lists every object, its millisecond and `mm:ss.mmm` timestamp, judged result, and slider-part collection. Replay headers contain aggregate counts only, so the tool **cannot know the true judgement of an individual object**. All object results are displayed as potential mismatch candidates.
+
+Fixtures are local and gitignored: **never commit beatmaps, replays, audio, or skins**. If either directory is missing or empty, the command exits successfully with setup instructions. Lazer fixtures should go in `fixtures/replays/lazer/` (not scanned by M1) or use a `*.lazer.osr` filename, which is explicitly skipped until M10 adds lazer support.
+
+GitHub Actions runs `npm test`, `npm run typecheck`, `npm run build`, and `npm run judge-check` on pushes and pull requests. Tests that require the optional `fixtures/renatus.osz` continue to skip when it is missing in CI. New fixture-independent CLI tests run under Node's built-in test runner as part of `npm test`.
