@@ -3,6 +3,7 @@ import type { PreparedMap, HitObj, SliderObj, SpinnerObj, Vec } from '../game/pr
 import { sliderBallAt } from '../game/prepare';
 import type { Judgement } from '../game/judge';
 import { eventAt } from '../game/judge';
+import { scoreHudLabel } from './hud-score';
 import { cursorAt, KEY, type ReplayFrame } from '../load/replay';
 import { playfieldLayout, type PlayfieldLayout } from './layout';
 
@@ -63,6 +64,7 @@ export class PlayfieldRenderer {
   private hud = new Container();
   private comboText!: Text;
   private accText!: Text;
+  private scoreText!: Text;
   private infoText!: Text;
   private keyBoxes: { g: Graphics; label: Text; count: Text; mask: number; presses: number[] }[] = [];
   private displays = new Map<number, Display>();
@@ -138,8 +140,10 @@ export class PlayfieldRenderer {
     this.comboText.anchor.set(0, 1);
     this.accText = new Text({ text: '', style: style(32) });
     this.accText.anchor.set(1, 0);
+    this.scoreText = new Text({ text: '', style: style(18, '400') });
+    this.scoreText.anchor.set(1, 0);
     this.infoText = new Text({ text: '', style: style(15, '400') });
-    this.hud.addChild(this.comboText, this.accText, this.infoText);
+    this.hud.addChild(this.comboText, this.accText, this.scoreText, this.infoText);
     const keys: [string, number][] = [['K1', KEY.K1], ['K2', KEY.K2], ['M1', KEY.M1], ['M2', KEY.M2]];
     for (const [name, mask] of keys) {
       const g = new Graphics();
@@ -171,10 +175,12 @@ export class PlayfieldRenderer {
     this.comboText.position.set(12 * u, h - 8 * u);
     this.accText.scale.set(u);
     this.accText.position.set(w - 14 * u, 10 * u);
+    this.scoreText.scale.set(u);
+    this.scoreText.position.set(w - 14 * u, 50 * u);
     this.infoText.scale.set(u);
     this.infoText.position.set(14 * u, 10 * u);
     const res = this.app.renderer.resolution;
-    for (const t of [this.comboText, this.accText, this.infoText]) t.resolution = res;
+    for (const t of [this.comboText, this.accText, this.scoreText, this.infoText]) t.resolution = res;
     this.keyBoxes.forEach((k, i) => {
       const size = 34 * u;
       const x = w - size - 8 * u;
@@ -483,6 +489,7 @@ export class PlayfieldRenderer {
     const e = this.judgement ? eventAt(this.judgement, t) : null;
     this.comboText.text = `${e?.combo ?? 0}x`;
     this.accText.text = `${((e?.accuracy ?? 1) * 100).toFixed(2)}%`;
+    this.scoreText.text = scoreHudLabel(e?.score);
     const c = this.frames.length ? cursorAt(this.frames, t, this.frameHint) : null;
     for (const k of this.keyBoxes) {
       k.g.visible = k.label.visible = k.count.visible = this.options.showKeyOverlay;
