@@ -26,6 +26,7 @@ function circleMap(starts = [1000], positions = [100]): PreparedMap {
     ar: 5,
     od: 5,
     hp: 5,
+    scoreDifficulty: 2,
     radius: 10,
     preempt: 1200,
     fadeIn: 400,
@@ -49,10 +50,10 @@ function singleHit(at: number): ReplayFrame[] {
 }
 
 describe('stable hit windows, early clicks and note-lock', () => {
-  it('includes the 300-window boundary but not a later millisecond', () => {
-    // OD 5 has a ±50ms 300 window and a ±100ms 100 window.
-    expect(judge(circleMap(), singleHit(1050)).objects[0].result).toBe(300);
-    expect(judge(circleMap(), singleHit(1051)).objects[0].result).toBe(100);
+  it('accounts for the provisional 1ms 300-window adjustment', () => {
+    // OD 5 has a ±50ms 300 window, with the provisional 1ms adjustment applied.
+    expect(judge(circleMap(), singleHit(1049)).objects[0].result).toBe(300);
+    expect(judge(circleMap(), singleHit(1050)).objects[0].result).toBe(100);
   });
 
   it('ignores presses earlier than -400ms, but a click at -400ms misses', () => {
@@ -66,7 +67,7 @@ describe('stable hit windows, early clicks and note-lock', () => {
     expect(judge(circleMap(), attempt(600)).objects[0].result).toBe(0);
   });
 
-  it('locks a later circle until the earlier object is hit', () => {
+  it('matches a later circle when a press lands inside it instead of an earlier circle', () => {
     const frames: ReplayFrame[] = [
       { t: 990, x: 200, y: 100, keys: 0 },
       { t: 1020, x: 200, y: 100, keys: KEY.M1 },
@@ -76,7 +77,7 @@ describe('stable hit windows, early clicks and note-lock', () => {
       { t: 1050, x: 200, y: 100, keys: KEY.M1 },
     ];
     const judged = judge(circleMap([1000, 1020], [100, 200]), frames);
-    expect(judged.objects.map((obj) => obj.hitTime)).toEqual([1040, 1050]);
+    expect(judged.objects.map((obj) => obj.hitTime)).toEqual([1040, 1020]);
     expect(judged.objects.map((obj) => obj.result)).toEqual([300, 300]);
   });
 

@@ -36,6 +36,7 @@ function mapWithSlider(): PreparedMap {
     ar: 5,
     od: 5,
     hp: 5,
+    scoreDifficulty: 2,
     radius: 10,
     preempt: 1200,
     fadeIn: 400,

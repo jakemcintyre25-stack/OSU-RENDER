@@ -18,6 +18,7 @@ function spinnerMap(spinsRequired = 8): PreparedMap {
   return {
     title: 'Synthetic spinner', artist: 'Test', version: 'Standard',
     creator: 'Tests', mods: [], rate: 1, cs: 4, ar: 5, od: 5, hp: 5,
+    scoreDifficulty: 2,
     radius: 32, preempt: 1200, fadeIn: 400, hidden: false,
     objects: [spinner], comboColors: [0xffffff],
     audioFile: null, backgroundFile: null, breaks: [],
