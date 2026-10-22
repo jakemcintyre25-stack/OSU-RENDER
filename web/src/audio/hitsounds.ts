@@ -14,8 +14,16 @@ export interface HitSoundEvent {
   /** Relative hitsound volume from .osu metadata, 0..1. */
   gain: number;
 }
+export interface HitSoundLoop {
+  start: number;
+  end: number;
+  sample: string;
+  gain: number;
+}
 export interface HitSoundPlan {
   events: HitSoundEvent[];
+  /** Genuine looping slider audio, restricted to observed tracking ranges. */
+  loops?: HitSoundLoop[];
   samples: Map<string, ArrayBuffer>;
   /** Number of sound requests for which no beatmap sample was available. */
   unavailable: number;
@@ -83,7 +91,7 @@ export function planHitsounds(
   beatmapPath = '',
   skinArchive: OszArchive | null = null,
 ): HitSoundPlan {
-  const plan: HitSoundPlan = { events: [], samples: new Map(), unavailable: 0 };
+  const plan: HitSoundPlan = { events: [], loops: [], samples: new Map(), unavailable: 0 };
   if (!archive && !skinArchive) return plan;
   const skinIni = skinArchive?.files.get('skin.ini');
   const ini = skinIni ? new TextDecoder().decode(skinIni) : '';
@@ -168,23 +176,33 @@ export function planHitsounds(
     return low ? timing[low - 1] : { t, set: metadataSet, index: 0, volume: 100 };
   };
   let totalSamplesBytes = 0;
-  const scheduleFile = (t: number, file: string, volume: number, allowSkin = true) => {
-    if (plan.events.length >= MAX_HITSOUND_EVENTS) { plan.unavailable++; return; }
+  const reserve = (file: string, allowSkin: boolean) => {
     const resource = lookupSample(file, allowSkin);
     if (!resource?.bytes || resource.bytes.byteLength > MAX_SAMPLE_FILE_BYTES) {
       plan.unavailable++;
-      return;
+      return null;
     }
     if (!plan.samples.has(resource.path)) {
       if (plan.samples.size >= MAX_UNIQUE_SAMPLES ||
           totalSamplesBytes + resource.bytes.byteLength > MAX_TOTAL_SAMPLES_BYTES) {
         plan.unavailable++;
-        return;
+        return null;
       }
       plan.samples.set(resource.path, toBuffer(resource.bytes));
       totalSamplesBytes += resource.bytes.byteLength;
     }
-    plan.events.push({ t, sample: resource.path, gain: Math.max(0, Math.min(1, volume / 100)) });
+    return resource.path;
+  };
+  const scheduleFile = (t: number, file: string, volume: number, allowSkin = true) => {
+    if (plan.events.length >= MAX_HITSOUND_EVENTS) { plan.unavailable++; return; }
+    const path = reserve(file, allowSkin);
+    if (path) plan.events.push({ t, sample: path, gain: Math.max(0, Math.min(1, volume / 100)) });
+  };
+  const scheduleLoop = (start: number, end: number, file: string, volume: number) => {
+    if (!(end > start) || !Number.isFinite(start) || !Number.isFinite(end)) return;
+    if ((plan.loops?.length ?? 0) >= MAX_HITSOUND_EVENTS) return;
+    const path = reserve(file, true);
+    if (path) plan.loops!.push({ start, end, sample: path, gain: Math.max(0, Math.min(1, volume / 100)) });
   };
   const scheduleHit = (
     t: number, bits: number, settings: SampleSettings,
@@ -246,6 +264,21 @@ export function planHitsounds(
       scheduleHit(t, edgeBits[edge] ?? bits, base, sets[0], sets[1], metadataTime);
     };
     if (judged.hitTime !== null) playEdge(judged.hitTime, 0, object.start);
+    // Follow the judge's actual tracking windows, not the slider's full span.
+    // The clip must be supplied by the map or selected .osk; no synthesized
+    // substitute is created when sliderslide/sliderwhistle is missing.
+    for (const [start, end] of judged.tracking ?? []) {
+      const from = Math.max(start, object.start);
+      const to = Math.min(end, object.end);
+      if (to <= from) continue;
+      const tp = activeSample(from);
+      const choice = base.normal || tp.set || metadataSet;
+      const set = names[choice] ? choice : metadataSet;
+      const suffix = (base.index || tp.index) > 1 ? String(base.index || tp.index) : '';
+      const volume = base.volume || tp.volume;
+      scheduleLoop(from, to, names[set] + '-sliderslide' + suffix + '.wav', volume);
+      if ((bits & 2) !== 0) scheduleLoop(from, to, names[set] + '-sliderwhistle' + suffix + '.wav', volume);
+    }
     let edge = 1;
     for (let k = 0; k < object.parts.length; k++) {
       if (!judged.parts?.[k]) {
@@ -269,5 +302,6 @@ export function planHitsounds(
     }
   }
   plan.events.sort((a, b) => a.t - b.t);
+  plan.loops?.sort((a, b) => a.start - b.start);
   return plan;
 }
