@@ -10,6 +10,7 @@ import { supportedSkinAudioFiles } from './audio/skin-assets';
 import { parseLaunchTarget, scoreShareUrl, userShareUrl } from './launch';
 import { playbackEndTime } from './audio/timeline';
 import { initialPlaybackTime } from './audio/lead-in';
+import { PlaybackRequestGate, type PlaybackLease } from './playback-gate';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -115,31 +116,44 @@ $('user-form').addEventListener('submit', (e) => {
   if (name) void showRecent(name, true);
 });
 
+const playbackGate = new PlaybackRequestGate();
+
 async function openPlay(p: RecentPlay) {
+  const lease = playbackGate.begin();
   try {
     loading('Downloading replay…');
-    const replayBytes = await getReplayFile(p.scoreId);
-    const { osz, osuFallback } = await downloadMap(p.beatmapsetId, p.beatmapId);
+    const replayBytes = await getReplayFile(p.scoreId, lease.signal);
+    if (!lease.isCurrent()) return;
+    const { osz, osuFallback } = await downloadMap(p.beatmapsetId, p.beatmapId, lease);
+    if (!lease.isCurrent()) return;
     loading('Preparing…');
     const s = await sessionFromReplay(replayBytes, osz, osuFallback, p.beatmapId, localSkin);
-    await startPlayer(s, p.scoreId);
-    history.replaceState(null, '', scoreShareUrl(location.href, p.scoreId));
+    if (!lease.isCurrent()) return;
+    await startPlayer(s, p.scoreId, lease);
+    if (lease.isCurrent()) history.replaceState(null, '', scoreShareUrl(location.href, p.scoreId));
   } catch (err) {
-    loading(null);
-    toast((err as Error).message);
+    if (lease.isCurrent()) {
+      loading(null);
+      toast((err as Error).message);
+    }
   }
 }
 
-async function downloadMap(setId: number, beatmapId: number): Promise<{ osz: OszArchive | null; osuFallback: string | null }> {
-  loading('Downloading beatmap…', 0);
+async function downloadMap(setId: number, beatmapId: number, lease: PlaybackLease): Promise<{ osz: OszArchive | null; osuFallback: string | null }> {
+  if (lease.isCurrent()) loading('Downloading beatmap…', 0);
   try {
-    const bytes = await getBeatmapset(setId, (p) => loading('Downloading beatmap…', p));
+    const bytes = await getBeatmapset(setId, (p) => {
+      if (lease.isCurrent()) loading('Downloading beatmap…', p);
+    }, lease.signal);
+    if (!lease.isCurrent()) throw new DOMException('Superseded replay download', 'AbortError');
     loading('Unpacking beatmap…');
     return { osz: openOsz(bytes), osuFallback: null };
   } catch (err) {
+    // An intentional cancellation must NEVER start an unrelated fallback download.
+    if (!lease.isCurrent()) throw err;
     console.warn('beatmapset download failed, falling back to .osu only', err);
     loading('Mirrors unavailable — getting the map without audio…');
-    return { osz: null, osuFallback: await getOsuFile(beatmapId) };
+    return { osz: null, osuFallback: await getOsuFile(beatmapId, lease.signal) };
   }
 }
 
@@ -163,33 +177,42 @@ function wireDrop(dropId: string, inputId: string, onFile: (f: File) => void) {
 }
 
 wireDrop('osr-drop', 'osr-input', async (file) => {
+  const lease = playbackGate.begin();
   try {
     loading('Reading replay…');
     assertLocalUploadSize('osr', file.size);
     const bytes = new Uint8Array(await file.arrayBuffer());
+    if (!lease.isCurrent()) return;
     const replay = await decodeReplay(bytes);
+    if (!lease.isCurrent()) return;
     if (!replay.beatmapMD5) throw new Error('This replay has no beatmap reference');
     loading('Finding the beatmap…');
-    // A beatmap .osz already dropped on the page wins: it works offline and needs no API.
     const md5 = replay.beatmapMD5.toLowerCase();
     const local = localOsz?.difficulties.find((d) => d.md5.toLowerCase() === md5);
     if (localOsz && local) {
       loading('Preparing…');
-      await startPlayer(await sessionFromReplay(bytes, localOsz, null, local.beatmapId ?? 0, localSkin));
+      const session = await sessionFromReplay(bytes, localOsz, null, local.beatmapId ?? 0, localSkin);
+      if (lease.isCurrent()) await startPlayer(session, null, lease);
       return;
     }
     let found: { beatmapId: number; beatmapsetId: number };
     try {
-      found = await lookupBeatmap(replay.beatmapMD5);
-    } catch {
-      throw new Error('Map not found. Drop the matching .osz file first (or set up osu! API keys for automatic lookup).');
+      found = await lookupBeatmap(replay.beatmapMD5, lease.signal);
+    } catch (error) {
+      if (!lease.isCurrent()) return;
+      throw new Error('Map not found. Drop the matching .osz file first (or set up osu! API keys for automatic lookup).', { cause: error });
     }
-    const { osz, osuFallback } = await downloadMap(found.beatmapsetId, found.beatmapId);
+    if (!lease.isCurrent()) return;
+    const { osz, osuFallback } = await downloadMap(found.beatmapsetId, found.beatmapId, lease);
+    if (!lease.isCurrent()) return;
     loading('Preparing…');
-    await startPlayer(await sessionFromReplay(bytes, osz, osuFallback, found.beatmapId, localSkin));
+    const session = await sessionFromReplay(bytes, osz, osuFallback, found.beatmapId, localSkin);
+    if (lease.isCurrent()) await startPlayer(session, null, lease);
   } catch (err) {
-    loading(null);
-    toast((err as Error).message);
+    if (lease.isCurrent()) {
+      loading(null);
+      toast((err as Error).message);
+    }
   }
 });
 
@@ -243,15 +266,19 @@ wireDrop('osz-drop', 'osz-input', async (file) => {
 
 $('osz-play').addEventListener('click', async () => {
   if (!localOsz) return;
+  const lease = playbackGate.begin();
   try {
     const std = localOsz.difficulties.filter((d) => d.mode === 0);
     const diff = std[Number(($('osz-diff') as HTMLSelectElement).value)];
     const mods = [...$('osz-mods').querySelectorAll<HTMLInputElement>('input:checked')].map((c) => c.value);
     loading('Preparing…');
-    await startPlayer(await sessionFromAutoplay(localOsz, diff, mods, localSkin));
+    const result = await sessionFromAutoplay(localOsz, diff, mods, localSkin);
+    if (lease.isCurrent()) await startPlayer(result, null, lease);
   } catch (err) {
-    loading(null);
-    toast((err as Error).message);
+    if (lease.isCurrent()) {
+      loading(null);
+      toast((err as Error).message);
+    }
   }
 });
 
@@ -264,7 +291,10 @@ let raf = 0;
 let seeking = false;
 let activeScoreId: number | null = null;
 
-async function startPlayer(s: Session, scoreId: number | null = null) {
+let rendererInit: Promise<void> | null = null;
+
+async function startPlayer(s: Session, scoreId: number | null = null, lease = playbackGate.begin()) {
+  if (!lease.isCurrent()) return;
   stopPlayer();
   activeScoreId = scoreId;
   ($('share-score') as HTMLButtonElement).disabled = scoreId === null;
@@ -272,50 +302,72 @@ async function startPlayer(s: Session, scoreId: number | null = null) {
   $('home').hidden = true;
   $('player').hidden = false;
   loading('Decoding audio…');
-  clock = new Clock();
+  const playerClock = new Clock();
+  clock = playerClock;
+  const active = () => lease.isCurrent() && clock === playerClock;
   try {
-    await clock.load(s.audio);
-  } catch {
-    s.warnings.push('The audio could not be decoded by this browser.');
-    await clock.load(null);
-  }
-  loading('Decoding beatmap hitsounds…');
-  const samples = await clock.loadHitsounds(s.hitsounds);
-  if (samples.failed > 0) s.warnings.push(`${samples.failed} beatmap hitsound files could not be decoded by this browser.`);
-  if (s.hitsounds.unavailable > 0) s.warnings.push('Some hitsounds are unavailable from this beatmap and your selected skin; bundled defaults are not included.');
-  clock.rate = s.map.rate;
-  clock.volume = Number(($('volume') as HTMLInputElement).value) / 100;
-  clock.offset = Number(($('sync-offset') as HTMLInputElement).value);
-  clock.onEnded = () => updatePlayButton();
-  if (!renderer) {
-    renderer = new PlayfieldRenderer();
-    await renderer.init($('stage'));
-  }
-  renderer.options.backgroundDim = Number(($('dim') as HTMLInputElement).value) / 100;
-  renderer.setBackground(s.background);
-  renderer.load(s.map, s.frames, s.judgement, { player: s.player });
-  clock.seek(initialPlaybackTime(s.map.firstObjectTime, s.map.audioLeadIn));
-  buildMarkers(s);
-  fillInfo(s);
-  loading(null);
-  if (s.warnings.length) toast(s.warnings.join(' '));
-  await clock.play();
-  updatePlayButton();
-  const loop = () => {
-    raf = requestAnimationFrame(loop);
-    if (!clock || !renderer || !session) return;
-    const t = clock.now();
-    clock.scheduleHitsounds();
-    renderer.render(t);
-    const end = endTime();
-    if (!seeking) ($('seek') as HTMLInputElement).value = String(Math.round((clamp(t, 0, end) / end) * 1000));
-    $('time').textContent = `${fmt(t / clock.rate)} / ${fmt(end / clock.rate)}`;
-    if (clock.isPlaying && t > end + 1000) {
-      clock.pause();
-      updatePlayButton();
+    try {
+      await playerClock.load(s.audio);
+    } catch {
+      if (!active()) return;
+      s.warnings.push('The audio could not be decoded by this browser.');
+      await playerClock.load(null);
     }
-  };
-  loop();
+    if (!active()) return;
+    loading('Decoding beatmap hitsounds…');
+    const samples = await playerClock.loadHitsounds(s.hitsounds);
+    if (!active()) return;
+    if (samples.failed > 0) s.warnings.push(`${samples.failed} beatmap hitsound files could not be decoded by this browser.`);
+    if (s.hitsounds.unavailable > 0) s.warnings.push('Some hitsounds are unavailable from this beatmap and your selected skin; bundled defaults are not included.');
+    playerClock.rate = s.map.rate;
+    playerClock.volume = Number(($('volume') as HTMLInputElement).value) / 100;
+    playerClock.offset = Number(($('sync-offset') as HTMLInputElement).value);
+    playerClock.onEnded = () => { if (active()) updatePlayButton(); };
+    if (!renderer) {
+      const newRenderer = new PlayfieldRenderer();
+      renderer = newRenderer;
+      rendererInit = newRenderer.init($('stage')).catch((error) => {
+        if (renderer === newRenderer) renderer = null;
+        rendererInit = null;
+        throw error;
+      });
+    }
+    if (rendererInit) await rendererInit;
+    if (!active() || !renderer) return;
+    renderer.options.backgroundDim = Number(($('dim') as HTMLInputElement).value) / 100;
+    renderer.setBackground(s.background);
+    renderer.load(s.map, s.frames, s.judgement, { player: s.player });
+    playerClock.seek(initialPlaybackTime(s.map.firstObjectTime, s.map.audioLeadIn));
+    buildMarkers(s);
+    fillInfo(s);
+    loading(null);
+    if (s.warnings.length) toast(s.warnings.join(' '));
+    await playerClock.play();
+    if (!active()) return;
+    updatePlayButton();
+    const loop = () => {
+      if (!active() || !renderer || !session) return;
+      raf = requestAnimationFrame(loop);
+      const t = playerClock.now();
+      playerClock.scheduleHitsounds();
+      renderer.render(t);
+      const end = endTime();
+      if (!seeking) ($('seek') as HTMLInputElement).value = String(Math.round((clamp(t, 0, end) / end) * 1000));
+      $('time').textContent = `${fmt(t / playerClock.rate)} / ${fmt(end / playerClock.rate)}`;
+      if (playerClock.isPlaying && t > end + 1000) {
+        playerClock.pause();
+        updatePlayButton();
+      }
+    };
+    loop();
+  } catch (error) {
+    if (active()) {
+      stopPlayer();
+      $('player').hidden = true;
+      $('home').hidden = false;
+    }
+    throw error;
+  }
 }
 
 const clamp = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);
@@ -331,6 +383,7 @@ function stopPlayer() {
 }
 
 function closePlayer() {
+  playbackGate.cancel();
   stopPlayer();
   $('player').hidden = true;
   $('home').hidden = false;
@@ -454,18 +507,26 @@ const launch = parseLaunchTarget(location.search);
 if (launch.kind === 'user') {
   void showRecent(String(launch.id));
 } else if (launch.kind === 'score') {
+  const lease = playbackGate.begin();
   void (async () => {
     try {
       loading('Downloading replay…');
-      const replayBytes = await getReplayFile(launch.id);
+      const replayBytes = await getReplayFile(launch.id, lease.signal);
+      if (!lease.isCurrent()) return;
       const replay = await decodeReplay(replayBytes);
-      const { beatmapId, beatmapsetId } = await lookupBeatmap(replay.beatmapMD5);
-      const { osz, osuFallback } = await downloadMap(beatmapsetId, beatmapId);
+      if (!lease.isCurrent()) return;
+      const { beatmapId, beatmapsetId } = await lookupBeatmap(replay.beatmapMD5, lease.signal);
+      if (!lease.isCurrent()) return;
+      const { osz, osuFallback } = await downloadMap(beatmapsetId, beatmapId, lease);
+      if (!lease.isCurrent()) return;
       loading('Preparing…');
-      await startPlayer(await sessionFromReplay(replayBytes, osz, osuFallback, beatmapId, localSkin), launch.id);
+      const result = await sessionFromReplay(replayBytes, osz, osuFallback, beatmapId, localSkin);
+      if (lease.isCurrent()) await startPlayer(result, launch.id, lease);
     } catch (err) {
-      loading(null);
-      toast((err as Error).message);
+      if (lease.isCurrent()) {
+        loading(null);
+        toast((err as Error).message);
+      }
     }
   })();
 }
