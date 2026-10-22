@@ -18,7 +18,7 @@ class TestAudioContext {
   }
   resume = vi.fn(async () => { this.state = 'running'; });
   close = vi.fn(async () => {});
-  decodeAudioData = vi.fn(async () => { throw new Error('not needed'); });
+  decodeAudioData = vi.fn(async (): Promise<AudioBuffer> => { throw new Error('not needed'); });
 }
 
 let audio: TestAudioContext;
