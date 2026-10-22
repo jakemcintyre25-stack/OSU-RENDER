@@ -28,7 +28,7 @@ export function parseAudioLeadIn(osuText: string): number {
 /** Preserve the existing 1.5s approach lead-in, but never skip explicit
  * AudioLeadIn silence requested by the beatmap.
  */
-export function initialPlaybackTime(firstObjectTime: number, audioLeadIn: number): number {
+export function initialPlaybackTime(firstObjectTime: number, audioLeadIn = 0): number {
   if (!Number.isFinite(firstObjectTime) || !Number.isFinite(audioLeadIn) ||
       audioLeadIn < 0 || audioLeadIn > MAX_AUDIO_LEAD_IN_MS)
     throw new Error('Invalid playback lead-in');
