@@ -21,6 +21,7 @@ export interface RecentPlay {
 
 const MAX_REPLAY_DOWNLOAD_BYTES = 64 * 1024 * 1024;
 const MAX_BEATMAPSET_DOWNLOAD_BYTES = 150 * 1024 * 1024;
+const MAX_OSU_TEXT_BYTES = 8 * 1024 * 1024;
 
 /** Enforce a response limit as bytes arrive; reported Content-Length is not trusted. */
 export async function readLimitedResponse(
@@ -93,7 +94,7 @@ export async function getBeatmapset(setId: number, onProgress?: (p: number) => v
 export async function getOsuFile(beatmapId: number): Promise<string> {
   const res = await fetch(`/api/beatmaps/${beatmapId}/osu`);
   if (!res.ok) throw await errorFrom(res);
-  return res.text();
+  return new TextDecoder().decode(await readLimitedResponse(res, MAX_OSU_TEXT_BYTES));
 }
 
 export async function lookupBeatmap(md5: string): Promise<{ beatmapId: number; beatmapsetId: number }> {
