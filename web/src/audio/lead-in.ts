@@ -32,5 +32,6 @@ export function initialPlaybackTime(firstObjectTime: number, audioLeadIn: number
   if (!Number.isFinite(firstObjectTime) || !Number.isFinite(audioLeadIn) ||
       audioLeadIn < 0 || audioLeadIn > MAX_AUDIO_LEAD_IN_MS)
     throw new Error('Invalid playback lead-in');
-  return Math.min(0, firstObjectTime - 1500, -audioLeadIn);
+  const start = Math.min(0, firstObjectTime - 1500, -audioLeadIn);
+  return start === 0 ? 0 : start;
 }
