@@ -87,6 +87,7 @@ footer { margin-top: 24px; text-align: center; }
 .markers i.m100 { background: #5fe36b; opacity: 0.5; }
 .ctl { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
 .ctl input { width: 80px; accent-color: var(--accent); }
+.offset-ctl output { min-width: 47px; font-variant-numeric: tabular-nums; text-align: right; }
 @media (max-width: 720px) { .ctl { display: none; } }
 .info {
   position: absolute; right: 12px; bottom: 60px; width: min(360px, calc(100% - 24px)); background: rgba(20, 24, 33, 0.96); border: 1px solid var(--line);
