@@ -15,6 +15,7 @@ import { PlaybackRequestGate, type PlaybackLease } from './playback-gate';
 import { checkedPlayerSpeed, effectivePlaybackRate } from './audio/speed';
 import { markerReviewTime } from './render/marker-review';
 import { storedToggle } from './render/preferences';
+import { ReplayVideoCapture, safeCaptureFilename } from './render/video-capture';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -119,6 +120,41 @@ $('user-form').addEventListener('submit', (e) => {
   const name = ($('username') as HTMLInputElement).value.trim();
   if (name) void showRecent(name, true);
 });
+
+const videoCapture = new ReplayVideoCapture();
+function captureButton() {
+  const button = $('capture-video') as HTMLButtonElement;
+  button.disabled = !session || !renderer;
+  button.textContent = videoCapture.active ? 'Stop recording' : 'Record WebM';
+}
+
+async function toggleCapture() {
+  if (videoCapture.active) {
+    try {
+      const { blob } = await videoCapture.stop();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = safeCaptureFilename(session?.player ?? 'player');
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      toast('Video-only WebM saved. Audio and MP4 export are not implemented yet.', true);
+    } catch (error) {
+      toast((error as Error).message);
+    } finally {
+      captureButton();
+    }
+    return;
+  }
+  if (!renderer || !session) return;
+  try {
+    videoCapture.start(renderer.app.canvas);
+    captureButton();
+    toast('Recording video only, maximum 60 seconds. Press Stop recording to save.');
+  } catch (error) {
+    toast((error as Error).message);
+  }
+}
 
 const playbackGate = new PlaybackRequestGate();
 
@@ -354,6 +390,7 @@ async function startPlayer(s: Session, scoreId: number | null = null, lease = pl
     renderer.setSkinVisuals(visuals, localSkin ? visualSkinConfig(localSkin) : undefined);
     renderer.setBackground(s.background);
     renderer.load(s.map, s.frames, s.judgement, { player: s.player });
+    captureButton();
     playerClock.seek(initialPlaybackTime(s.map.firstObjectTime, s.map.audioLeadIn));
     buildMarkers(s);
     fillInfo(s);
@@ -391,12 +428,14 @@ const clamp = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);
 const endTime = () => session ? playbackEndTime(session.map.lastObjectTime, clock?.duration ?? 0) : 1;
 
 function stopPlayer() {
+  videoCapture.cancel();
   activeScoreId = null;
   ($('share-score') as HTMLButtonElement).disabled = true;
   cancelAnimationFrame(raf);
   clock?.dispose();
   clock = null;
   session = null;
+  captureButton();
 }
 
 function closePlayer() {
@@ -465,6 +504,7 @@ function fillInfo(s: Session) {
 }
 
 $('playpause').addEventListener('click', () => void togglePlay());
+$('capture-video').addEventListener('click', () => void toggleCapture());
 $('back').addEventListener('click', closePlayer);
 $('info-btn').addEventListener('click', () => ($('info').hidden = !$('info').hidden));
 $('share-score').addEventListener('click', async () => {
