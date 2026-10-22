@@ -5,9 +5,13 @@ class TestAudioContext {
   currentTime = 10;
   state: AudioContextState = 'running';
   destination = {} as AudioDestinationNode;
-  gain = { gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() };
+  gains: Array<{ gain: { value: number }; connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }> = [];
   sources: Array<{ playbackRate: { value: number }; start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }> = [];
-  createGain(): GainNode { return this.gain as unknown as GainNode; }
+  createGain(): GainNode {
+    const gain = { gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() };
+    this.gains.push(gain);
+    return gain as unknown as GainNode;
+  }
   createBufferSource(): AudioBufferSourceNode {
     const source = {
       playbackRate: { value: 1 }, buffer: null, connect: vi.fn(),
@@ -96,6 +100,25 @@ describe('Web Audio master clock seek, rate, pause and visual offset', () => {
     expect(clock.now()).toBeCloseTo(3150, 6);
     clock.dispose();
   });
+  it('separates master music volume and hit-effect volume without altering clock timing', () => {
+    const clock = new Clock();
+    expect(audio.gains.length).toBeGreaterThanOrEqual(2);
+    clock.volume = 0.35;
+    clock.effectsVolume = 0.8;
+    expect(audio.gains[0].gain.value).toBe(0.35);
+    expect(audio.gains[1].gain.value).toBe(0.8);
+    clock.effectsVolume = 0;
+    expect(audio.gains[0].gain.value).toBe(0.35);
+    expect(audio.gains[1].gain.value).toBe(0);
+    clock.volume = 3;
+    clock.effectsVolume = -1;
+    expect(audio.gains[0].gain.value).toBe(1);
+    expect(audio.gains[1].gain.value).toBe(0);
+    clock.seek(1000);
+    expect(clock.now()).toBe(1000);
+    clock.dispose();
+  });
+
   it('integrates loaded map sample cues with playback, pause and seek', async () => {
     const clock = new Clock();
     audio.decodeAudioData.mockResolvedValue({ duration: 0.1 } as AudioBuffer);
