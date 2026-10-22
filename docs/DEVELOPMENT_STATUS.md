@@ -7,16 +7,16 @@ Updated: 22 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 | Milestone | Status | Verification and outstanding work |
 |---|---|---|
 | M1 Judgement harness | **PASS** | `npm run judge-check`, verbose diagnostics and CI implemented. Empty optional fixtures exit zero. Real replay fixtures stay local. |
-| M2 Stable judgement parity | **IN PROGRESS** | Slider follow/part timestamps, combo breaks, explicit early misses, spinner capped integration, 2B autoplay edge tested. Official strict rounded-error/truncated-OD window edges are implemented, but spinner velocity smoothing, stacked 2B/note-lock edge rules and **all real stable replay-header matches** remain unverified. |
+| M2 Stable judgement parity | **IN PROGRESS** | Strict checksum matching rejects updated beatmaps with unchanged IDs; `.osu`-only fallback labels uncertainty. Strict parity mode fails when no stable replay is checked. Slider timing, combo breaks, hit-window edges and 2B autoplay have synthetic tests; exact real-replay parity, spinner smoothing and complex note-lock remain unverified. |
 | M3 HP and fail | **IN PROGRESS** | Verified SD/PF failure timestamps from circle grades and slider-head/tick/repeat combo breaks, with NF precedence. Exact stable HP drain, hit gains, break pauses, HP timeline and HP-zero failure remain. |
 | M4 Score V1 | **IN PROGRESS** | Running ScoreV1, mod multipliers, slider/spinner part scoring implemented. Fixed 30-point slider heads, clamped difficulty multiplier to 2–6, and normalized NC/DT and DC/HT speed-mod aliases. Real header parity remains unverified; older M4 replay comparison values are stale. |
-| M5 Audio timing and hitsounds | **OPEN** | Base Web Audio master clock exists, but map/user offset, hitsounds and pitch-preserving DT/HT still required. |
+| M5 Audio timing and hitsounds | **IN PROGRESS** | Fixed offset-aware play/pause/seek/rate continuity with instrumented AudioContext tests; added persisted player Sync control. Real-browser acoustic sync, hitsounds and pitch-preserving DT/HT remain unverified/open. |
 | M6 Default skin and visual parity | **OPEN** | Basic Pixi renderer exists; sprite parity, shader, HUD, FL and effects remain. |
 | M7 Custom skins | **OPEN** | .osk and skin.ini support, IndexedDB and fallbacks remain. |
 | M8 Player page | **IN PROGRESS** | Basic browsing, replay loading and controls exist. Settings, timeline enhancements, loading retries and mobile acceptance remain. |
 | M9 MP4 export | **OPEN** | No WebCodecs/offline audio export yet. |
 | M10 Lazer | **OPEN** | Legacy/stable only; lazer detection and rule set remain. |
-| M11 Hardening | **IN PROGRESS** | Worker has edge caching and rate limit. R2, mirror breaker, ZIP validation, logging, bundle split and tests remain. |
+| M11 Hardening | **IN PROGRESS** | Added ZIP central-directory safety limits, traversal/duplicate/encryption checks, CRC32 integrity, finite bounded replay-frame validation, and streaming byte caps in worker/browser. Regression tests and CI pass; R2, mirror breaker, deeper decompression limits, real-browser security and load testing remain. |
 | M12 One Miss Merchants links | **OPEN** | Parameterized integration and INTEGRATION.md remain. |
 
 ## Verified recent commits
@@ -32,11 +32,24 @@ Updated: 22 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 - `ba15f41`: expose SD/PF failTime on the event timeline, including missed slider ticks/repeats but not dropped tails; No Fail prevents failures. Additional regression tests verify repeats, spinner misses and early head misses.
 - `e86ec6d`: avoid double score multiplication when speed-mod aliases appear together (NC+DT or DC+HT).
 
-The latest verified GitHub Actions head at the time of this update is `e86ec6d97178f62f8e9d7a37ce41d967276ddc86`. Both push and pull-request CI runs passed the normal tests, typecheck, build and empty-fixture judge-check. This does **not** prove real-replay or desktop executable acceptance.
+## Verification and recovery — 22 October 2026, continuation
+
+- `4584e1b`: ZIP central-directory inspection and extraction size/path protections; 8 new archive tests.
+- `8403e66`: checksum verification for extracted ZIP files; corrupted and forged CRC test cases.
+- `06dc3ae`: fail-closed replay frame validation, including finite positions, valid key masks and frame limits.
+- `7bd0f1e`: corrected playback clock offset/seek/pause/rate continuity with 4 instrumented AudioContext tests.
+- `c474837`: persisted in-player audio/visual Sync control; web build passes, hands-on browser acceptance remains.
+- `7cd860a`: exact replay/map checksum matching and explicit unverified fallback, with generated .osr integration tests.
+- `3eebade`, `6ec900c`: capped streamed download sizes in worker and browser even when Content-Length is wrong or absent; streamed mock tests.
+- `6e47153`: added `npm run judge-check:strict`. It must check at least one real stable replay and fails otherwise; the ordinary `npm run judge-check` remains CI-friendly for missing optional fixtures.
+
+GitHub Actions covers Node web+worker tests, TypeScript checks, web build and the ordinary no-fixture judge-check. The latest complete CI code head recorded here is `6e47153172c357b490f975aed233cd8694794569` (push success at documentation time; confirm both workflows before considering this branch ready). This is **not proof of human-replay parity, browser audio quality, Windows EXE correctness or complete security**.
+
+The critical real-data acceptance command is now `npm run judge-check:strict` after placing exact-MD5-matched real files in gitignored `fixtures/replays/` and `fixtures/maps/`. It deliberately fails in normal CI without those private fixtures.
 
 ## Immediate next implementation work
 
-1. Run `npm run judge-check` and `npm run judge-check -- --verbose <replay.osr>` using the local exact-MD5-matched real osu!stable replay fixture set (not committed); resolve count/combo mismatches before marking M2 PASS.
+1. Run `npm run judge-check:strict` and `npm run judge-check -- --require-fixtures --verbose <replay.osr>` using the local exact-MD5-matched real osu!stable replay fixture set (not committed); resolve count/combo mismatches before marking M2 PASS.
 2. Validate the now documented-and-unit-tested strict rounded-error 300/100/50 windows against the real replay set; independently establish exact stable spinner velocity/RPM smoothing.
 3. Run the optional all-difficulties Renatus autoplay acceptance test locally and fix any map-specific issues.
 4. Complete M3's exact stable HP drain/gain and no-drain-during-break algorithm (failTime for SD/PF/NF is already verified). Then complete M4 ScoreV1 header parity and the audio/skin/export milestones.
