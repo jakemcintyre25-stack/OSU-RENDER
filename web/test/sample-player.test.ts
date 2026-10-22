@@ -122,6 +122,43 @@ describe('M5 Web Audio sample scheduling and lifecycle', () => {
     expect(context.sources[0].stop).toHaveBeenCalledOnce();
   });
 
+  it('limits concurrent sample decoding to four files even for large beatmaps', async () => {
+    const { context, player } = fixture();
+    let simultaneous = 0;
+    let peak = 0;
+    context.decodeAudioData.mockImplementation(async () => {
+      simultaneous++;
+      peak = Math.max(peak, simultaneous);
+      await Promise.resolve();
+      simultaneous--;
+      return { duration: 0.15 } as AudioBuffer;
+    });
+    const entries = Array.from({ length: 24 }, (_, i) =>
+      ['sound' + i, new Uint8Array([i]).buffer] as const);
+    const plan: HitSoundPlan = {
+      samples: new Map(entries),
+      events: entries.map(([sample], i) => ({ t: 1000 + i, sample, gain: 1 })),
+      unavailable: 0,
+    };
+    expect(await player.load(plan)).toEqual({ loaded: 24, failed: 0 });
+    expect(peak).toBeLessThanOrEqual(4);
+    expect(peak).toBeGreaterThan(1);
+    player.dispose();
+  });
+
+  it('discards decoded sounds when the player was disposed mid-load', async () => {
+    const { context, player } = fixture();
+    let complete!: (buffer: AudioBuffer) => void;
+    context.decodeAudioData.mockImplementation(() => new Promise<AudioBuffer>(resolve => { complete = resolve; }));
+    const loading = player.load(namedPlan([1000]));
+    player.dispose();
+    complete({ duration: 0.15 } as AudioBuffer);
+    expect(await loading).toEqual({ loaded: 0, failed: 0 });
+    player.reset(900);
+    player.schedule(900, 10, 1, 0);
+    expect(context.sources).toHaveLength(0);
+  });
+
   it('caps concurrent queued voices rather than unboundedly allocating nodes', async () => {
     const { context, player } = fixture();
     await player.load(namedPlan(Array.from({ length: 70 }, () => 1000)));
