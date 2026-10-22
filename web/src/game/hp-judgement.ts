@@ -20,10 +20,20 @@ export function hpFromJudgement(
   for (const result of [0, 50, 100, 300] as const) {
     if (!Number.isFinite(gains[result])) throw new RangeError('Invalid HP result gain');
   }
-  const start = map.firstObjectTime;
-  const end = map.lastObjectTime;
   const deltas = judgement.events
     .filter((e): e is typeof e & { result: Hit } => e.result !== undefined)
     .map(e => ({ t: e.t, amount: gains[e.result] }));
-  return simulateHp(start, end, map.breaks, deltas, calibration);
+  // Early press judgements can precede the first object; missed circles can
+  // resolve after the last object. Preserve these event timestamps, but do
+  // not manufacture HP drain before the first object or after the last one.
+  const first = map.firstObjectTime;
+  const last = map.lastObjectTime;
+  const start = Math.min(first, ...deltas.map(e => e.t));
+  const end = Math.max(last, ...deltas.map(e => e.t));
+  const breaks = [
+    ...map.breaks,
+    ...(start < first ? [{ start, end: first }] : []),
+    ...(end > last ? [{ start: last, end }] : []),
+  ];
+  return simulateHp(start, end, breaks, deltas, calibration);
 }
