@@ -1,5 +1,8 @@
 # Next steps
 
+> **Historical initial implementation plan (22 October 2026).** Several items below (hitsounds, user OSK audio, calculated score HUD, speed controls, mirror throttling and osu-render-side OMM links) have since been partially or fully implemented. Treat [docs/DEVELOPMENT_STATUS.md](docs/DEVELOPMENT_STATUS.md) as the authoritative current milestone/verification checklist and [docs/M5-FINDINGS.md](docs/M5-FINDINGS.md) for precise sound scope. **No milestone is considered done merely because an old checklist line was satisfied.** Real osu!stable parity, browser listening, Windows executable, video export and deployment acceptance are still open.
+
+
 Where the project is, what's left, and the exact order to do it in. Written 22 October 2026, after the first push (`7c10ca4`).
 
 Each step has a **Done when** line. Don't move on until it's true.
