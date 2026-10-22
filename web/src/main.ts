@@ -5,6 +5,7 @@ import { decodeReplay } from './load/replay';
 import { sessionFromReplay, sessionFromAutoplay, type Session } from './session';
 import { PlayfieldRenderer } from './render/renderer';
 import { Clock } from './audio/clock';
+import { playbackEndTime } from './audio/timeline';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -283,7 +284,7 @@ async function startPlayer(s: Session) {
 }
 
 const clamp = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);
-const endTime = () => (session ? Math.max(session.map.lastObjectTime + 500, clock?.hasAudio ? 0 : 0) : 1);
+const endTime = () => session ? playbackEndTime(session.map.lastObjectTime, clock?.duration ?? 0) : 1;
 
 function stopPlayer() {
   cancelAnimationFrame(raf);
