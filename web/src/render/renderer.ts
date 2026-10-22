@@ -51,6 +51,8 @@ interface Display {
   // spinners
   spinnerDisc?: Graphics;
   spinnerRing?: Graphics;
+  skinSpinnerDisc?: Sprite;
+  skinSpinnerApproach?: Sprite;
 }
 
 export interface RenderOptions {
@@ -315,6 +317,20 @@ export class PlayfieldRenderer {
       d.spinnerRing = new Graphics();
       d.spinnerRing.circle(0, 0, 180).stroke({ width: 6, color: 0xffffff });
       root.addChild(d.spinnerDisc, d.spinnerRing);
+      if (this.skinTextures['spinner-circle']) {
+        d.skinSpinnerDisc = new Sprite(this.skinTextures['spinner-circle']);
+        d.skinSpinnerDisc.anchor.set(0.5);
+        d.skinSpinnerDisc.width = d.skinSpinnerDisc.height = 360;
+        d.spinnerDisc.visible = false;
+        root.addChild(d.skinSpinnerDisc);
+      }
+      if (this.skinTextures['spinner-approachcircle']) {
+        d.skinSpinnerApproach = new Sprite(this.skinTextures['spinner-approachcircle']);
+        d.skinSpinnerApproach.anchor.set(0.5);
+        d.skinSpinnerApproach.width = d.skinSpinnerApproach.height = 360;
+        d.spinnerRing.visible = false;
+        root.addChild(d.skinSpinnerApproach);
+      }
       root.position.set(256, 192);
       return d;
     }
@@ -523,11 +539,20 @@ export class PlayfieldRenderer {
     if (t > s.end) a *= 1 - clamp01((t - s.end) / SLIDER_FADE);
     d.root.alpha = a;
     const p = clamp01((t - s.start) / Math.max(1, s.end - s.start));
-    d.spinnerRing!.scale.set(Math.max(0.02, 1 - p));
-    d.spinnerRing!.visible = t >= s.start && t <= s.end;
+    const approachScale = Math.max(0.02, 1 - p);
+    d.spinnerRing!.scale.set(approachScale);
+    d.spinnerRing!.visible = !d.skinSpinnerApproach && t >= s.start && t <= s.end;
+    if (d.skinSpinnerApproach) {
+      d.skinSpinnerApproach.scale.set(approachScale);
+      d.skinSpinnerApproach.visible = t >= s.start && t <= s.end;
+    }
     // Spin the disc with the player's cursor angle while held.
     const c = cursorAt(this.frames, t, this.frameHint);
-    if (t >= s.start && t <= s.end && c.keys & (KEY.M1 | KEY.M2)) d.spinnerDisc!.rotation = Math.atan2(c.y - 192, c.x - 256);
+    if (t >= s.start && t <= s.end && c.keys & (KEY.M1 | KEY.M2)) {
+      const angle = Math.atan2(c.y - 192, c.x - 256);
+      d.spinnerDisc!.rotation = angle;
+      if (d.skinSpinnerDisc) d.skinSpinnerDisc.rotation = angle;
+    }
     void map;
   }
 
