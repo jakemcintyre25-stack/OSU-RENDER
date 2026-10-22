@@ -10,7 +10,7 @@ Updated 23 October 2026. **Status: IN PROGRESS, not full osu!stable audio parity
 - Real chart/skin `sliderslide` and `sliderwhistle` clips now loop **only over actual judge tracking intervals**. A seek into an existing interval resumes its loop at the appropriate clip phase and aligns with the music source's 50ms startup scheduling lead-in. Loop voice nodes stop at the tracked interval boundary.
 - The selected map's `[General] AudioLeadIn` is parsed with an explicit operational input ceiling and honored at playback start. Existing synthetic PreparedMap fixtures can omit this optional field; actual prepared beatmaps set it.
 - An optional user-imported .osk supplies real root-level WAV/MP3/OGG hit sounds and slider loops when absent from the map. Limited `skin.ini` `LayeredHitSounds` is applied. No default skin sounds, skins, replays or beatmaps are distributed in this repository.
-- The music Web Audio clock schedules sample voices using a 250ms lookahead, applies DT/HT playback rates and visual sync offsets, and cancels abandoned sounds after pause, seek, speed change and disposal. Four-concurrent-decode, 48-live-voice, unique-sample and byte/event bounds limit resource use.
+- The music Web Audio clock schedules voices using a 250ms lookahead, DT/HT rates and visual sync offsets; it cancels abandoned sounds after pause, seek, speed change and disposal. Independent music and effects gain buses provide separate volume controls. Pending asynchronous AudioContext resume is invalidated on seek, pause, speed change or dispose. Four concurrent decoders, 48 live voices, unique-sample and byte/event bounds limit resources.
 
 ## Verification passes
 
@@ -18,7 +18,7 @@ Updated 23 October 2026. **Status: IN PROGRESS, not full osu!stable audio parity
 
 **Robustness:** `sample-player.test.ts` checks errors, missing clips, voice ceilings, async decoder cancellation and lookahead behaviour. `lead-in.test.ts` checks invalid, nonfinite or unbounded AudioLeadIn values; `upload-limits.test.ts` limits untrusted local reads. `skin-hitsounds.test.ts` covers incorrect filenames, skin.ini options and format variants.
 
-**Integration:** `audio-clock.test.ts` instruments the production Clock API and seek/pause cleanup; `web/src/main.ts` loads the real session hitsound plan and all effects through that clock. CI runs web/worker tests, TypeScript typechecks, Vite build and the CI-friendly judgement harness. These tests **do not demonstrate audible browser/device output** because their sample byte arrays are synthetic and AudioContext is instrumented.
+**Integration:** `audio-clock.test.ts` instruments the production Clock API, independent music/FX gains, suspended-context resume cancellation, seek/pause and speed cleanup; `web/src/main.ts` loads the real session hitsound plan and all effects through that clock. CI runs web/worker tests, TypeScript typechecks, Vite build and the CI-friendly judgement harness. These tests **do not demonstrate audible browser/device output** because their sample byte arrays are synthetic and AudioContext is instrumented.
 
 ## Still OPEN or unverified
 
