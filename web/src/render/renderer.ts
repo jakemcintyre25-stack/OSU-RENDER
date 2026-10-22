@@ -127,6 +127,7 @@ export class PlayfieldRenderer {
 
   setSkinVisuals(images: Partial<Record<VisualSkinKey, ImageBitmap | HTMLImageElement>>, config?: VisualSkinConfig) {
     this.skinConfig = config ?? { cursorRotate: true, cursorExpand: true, cursorCentre: true, sliderBallFlip: true, sliderBallFrames: 1 };
+    this.cursorSprite.anchor.set(this.skinConfig.cursorCentre ? 0.5 : 0);
     this.skinTextures = {};
     for (const [name, image] of Object.entries(images)) {
       this.skinTextures[name as VisualSkinKey] = Texture.from(image);
@@ -542,7 +543,12 @@ export class PlayfieldRenderer {
       const b = sliderBallAt(s, t);
       d.ball!.position.set(b.x, b.y);
       d.follow!.position.set(b.x, b.y);
-      if (d.skinBall) d.skinBall.position.set(b.x, b.y);
+      if (d.skinBall) {
+        d.skinBall.position.set(b.x, b.y);
+        const span = Math.max(0, Math.min(s.spans - 1, Math.floor((t - s.start) / Math.max(1, s.spanDuration))));
+        const reverse = this.skinConfig.sliderBallFlip && span % 2 === 1;
+        d.skinBall.scale.x = Math.abs(d.skinBall.scale.x) * (reverse ? -1 : 1);
+      }
       if (d.skinFollow) d.skinFollow.position.set(b.x, b.y);
       const tracking = j.tracking?.some(([a, e]) => t >= a && t <= e) ?? false;
       d.follow!.visible = tracking && !d.skinFollow;
