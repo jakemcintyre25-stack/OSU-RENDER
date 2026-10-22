@@ -4,9 +4,19 @@
  */
 export async function readBoundedResponse(response: Response, maxBytes: number): Promise<ArrayBuffer> {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) throw new Error('Invalid download byte limit');
-  const declared = Number(response.headers.get('content-length') ?? 0);
-  if (Number.isFinite(declared) && declared > maxBytes) {
-    throw new Error('Download too large (declared length)');
+  const declaredHeader = response.headers.get('content-length');
+  // Content-Length is untrusted: reject malformed/negative/non-integer values
+  // rather than accepting Infinity, exponent notation or inconsistent hints.
+  if (declaredHeader !== null) {
+    if (!/^(0|[1-9][0-9]*)$/.test(declaredHeader)) {
+      void response.body?.cancel().catch(() => {});
+      throw new Error('Invalid download Content-Length');
+    }
+    const declared = Number(declaredHeader);
+    if (!Number.isSafeInteger(declared) || declared > maxBytes) {
+      void response.body?.cancel().catch(() => {});
+      throw new Error('Download too large (declared length)');
+    }
   }
   if (!response.body) throw new Error('Download has no readable body');
   const reader = response.body.getReader();
