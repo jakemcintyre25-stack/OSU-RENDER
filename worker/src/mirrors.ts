@@ -12,6 +12,48 @@ export const MIRRORS: { name: string; url: (setId: string) => string }[] = [
 const ZIP_MAGIC = [0x50, 0x4b, 0x03, 0x04];
 const MAX_OSZ_BYTES = 150 * 1024 * 1024;
 
+/**
+ * Bound a mirror download while consuming the stream. Content-Length alone is
+ * not an enforcement mechanism: mirrors may omit it or send fewer bytes there
+ * than in the actual body. Never accumulate beyond maxBytes.
+ */
+export async function readBoundedResponse(response: Response, maxBytes: number): Promise<ArrayBuffer> {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
+    throw new Error('Invalid download byte limit');
+  }
+  const declared = Number(response.headers.get('content-length') ?? 0);
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    throw new Error('Download too large (declared length)');
+  }
+  if (!response.body) throw new Error('Download has no readable body');
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        throw new Error('Download too large (streamed length)');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes.buffer;
+}
+
+
 /** Tries each mirror in turn and returns the first response that is really a zip. */
 export async function fetchBeatmapset(setId: string, fetchImpl: typeof fetch = fetch): Promise<{ body: ArrayBuffer; mirror: string }> {
   const errors: string[] = [];
@@ -31,7 +73,7 @@ export async function fetchBeatmapset(setId: string, fetchImpl: typeof fetch = f
         errors.push(`${m.name}: too large`);
         continue;
       }
-      const body = await res.arrayBuffer();
+      const body = await readBoundedResponse(res, MAX_OSZ_BYTES);
       const head = new Uint8Array(body, 0, Math.min(4, body.byteLength));
       if (!ZIP_MAGIC.every((b, i) => head[i] === b)) {
         errors.push(`${m.name}: not a zip`);
