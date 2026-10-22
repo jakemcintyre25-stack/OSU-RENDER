@@ -87,3 +87,22 @@ Verbose output lists every object, its millisecond and `mm:ss.mmm` timestamp, ju
 Fixtures are local and gitignored: **never commit beatmaps, replays, audio, or skins**. If either directory is missing or empty, the command exits successfully with setup instructions. Lazer fixtures should go in `fixtures/replays/lazer/` (not scanned by M1) or use a `*.lazer.osr` filename, which is explicitly skipped until M10 adds lazer support.
 
 GitHub Actions runs `npm test`, `npm run typecheck`, `npm run build`, and `npm run judge-check` on pushes and pull requests. Tests that require the optional `fixtures/renatus.osz` continue to skip when it is missing in CI. New fixture-independent CLI tests run under Node's built-in test runner as part of `npm test`.
+
+## Standalone Windows app
+
+One file, `osu-render.exe`, serves the renderer on `http://127.0.0.1:8787` and opens it in your browser. It needs no install and no internet to render a local replay.
+
+Build it (on any machine with Bun and Node):
+
+```
+npm install
+npm run desktop          # writes dist-desktop/osu-render.exe
+bun desktop/build.ts --linux   # Linux test binary
+```
+
+Use it:
+
+- Drop a beatmap `.osz` first, then a replay `.osr`. The replay is matched to the map by MD5, offline.
+- For "recent plays" and automatic map lookup, copy `osu-render.env.example` to `osu-render.env` next to the exe and add your osu! API v2 client credentials.
+
+Known limits: scoring and judgement are not yet exact (see `docs/M2-FINDINGS.md` and `docs/M4-FINDINGS.md`), and HP is not implemented.

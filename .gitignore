@@ -5,3 +5,5 @@ dist/
 fixtures/
 *.log
 .DS_Store
+dist-desktop/
+desktop/src/embedded.gen.ts

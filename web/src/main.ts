@@ -156,10 +156,23 @@ wireDrop('osr-drop', 'osr-input', async (file) => {
     const replay = await decodeReplay(bytes);
     if (!replay.beatmapMD5) throw new Error('This replay has no beatmap reference');
     loading('Finding the beatmap…');
-    const { beatmapId, beatmapsetId } = await lookupBeatmap(replay.beatmapMD5);
-    const { osz, osuFallback } = await downloadMap(beatmapsetId, beatmapId);
+    // A beatmap .osz already dropped on the page wins: it works offline and needs no API.
+    const md5 = replay.beatmapMD5.toLowerCase();
+    const local = localOsz?.difficulties.find((d) => d.md5.toLowerCase() === md5);
+    if (localOsz && local) {
+      loading('Preparing…');
+      await startPlayer(await sessionFromReplay(bytes, localOsz, null, local.beatmapId ?? 0));
+      return;
+    }
+    let found: { beatmapId: number; beatmapsetId: number };
+    try {
+      found = await lookupBeatmap(replay.beatmapMD5);
+    } catch {
+      throw new Error('Map not found. Drop the matching .osz file first (or set up osu! API keys for automatic lookup).');
+    }
+    const { osz, osuFallback } = await downloadMap(found.beatmapsetId, found.beatmapId);
     loading('Preparing…');
-    await startPlayer(await sessionFromReplay(bytes, osz, osuFallback, beatmapId));
+    await startPlayer(await sessionFromReplay(bytes, osz, osuFallback, found.beatmapId));
   } catch (err) {
     loading(null);
     toast((err as Error).message);
