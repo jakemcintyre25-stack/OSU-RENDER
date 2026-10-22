@@ -9,6 +9,7 @@ import { Clock } from './audio/clock';
 import { supportedSkinAudioFiles } from './audio/skin-assets';
 import { parseLaunchTarget, scoreShareUrl, userShareUrl } from './launch';
 import { playbackEndTime } from './audio/timeline';
+import { initialPlaybackTime } from './audio/lead-in';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -293,8 +294,7 @@ async function startPlayer(s: Session, scoreId: number | null = null) {
   renderer.options.backgroundDim = Number(($('dim') as HTMLInputElement).value) / 100;
   renderer.setBackground(s.background);
   renderer.load(s.map, s.frames, s.judgement, { player: s.player });
-  const start = Math.min(0, s.map.firstObjectTime - 1500);
-  clock.seek(Math.max(start, s.map.firstObjectTime - 2500));
+  clock.seek(initialPlaybackTime(s.map.firstObjectTime, s.map.audioLeadIn));
   buildMarkers(s);
   fillInfo(s);
   loading(null);
