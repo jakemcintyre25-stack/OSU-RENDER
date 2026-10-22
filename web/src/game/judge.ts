@@ -173,14 +173,14 @@ function judgeSlider(s: SliderObj, j: ObjectJudgement, head: Hit, frames: Replay
     const ball = sliderBallAt(s, t);
     const held = (cursor.keys & PRESS_MASK) !== 0;
     const distance = Math.hypot(cursor.x - ball.x, cursor.y - ball.y);
-    const next = held && distance <= (tracked ? r * FOLLOW_SCALE : r);
+    const trackingNow: boolean = held && distance <= (tracked ? r * FOLLOW_SCALE : r);
 
-    if (next && trackStart === null) trackStart = t;
-    if (!next && trackStart !== null) {
+    if (trackingNow && trackStart === null) trackStart = t;
+    if (!trackingNow && trackStart !== null) {
       tracking.push([trackStart, t]);
       trackStart = null;
     }
-    tracked = next;
+    tracked = trackingNow;
     for (const index of partIndexes.get(t) ?? []) {
       collected[index] = tracked;
     }
