@@ -1,4 +1,4 @@
-import type { HitSoundEvent, HitSoundPlan } from './hitsounds';
+import type { HitSoundEvent, HitSoundLoop, HitSoundPlan } from './hitsounds';
 
 const LOOKAHEAD_SECONDS = 0.25;
 const MAX_ACTIVE_VOICES = 48;
@@ -14,6 +14,8 @@ const MAX_ACTIVE_VOICES = 48;
 export class HitSoundPlayer {
   private buffers = new Map<string, AudioBuffer>();
   private events: HitSoundEvent[] = [];
+  private loops: HitSoundLoop[] = [];
+  private nextLoop = 0;
   private next = 0;
   private generation = 0;
   private active = new Map<AudioBufferSourceNode, GainNode>();
@@ -52,7 +54,13 @@ export class HitSoundPlayer {
       Number.isFinite(event.t) && Number.isFinite(event.gain) &&
       event.gain > 0 && buffers.has(event.sample),
     ).sort((a, b) => a.t - b.t);
+    this.loops = (plan.loops ?? []).filter((loop) =>
+      Number.isFinite(loop.start) && Number.isFinite(loop.end) &&
+      loop.end > loop.start && Number.isFinite(loop.gain) && loop.gain > 0 &&
+      buffers.has(loop.sample),
+    ).sort((a, b) => a.start - b.start);
     this.next = 0;
+    this.nextLoop = 0;
     return { loaded: buffers.size, failed };
   }
 
@@ -73,6 +81,10 @@ export class HitSoundPlayer {
       else high = mid;
     }
     this.next = low;
+    // A seek can land *inside* a currently tracked slider loop. Preserve
+    // that interval, resuming it from the corresponding audio buffer offset.
+    this.nextLoop = this.loops.findIndex(loop => loop.end > visualTime);
+    if (this.nextLoop < 0) this.nextLoop = this.loops.length;
   }
 
   /** Positive visual offset delays sounds to match visual gameplay time. */
@@ -103,12 +115,45 @@ export class HitSoundPlayer {
       this.active.set(source, volume);
       source.start(Math.max(now, when));
     }
+    // Continuous audio is bounded to *collected* slider tracking intervals.
+    // A seek into a tracking interval restarts its loop at the correct phase;
+    // paused and abandoned source nodes are cancelled by reset().
+    while (this.nextLoop < this.loops.length) {
+      const loop = this.loops[this.nextLoop];
+      const begin = startContextSeconds + (loop.start + offsetMs - startAudioMapMs) / (1000 * rate);
+      if (begin > now + LOOKAHEAD_SECONDS) break;
+      this.nextLoop++;
+      const until = startContextSeconds + (loop.end + offsetMs - startAudioMapMs) / (1000 * rate);
+      if (until <= now || this.active.size >= MAX_ACTIVE_VOICES) continue;
+      const buffer = this.buffers.get(loop.sample);
+      if (!buffer || buffer.duration <= 0) continue;
+      const when = Math.max(now, begin);
+      const elapsedSampleSeconds = Math.max(0, when - begin) * rate;
+      const sampleOffset = elapsedSampleSeconds % buffer.duration;
+      const source = this.context.createBufferSource();
+      const volume = this.context.createGain();
+      source.buffer = buffer;
+      source.playbackRate.value = rate;
+      source.loop = true;
+      volume.gain.value = Math.max(0, Math.min(1, loop.gain));
+      source.connect(volume);
+      volume.connect(this.destination);
+      source.onended = () => {
+        this.active.delete(source);
+        source.disconnect();
+        volume.disconnect();
+      };
+      this.active.set(source, volume);
+      source.start(when, sampleOffset);
+      source.stop(until);
+    }
   }
 
   dispose() {
     this.generation++;
     this.reset(0);
     this.events = [];
+    this.loops = [];
     this.buffers.clear();
   }
 }
