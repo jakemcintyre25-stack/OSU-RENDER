@@ -15,6 +15,7 @@ export class HitSoundPlayer {
   private buffers = new Map<string, AudioBuffer>();
   private events: HitSoundEvent[] = [];
   private next = 0;
+  private generation = 0;
   private active = new Map<AudioBufferSourceNode, GainNode>();
 
   constructor(
@@ -23,19 +24,29 @@ export class HitSoundPlayer {
   ) {}
 
   async load(plan: HitSoundPlan): Promise<{ loaded: number; failed: number }> {
+    const generation = ++this.generation;
     this.reset(0);
     const buffers = new Map<string, AudioBuffer>();
     let failed = 0;
-    await Promise.all([...plan.samples].map(async ([name, bytes]) => {
-      try {
-        // decodeAudioData may detach its input buffer. Keep the planner's data.
-        const decoded = await this.context.decodeAudioData(bytes.slice(0));
-        if (decoded.duration > 0) buffers.set(name, decoded);
-        else failed++;
-      } catch {
-        failed++;
+    const entries = [...plan.samples];
+    let next = 0;
+    // Decode no more than four clips concurrently to avoid spiking browser
+    // memory for beatmaps with hundreds of distinct custom WAV samples.
+    const decodeWorker = async () => {
+      while (next < entries.length && generation === this.generation) {
+        const [name, bytes] = entries[next++];
+        try {
+          // decodeAudioData may detach its input buffer. Keep the planner's data.
+          const decoded = await this.context.decodeAudioData(bytes.slice(0));
+          if (decoded.duration > 0) buffers.set(name, decoded);
+          else failed++;
+        } catch {
+          failed++;
+        }
       }
-    }));
+    };
+    await Promise.all(Array.from({ length: Math.min(4, entries.length) }, decodeWorker));
+    if (generation !== this.generation) return { loaded: 0, failed: 0 };
     this.buffers = buffers;
     this.events = plan.events.filter((event) =>
       Number.isFinite(event.t) && Number.isFinite(event.gain) &&
@@ -95,6 +106,7 @@ export class HitSoundPlayer {
   }
 
   dispose() {
+    this.generation++;
     this.reset(0);
     this.events = [];
     this.buffers.clear();
