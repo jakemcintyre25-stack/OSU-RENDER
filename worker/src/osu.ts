@@ -1,6 +1,8 @@
 // osu! API v2 access using the app's own client-credentials token.
 // No user tokens are needed: recent scores and replay downloads only need the `public` scope.
 
+import { readBoundedResponse } from './bounded-stream';
+
 export interface OsuEnv {
   OSU_CLIENT_ID?: string;
   OSU_CLIENT_SECRET?: string;
@@ -145,7 +147,11 @@ export async function getReplay(env: OsuEnv, scoreId: string): Promise<ArrayBuff
     throw new HttpError(502, 'osu! refused the replay download (the app token may not be allowed to download replays)');
   }
   if (!res.ok) throw new HttpError(502, 'Replay download failed');
-  return res.arrayBuffer();
+  try {
+    return await readBoundedResponse(res, 64 * 1024 * 1024);
+  } catch (error) {
+    throw new HttpError(502, 'Replay download rejected: ' + (error as Error).message);
+  }
 }
 
 /** Finds a beatmap by the MD5 hash stored in a replay header (used for uploaded .osr files). */
