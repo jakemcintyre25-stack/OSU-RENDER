@@ -65,6 +65,6 @@ describe('replay -> beatmap provenance', () => {
   it('labels .osu-only fallback as unverified rather than claiming an exact match', async () => {
     const session = await sessionFromReplay(await replayBytes(), null, osuText, 4444);
     expect(session.map.objects).toHaveLength(1);
-    expect(session.warnings.join(' ')).toMatch(/not verified|unverified/i);
+    expect(session.warnings.join(' ')).toMatch(/not been verified|unverified/i);
   });
 });
