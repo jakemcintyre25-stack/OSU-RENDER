@@ -1,6 +1,6 @@
 # OSU-RENDER — development and verification status
 
-Updated: 22 October 2026. The 12-milestone specification in `osu-render-chatgpt-prompt.md` is the acceptance contract. This checklist reflects **verified features**, not the existence of scaffolding or partial code.
+Updated: 23 October 2026. The 12-milestone specification in `osu-render-chatgpt-prompt.md` is the acceptance contract. This checklist reflects **verified features**, not the existence of scaffolding or partial code.
 
 **Estimated project completion: ~25% by remaining engineering effort (rough planning judgement, not a measured or verified completion metric).** Large unresolved deliverables include exact real-replay parity, complete HP/score, hitsounds/audio, skins, video export and deployment acceptance. Only individual rows marked PASS have satisfied their named criteria.
 
@@ -12,10 +12,10 @@ Updated: 22 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 | M2 Stable judgement parity | **IN PROGRESS** | Strict checksum matching rejects updated beatmaps with unchanged IDs; `.osu`-only fallback labels uncertainty. Strict parity mode fails when no stable replay is checked. Slider timing, combo breaks, hit-window edges and 2B autoplay have synthetic tests; exact real-replay parity, spinner smoothing and complex note-lock remain unverified. |
 | M3 HP and fail | **IN PROGRESS** | Verified SD/PF failure timestamps from circle grades and slider-head/tick/repeat combo breaks, with NF precedence. Exact stable HP drain, hit gains, break pauses, HP timeline and HP-zero failure remain. |
 | M4 Score V1 | **IN PROGRESS** | Running ScoreV1, mod multipliers, slider/spinner part scoring implemented. Fixed 30-point slider heads, clamped difficulty multiplier to 2–6, and normalized NC/DT and DC/HT speed-mod aliases. Real header parity remains unverified; older M4 replay comparison values are stale. |
-| M5 Audio timing and hitsounds | **IN PROGRESS** | Fixed offset-aware play/pause/seek/rate continuity with instrumented AudioContext tests; added persisted player Sync control. Real-browser acoustic sync, hitsounds and pitch-preserving DT/HT remain unverified/open. |
+| M5 Audio timing and hitsounds | **IN PROGRESS** | Added actual beatmap-asset hitsound metadata resolution, judged circle/slider head/tick/repeat/tail cues, sample decoding and seek-safe Web Audio scheduling; tests cover real synthetic ZIPs and instrumented AudioContext timing. Default/user-skin sounds, slider loops/spinners, acoustic browser checks and pitch-preserving DT/HT remain open. See docs/M5-FINDINGS.md. |
 | M6 Default skin and visual parity | **OPEN** | Basic Pixi renderer exists; sprite parity, shader, HUD, FL and effects remain. |
 | M7 Custom skins | **OPEN** | .osk and skin.ini support, IndexedDB and fallbacks remain. |
-| M8 Player page | **IN PROGRESS** | Basic browsing, replay loading and controls exist. Settings, timeline enhancements, loading retries and mobile acceptance remain. |
+| M8 Player page | **IN PROGRESS** | Basic browsing, replay loading and controls exist; audio/visual Sync slider and music-outro-aware seek/end range now tested. Settings, mobile/browser acceptance, loading recovery and richer timeline remain. |
 | M9 MP4 export | **OPEN** | No WebCodecs/offline audio export yet. |
 | M10 Lazer | **OPEN** | Legacy/stable only; lazer detection and rule set remain. |
 | M11 Hardening | **IN PROGRESS** | Added ZIP central-directory resource/path checks, CRC32, bounded replay frames, and streaming byte limits for .osz, .osr and .osu. Backend now checks a mirror ZIP's central directory and that it contains a .osu difficulty before returning/caching it; corrupt or irrelevant ZIPs trigger the next mirror. Negative-case tests pass; R2, a stateful mirror breaker, deeper decompression limits, security review and production load tests remain. |
@@ -47,8 +47,13 @@ Updated: 22 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 - `b45c27c`: completed 8 MiB streamed limits for .osu-only fallback text on browser and worker, with valid-text and oversized-input tests.
 - `26bf17e`: validate central-directory metadata in fetched mirror ZIPs before accepting response for caching; retry next provider if malformed; Worker-compatible UTF-8 validation. `1242e81` adds comprehensive corrupt-metadata tests. Both GitHub Actions checks passed on `1242e81`; this is only structural envelope validation, not full decompression/CRC/authenticity verification.
 - `1d38c1d`: reject and retry mirror archives with zero `.osu` difficulties. `5e35961` tests actual fallback behaviour, `b0b32d5` adds a negative envelope test. Both CI runs passed on the implementation commit. No claim of cryptographic authenticity or end-to-end download availability.
+- `7a0fc0b`: wire beatmap-provided hitsound samples to the music AudioContext; judged .osu metadata, custom file paths, playable circle/slider cues and nested archive support. `web/test/hitsounds.test.ts` validates the genuine archive parser and replay judgement integration.
+- `0417b35`: verify exact sample set selection for early hits near timing point changes, preserving actual sound trigger timestamp.
+- `ed5a847`: cap concurrent sample decoding, reject stale/disposed audio loads, and enforce active voice limits with instrumented AudioContext tests.
+- `77ec204`: keep music outros accessible beyond last hit object in player seek/timing controls.
+- `b9fc495`: verify Clock-to-hitsound node integration with pause/seek cleanup; both tests and typecheck passed on the push CI run (PR workflow acceptance tracked separately). Details and outstanding acoustic/browser acceptance: `docs/M5-FINDINGS.md`.
 
-GitHub Actions covers Node web+worker tests, TypeScript checks, web build and the ordinary no-fixture judge-check. The latest verified implementation head recorded here is `b45c27ca7d81758f5f3a95b1970740a9b765db14` (GitHub Actions push checks passed; PR check was still in progress when this line was written). This is **not proof of human-replay parity, browser audio quality, Windows EXE correctness or complete security**.
+GitHub Actions covers Node web+worker tests, TypeScript checks, web build and the ordinary no-fixture judge-check. The latest verified code head recorded here is `b9fc495e547d139e0a2d693951f470795a8ce24f` (GitHub Actions push tests, TypeScript and build passed; see Actions for both push and PR conclusions). This is **not proof of human-replay parity, browser audio quality, Windows EXE correctness or complete security**.
 
 The critical real-data acceptance command is now `npm run judge-check:strict` after placing exact-MD5-matched real files in gitignored `fixtures/replays/` and `fixtures/maps/`. It deliberately fails in normal CI without those private fixtures.
 
