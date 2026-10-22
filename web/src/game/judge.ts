@@ -40,6 +40,8 @@ export interface ComboEvent {
   score: number;
   /** The result that caused this event, if it was an object result. */
   result?: Hit;
+  /** Whether this final result belongs to a slider (its parts are separate). */
+  slider?: boolean;
   x?: number;
   y?: number;
 }
@@ -375,7 +377,7 @@ function buildEvents(map: PreparedMap, objects: ObjectJudgement[], w50: number):
       else if (!e.slider) combo++;
     }
     maxCombo = Math.max(maxCombo, combo);
-    events.push({ t: e.t, combo, accuracy: acc(), counts: { ...counts }, score, result: e.kind === 'result' ? e.result : undefined, x: e.x, y: e.y });
+    events.push({ t: e.t, combo, accuracy: acc(), counts: { ...counts }, score, result: e.kind === 'result' ? e.result : undefined, slider: e.kind === 'result' ? e.slider : undefined, x: e.x, y: e.y });
   }
   return { objects, events, maxCombo, counts, totalScore: score, scoring, failTime };
 }
