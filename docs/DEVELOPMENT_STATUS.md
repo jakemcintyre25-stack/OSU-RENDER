@@ -93,6 +93,13 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - `e7e63ca3`: Add integration tests that parse actual `.osu` source text with overlapping breaks and compare the resulting difficulty multiplier with a merged equivalent. CI pending at time of entry.
 - **M3 IN PROGRESS:** Break-aware timing is wired into ScoreV1, not yet the HP meter. Reference HP drain/gain and HP-zero failure remain OPEN. **M4 IN PROGRESS:** ScoreV1 density break handling is improved; replay-header parity remains unverified.
 
+### M3 HP event engine integration (23 October 2026)
+
+- `d3aaeba1`, `4f4f81e6`: deterministic HP event engine with caller-provided coefficients, break-aware drain, clamped gains/losses, exact first zero-crossing and invalid-input checks. Both CI workflows passed on the test commit.
+- `ec4c8382`, `ac671172`, `9025bad3`: bridge the **real judgement timeline** into the HP engine, preserving early-click and post-object miss times while excluding pre/post-object drain. Both CI workflows passed for the initial bridge; follow-up changes are subject to their own CI.
+- `0fa8b1c7`: integration tests exercising real judged circle results, break-paused HP, early press misses, and invalid calibration; CI pending at time of writing.
+- **M3 remains IN PROGRESS.** The HP engine is intentionally not enabled as a visible stable HP bar and does not alter `judge().failTime`. osu!stable HP coefficients, per-object nested HP gains, break refills, HP-zero failure and parity tests remain OPEN. No coefficients were guessed or labeled as verified.
+
 ## Immediate next implementation work
 
 1. **Independent:** finish M3's calibrated HP drain/gain, no-drain-during-breaks and HP-zero failure checks. Maintain explicit stable parity uncertainty until real evidence exists.
