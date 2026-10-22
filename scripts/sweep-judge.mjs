@@ -15,6 +15,7 @@ const arg = (name, def) => {
 const windows = arg('--windows', [1, 0.95, 0.9, 0.85, 0.8]);
 const radii = arg('--radii', [1, 1.05]);
 const offsets = arg('--offsets', [0]);
+const pressFrames = arg('--press-frames', [0]).map((v) => v === 1);
 
 async function list(dir, ext) {
   try {
@@ -60,23 +61,23 @@ try {
 
   console.log(`${cases.length} unique replays`);
   const results = [];
-  for (const rs of radii) for (const ws of windows) for (const off of offsets) {
+  for (const rs of radii) for (const ws of windows) for (const off of offsets) for (const pf of pressFrames) {
     let total = 0;
     let comboTotal = 0;
     const per = [];
     for (const c of cases) {
-      const j = J.judge(c.map, c.rep.frames, { windowScale: ws, radiusScale: rs, window300Offset: off });
+      const j = J.judge(c.map, c.rep.frames, { windowScale: ws, radiusScale: rs, window300Offset: off, pressPositionFrames: pf });
       const h = c.rep.stats;
       const err = Math.abs(j.counts.c300 - h.count300) + Math.abs(j.counts.c100 - h.count100) + Math.abs(j.counts.c50 - h.count50) + Math.abs(j.counts.miss - h.countMiss);
       total += err;
       comboTotal += Math.abs(j.maxCombo - h.maxCombo);
       per.push(err);
     }
-    results.push({ rs, ws, off, total, comboTotal, per });
+    results.push({ rs, ws, off, pf, total, comboTotal, per });
   }
   results.sort((a, b) => a.total - b.total);
-  console.log('radius  window  off300  count_err  combo_err  per_replay_count_err');
-  for (const r of results) console.log(`${String(r.rs).padEnd(7)} ${String(r.ws).padEnd(7)} ${String(r.off).padEnd(7)} ${String(r.total).padStart(9)} ${String(r.comboTotal).padStart(10)}  ${r.per.join(' ')}`);
+  console.log('radius  window  off300  pf  count_err  combo_err  per_replay_count_err');
+  for (const r of results) console.log(`${String(r.rs).padEnd(7)} ${String(r.ws).padEnd(7)} ${String(r.off).padEnd(7)} ${String(r.pf ? 1 : 0).padEnd(3)} ${String(r.total).padStart(9)} ${String(r.comboTotal).padStart(10)}  ${r.per.join(' ')}`);
 } finally {
   await vite.close();
 }

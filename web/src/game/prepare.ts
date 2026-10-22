@@ -4,6 +4,7 @@
 
 import { BeatmapDecoder } from 'osu-parsers';
 import { StandardRuleset, Circle, Slider, Spinner, SliderTick, SliderRepeat, SliderTail } from 'osu-standard-stable';
+import { difficultyMultiplier } from './score';
 
 export interface Vec {
   x: number;
@@ -59,6 +60,8 @@ export interface PreparedMap {
   ar: number;
   od: number;
   hp: number;
+  /** ScoreV1 difficulty multiplier from original (unmodded) values. */
+  scoreDifficulty: number;
   radius: number;
   preempt: number;
   fadeIn: number;
@@ -92,6 +95,19 @@ export function prepareMap(osuText: string, mods: string[] = []): PreparedMap {
   const modString = mods.filter((m) => MAP_MODS.includes(m)).join('') || 'NM';
   const beatmap = ruleset.applyToBeatmapWithMods(parsed, ruleset.createModCombination(modString));
   const d = beatmap.difficulty;
+
+  // ScoreV1 uses the map's original values; mods don't change the difficulty multiplier's inputs.
+  const original = ruleset.applyToBeatmapWithMods(parsed, ruleset.createModCombination('NM'));
+  const originalHits = original.hitObjects;
+  const breakMs = (parsed.events.breaks ?? []).reduce((sum, b) => sum + Math.max(0, b.endTime - b.startTime), 0);
+  const drainSeconds = Math.max(1, (originalHits.at(-1)?.startTime ?? 0) - (originalHits[0]?.startTime ?? 0) - breakMs) / 1000;
+  const scoreDifficulty = difficultyMultiplier(
+    original.difficulty.drainRate,
+    original.difficulty.circleSize,
+    original.difficulty.overallDifficulty,
+    originalHits.length,
+    drainSeconds,
+  );
 
   const colors = (parsed.colors?.comboColors ?? []).map((c) => (c.red << 16) | (c.green << 8) | c.blue);
   const comboColors = colors.length ? colors : DEFAULT_COMBO_COLORS;
@@ -163,6 +179,7 @@ export function prepareMap(osuText: string, mods: string[] = []): PreparedMap {
     ar: d.approachRate,
     od: d.overallDifficulty,
     hp: d.drainRate,
+    scoreDifficulty,
     radius: radius || 54.4 - 4.48 * d.circleSize,
     preempt: preempt || 1200,
     fadeIn: fadeIn || 400,

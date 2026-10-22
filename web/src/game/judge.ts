@@ -9,6 +9,7 @@
 import type { PreparedMap, SliderObj, SpinnerObj } from './prepare';
 import { hitWindows, sliderBallAt } from './prepare';
 import { cursorAt, KEY, type ReplayFrame } from '../load/replay';
+import { hitPoints, modMultiplier, sliderPartPoints, spinnerSpinPoints } from './score';
 
 export type Hit = 300 | 100 | 50 | 0;
 
@@ -33,6 +34,8 @@ export interface ComboEvent {
   /** Running accuracy 0..1 after this event (only changes on final object results). */
   accuracy: number;
   counts: { c300: number; c100: number; c50: number; miss: number };
+  /** Running ScoreV1 total after this event. */
+  score: number;
   /** The result that caused this event, if it was an object result. */
   result?: Hit;
   x?: number;
@@ -44,6 +47,9 @@ export interface Judgement {
   events: ComboEvent[];
   maxCombo: number;
   counts: { c300: number; c100: number; c50: number; miss: number };
+  totalScore: number;
+  /** Every point-scoring hit in time order, for checking score formulas against headers. */
+  scoring: { t: number; base: number; before: number; flat: number }[];
 }
 
 const MISS_WINDOW = 400;
@@ -57,17 +63,21 @@ interface Press {
   t: number;
   x: number;
   y: number;
+  /** Nearby cursor positions (previous and next frame), used when pressPositionFrames is on. */
+  nearby: { x: number; y: number }[];
 }
 
 export function findPresses(frames: ReplayFrame[]): Press[] {
   const out: Press[] = [];
   let prev = 0;
-  for (const f of frames) {
+  for (let i = 0; i < frames.length; i++) {
+    const f = frames[i];
     const down = f.keys & PRESS_MASK;
     const newly = down & ~prev;
+    const nearby = [frames[i - 1], frames[i + 1]].filter(Boolean).map((n) => ({ x: n.x, y: n.y }));
     // Pressing both keys on the same frame counts as two presses, like stable.
-    if (newly & KEY.M1) out.push({ t: f.t, x: f.x, y: f.y });
-    if (newly & KEY.M2) out.push({ t: f.t, x: f.x, y: f.y });
+    if (newly & KEY.M1) out.push({ t: f.t, x: f.x, y: f.y, nearby });
+    if (newly & KEY.M2) out.push({ t: f.t, x: f.x, y: f.y, nearby });
     prev = down;
   }
   return out;
@@ -88,6 +98,8 @@ export interface JudgeOptions {
   radiusScale?: number;
   /** Milliseconds removed from the 300 window only (after scaling). Experimental, default 0. */
   window300Offset?: number;
+  /** Count a click as on a circle if the cursor was within radius on the frame before or after the press. */
+  pressPositionFrames?: boolean;
 }
 
 export function judge(map: PreparedMap, frames: ReplayFrame[], options: JudgeOptions = {}): Judgement {
@@ -120,7 +132,8 @@ export function judge(map: PreparedMap, frames: ReplayFrame[], options: JudgeOpt
       if (headDone[k]) continue;
       const offset = p.t - o.start;
       if (offset > w.w50) continue; // too late for this object; it will expire
-      if (Math.hypot(p.x - o.x, p.y - o.y) > r) continue; // click missed this circle's area
+      const cands = options.pressPositionFrames ? [p, ...p.nearby] : [p];
+      if (!cands.some((c) => Math.hypot(c.x - o.x, c.y - o.y) <= r)) continue; // click missed this circle's area
       const res = headResult(offset, w); // early clicks inside MISS_WINDOW count as a miss
       headDone[k] = true;
       headHit[k] = res;
@@ -206,20 +219,34 @@ function judgeSpinner(s: SpinnerObj, j: ObjectJudgement, frames: ReplayFrame[]) 
 }
 
 function buildEvents(map: PreparedMap, objects: ObjectJudgement[], w50: number): Judgement {
-  type Raw = { t: number; kind: 'combo+' | 'break' | 'result'; result?: Hit; x?: number; y?: number; slider?: boolean };
+  // base: ScoreV1 base points for a combo-adding hit (gets the combo bonus).
+  // flat: points that never get a combo bonus (spinners).
+  // flat: points with no combo bonus (slider ticks/repeats/tails, spinner spins).
+  // A result carries the judged 300/100/50 that is scored with the combo bonus.
+  type Raw = {
+    t: number;
+    kind: 'combo+' | 'break' | 'result';
+    result?: Hit;
+    x?: number;
+    y?: number;
+    slider?: boolean;
+    flat?: number;
+  };
   const raw: Raw[] = [];
   map.objects.forEach((o, i) => {
     const j = objects[i];
     if (o.kind === 'slider') {
-      if (j.hitTime !== null) raw.push({ t: j.hitTime, kind: 'combo+' });
+      if (j.hitTime !== null) raw.push({ t: j.hitTime, kind: 'combo+', flat: sliderPartPoints('head') });
       else raw.push({ t: Math.min(o.start + w50, o.end), kind: 'break' });
       o.parts.forEach((p, k) => {
         const got = j.parts?.[k];
         // A missed tick, repeat or tail only lowers the slider's result (stable does not break combo
         // on slider-part misses). Only a missed head or a whole-slider miss resets combo.
-        if (got) raw.push({ t: p.t, kind: 'combo+' });
+        if (got) raw.push({ t: p.t, kind: 'combo+', flat: sliderPartPoints(p.kind) });
       });
       raw.push({ t: j.resultTime, kind: 'result', result: j.result, x: o.parts.at(-1)?.x ?? o.x, y: o.parts.at(-1)?.y ?? o.y, slider: true });
+    } else if (o.kind === 'spinner') {
+      raw.push({ t: j.resultTime, kind: 'result', result: j.result, x: o.x, y: o.y, flat: spinnerSpinPoints(j.spins ?? 0, o.spinsRequired) });
     } else {
       raw.push({ t: j.result > 0 ? (j.hitTime ?? j.resultTime) : j.resultTime, kind: 'result', result: j.result, x: o.x, y: o.y });
     }
@@ -229,28 +256,48 @@ function buildEvents(map: PreparedMap, objects: ObjectJudgement[], w50: number):
   const counts = { c300: 0, c100: 0, c50: 0, miss: 0 };
   let combo = 0;
   let maxCombo = 0;
+  let score = 0;
+  const diff = map.scoreDifficulty;
+  const mod = modMultiplier(map.mods);
   const events: ComboEvent[] = [];
+  const scoring: Judgement['scoring'] = [];
   const acc = () => {
     const n = counts.c300 + counts.c100 + counts.c50 + counts.miss;
     return n === 0 ? 1 : (300 * counts.c300 + 100 * counts.c100 + 50 * counts.c50) / (300 * n);
   };
   for (const e of raw) {
-    if (e.kind === 'combo+') combo++;
-    else if (e.kind === 'break') combo = 0;
+    const before = combo;
+    if (e.kind === 'combo+') {
+      combo++;
+      if (e.flat) {
+        score += e.flat;
+        scoring.push({ t: e.t, base: 0, before, flat: e.flat });
+      }
+    } else if (e.kind === 'break') combo = 0;
     else {
       if (e.result === 300) counts.c300++;
       else if (e.result === 100) counts.c100++;
       else if (e.result === 50) counts.c50++;
       else counts.miss++;
+      // Circles, sliders and spinners each score their judged result with the combo bonus.
+      if (e.result) {
+        const base = e.result;
+        score += hitPoints(base, before, diff, mod);
+        scoring.push({ t: e.t, base, before, flat: 0 });
+      }
+      if (e.flat) {
+        score += e.flat;
+        scoring.push({ t: e.t, base: 0, before, flat: e.flat });
+      }
       // Circles and spinners add combo on their result; misses reset it.
       // Slider results don't add combo themselves (their head and parts already did).
       if (e.result === 0) combo = 0;
       else if (!e.slider) combo++;
     }
     maxCombo = Math.max(maxCombo, combo);
-    events.push({ t: e.t, combo, accuracy: acc(), counts: { ...counts }, result: e.kind === 'result' ? e.result : undefined, x: e.x, y: e.y });
+    events.push({ t: e.t, combo, accuracy: acc(), counts: { ...counts }, score, result: e.kind === 'result' ? e.result : undefined, x: e.x, y: e.y });
   }
-  return { objects, events, maxCombo, counts };
+  return { objects, events, maxCombo, counts, totalScore: score, scoring };
 }
 
 /** Latest combo event at or before t (binary search). */
