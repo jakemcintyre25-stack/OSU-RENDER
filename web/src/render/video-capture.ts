@@ -80,11 +80,16 @@ export class ReplayVideoCapture {
         this.promise = null;
       };
       recorder.start(1000);
-      this.timeout = setTimeout(() => this.stop(), MAX_CAPTURE_MS);
+      // The caller may not be awaiting stop() yet when the safety timer fires.
+      this.timeout = setTimeout(() => { void this.stop().catch(() => {}); }, MAX_CAPTURE_MS);
     } catch (error) {
       stream.getTracks().forEach(track => track.stop());
+      if (this.timeout) clearTimeout(this.timeout);
+      this.timeout = null;
       this.recorder = null;
       this.promise = null;
+      this.resolve = null;
+      this.reject = null;
       throw error;
     }
   }
