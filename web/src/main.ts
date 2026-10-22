@@ -6,6 +6,7 @@ import { decodeReplay } from './load/replay';
 import { sessionFromReplay, sessionFromAutoplay, type Session } from './session';
 import { PlayfieldRenderer } from './render/renderer';
 import { Clock } from './audio/clock';
+import { supportedSkinAudioFiles } from './audio/skin-assets';
 import { playbackEndTime } from './audio/timeline';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -191,8 +192,7 @@ wireDrop('osk-drop', 'osk-input', async (file) => {
     loading('Checking skin archive…');
     assertLocalUploadSize('osk', file.size);
     const archive = openOsz(new Uint8Array(await file.arrayBuffer()));
-    const usable = [...archive.files.keys()].filter((name) =>
-      /^(normal|soft|drum)-hit(?:normal|whistle|finish|clap)(?:[0-9]+)?\.(wav|mp3|ogg)$/i.test(name));
+    const usable = supportedSkinAudioFiles(archive);
     if (!usable.length) throw new Error('This skin contains no supported hitsound audio files.');
     localSkin = archive;
     $('osk-status').textContent = `${file.name}: ${usable.length} available hitsound files. The next replay will use these for missing beatmap sounds.`;
