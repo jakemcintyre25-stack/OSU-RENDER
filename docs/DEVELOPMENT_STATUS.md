@@ -74,6 +74,13 @@ GitHub Actions covers Node web+worker tests, TypeScript checks, web build and th
 
 The critical real-data acceptance command is now `npm run judge-check:strict` after placing exact-MD5-matched real files in gitignored `fixtures/replays/` and `fixtures/maps/`. It deliberately fails in normal CI without those private fixtures.
 
+### Additional M11 stream-hardening checkpoint (23 October 2026)
+
+- `dcbc9787`: reject malformed, negative, fractional, exponent and unsafe `Content-Length` hints; cancel upstream bodies immediately when a declared size exceeds the ceiling.
+- `09b11fd0`: add dedicated `worker/test/bounded-stream.test.ts` cases for exact byte ceilings, streamed overruns and invalid declared lengths.
+- **IN PROGRESS:** Both commits are pushed to `development/m2-slider-tracking`; GitHub Actions must be checked before marking this checkpoint verified. The prior `05363632` checkpoint passed both push and PR workflows.
+- **OPEN:** Independent production memory/load profiling, globally coordinated provider breaker and real upstream network acceptance.
+
 ## Immediate next implementation work
 
 1. **Independent:** finish M3's calibrated HP drain/gain, no-drain-during-breaks and HP-zero failure checks. Maintain explicit stable parity uncertainty until real evidence exists.
