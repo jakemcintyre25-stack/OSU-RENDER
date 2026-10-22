@@ -71,5 +71,6 @@ describe('M3 calibrated HP timeline mechanics (not stable coefficients)', () => 
     expect(() => simulateHp(0, 10, [], [], { initial: 10, maximum: 100, drainPerMs: NaN })).toThrow(RangeError);
     expect(() => simulateHp(0, 10, [], [{ t: 11, amount: 5 }], calibration)).toThrow(RangeError);
     expect(() => simulateHp(0, 10, [{ start: 8, end: 2 }], [], calibration)).toThrow(RangeError);
+    expect(() => simulateHp(10, 10, [{ start: 8, end: 2 }], [], calibration)).toThrow(RangeError);
   });
 });
