@@ -10,6 +10,15 @@ export interface ReplayFrame {
 
 export const KEY = { M1: 1, M2: 2, K1: 4, K2: 8, SMOKE: 16 } as const;
 
+/** Operational input safety ceilings; not official osu! format limits. */
+export const REPLAY_LIMITS = Object.freeze({
+  compressedBytes: 64 * 1024 * 1024,
+  frames: 1_000_000,
+  timeAbsMs: 1_000_000_000,
+  positionAbs: 100_000,
+  maxKeyMask: 65535,
+});
+
 export interface ReplayHeaderStats {
   count300: number;
   count100: number;
@@ -31,6 +40,9 @@ export interface LoadedReplay {
 }
 
 export async function decodeReplay(data: Uint8Array): Promise<LoadedReplay> {
+  if (data.byteLength === 0 || data.byteLength > REPLAY_LIMITS.compressedBytes) {
+    throw new Error('Invalid replay: .osr file size outside safe limits');
+  }
   const score = await new ScoreDecoder().decodeFromBuffer(data, true);
   const info = score.info;
   const frames = cleanFrames(
@@ -58,11 +70,27 @@ export async function decodeReplay(data: Uint8Array): Promise<LoadedReplay> {
   };
 }
 
-/** Drops the RNG-seed frame and stable's off-screen placeholder frames, and sorts by time. */
+/** Drop known osu!stable placeholders; reject malformed gameplay data, then sort. */
 export function cleanFrames(frames: ReplayFrame[]): ReplayFrame[] {
-  return frames
-    .filter((f) => Number.isFinite(f.t) && !(f.y === -500 && f.x === 256) && f.t !== -12345)
-    .sort((a, b) => a.t - b.t);
+  // Limit before copying or sorting to protect against decompression expansion.
+  if (frames.length > REPLAY_LIMITS.frames) {
+    throw new Error('Invalid replay: too many replay frames');
+  }
+  const valid: ReplayFrame[] = [];
+  for (const frame of frames) {
+    // Replay seed and legacy off-screen sentinel are not cursor samples.
+    if (frame && ((frame.y === -500 && frame.x === 256) || frame.t === -12345)) continue;
+    if (!frame || !Number.isFinite(frame.t) ||
+        !Number.isFinite(frame.x) || !Number.isFinite(frame.y) ||
+        Math.abs(frame.t) > REPLAY_LIMITS.timeAbsMs ||
+        Math.abs(frame.x) > REPLAY_LIMITS.positionAbs ||
+        Math.abs(frame.y) > REPLAY_LIMITS.positionAbs ||
+        !Number.isInteger(frame.keys) || frame.keys < 0 || frame.keys > REPLAY_LIMITS.maxKeyMask) {
+      throw new Error('Invalid replay: non-finite or out-of-range frame data');
+    }
+    valid.push(frame);
+  }
+  return valid.sort((a, b) => a.t - b.t);
 }
 
 const MOD_BITS: [number, string][] = [
