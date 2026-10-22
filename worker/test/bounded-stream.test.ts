@@ -3,7 +3,7 @@ import { readBoundedResponse } from '../src/bounded-stream';
 
 describe('bounded upstream streaming contract', () => {
   it('rejects malformed, negative, exponent and unsafe declared sizes', async () => {
-    for (const length of ['-1', '1e30', 'Infinity', 'NaN', '9007199254740993', ' 3', '3.5']) {
+    for (const length of ['-1', '1e30', 'Infinity', 'NaN', '9007199254740993', '01', '3.5']) {
       const response = new Response(new Uint8Array([1, 2]), { headers: { 'Content-Length': length } });
       await expect(readBoundedResponse(response, 10)).rejects.toThrow(/Content-Length|too large/);
     }
