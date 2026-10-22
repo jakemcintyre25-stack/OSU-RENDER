@@ -128,6 +128,14 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - `6ecda751`: independently compare indexed drain to direct break arithmetic on 120 breaks and 300 events. CI pending at time of writing.
 - **M3 IN PROGRESS:** No verified osu!stable HP coefficients, HP-zero player failure, or real-replay parity. Optimization and synthetic tests do not satisfy these acceptance criteria.
 
+### Larger M6 implementation batch — indexed Pixi visibility (23 October 2026)
+
+- Previous HP optimization `586e3976` passed both GitHub Actions workflows.
+- `84e218dd`: add a seekable visibility index for sorted hit objects, preserving long overlapping sliders/spinners via prefix maximum end times.
+- `1761afe5`: integrate indexed candidates into the real Pixi render loop, while retaining existing judgement-specific fade and hit handling.
+- `6e584ba9`, `90a6f538`: test arbitrary backward/forward seeks, overlap boundaries and compare against exhaustive visibility over 4,000 mixed objects and hundreds of timestamps. CI pending; do not claim frame-rate improvements without browser profiling.
+- **M6 IN PROGRESS:** Visual sprite parity, shaders, custom skin layout, Flashlight and browser performance profiling remain OPEN.
+
 ## Immediate next implementation work
 
 1. **Independent:** finish M3's calibrated HP drain/gain, no-drain-during-breaks and HP-zero failure checks. Maintain explicit stable parity uncertainty until real evidence exists.
