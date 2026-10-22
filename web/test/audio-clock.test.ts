@@ -119,6 +119,46 @@ describe('Web Audio master clock seek, rate, pause and visual offset', () => {
     clock.dispose();
   });
 
+  it('does not start delayed Web Audio playback after player disposal', async () => {
+    const clock = new Clock();
+    audio.state = 'suspended';
+    let resume!: () => void;
+    audio.resume.mockImplementation(() => new Promise<void>(resolve => { resume = resolve; }));
+    const pending = clock.play();
+    clock.dispose();
+    resume();
+    await pending;
+    expect(clock.isPlaying).toBe(false);
+    expect(audio.sources).toHaveLength(0);
+  });
+
+  it('cancels pending suspended-context play requests after a seek or pause', async () => {
+    const clock = new Clock();
+    audio.state = 'suspended';
+    let resume!: () => void;
+    audio.resume.mockImplementation(() => new Promise<void>(resolve => { resume = resolve; }));
+    const pending = clock.play();
+    clock.seek(2500);
+    resume();
+    await pending;
+    expect(clock.isPlaying).toBe(false);
+    expect(clock.now()).toBe(2500);
+    clock.dispose();
+  });
+
+  it('starts at most one source for concurrent suspended-context play calls', async () => {
+    const clock = new Clock();
+    audio.state = 'suspended';
+    let resume!: () => void;
+    audio.resume.mockImplementation(() => new Promise<void>(resolve => { resume = resolve; }));
+    const p1 = clock.play();
+    const p2 = clock.play();
+    resume();
+    await Promise.all([p1, p2]);
+    expect(clock.isPlaying).toBe(true);
+    clock.dispose();
+  });
+
   it('integrates loaded map sample cues with playback, pause and seek', async () => {
     const clock = new Clock();
     audio.decodeAudioData.mockResolvedValue({ duration: 0.1 } as AudioBuffer);
