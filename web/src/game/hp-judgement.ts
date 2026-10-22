@@ -28,8 +28,8 @@ export function hpFromJudgement(
   // not manufacture HP drain before the first object or after the last one.
   const first = map.firstObjectTime;
   const last = map.lastObjectTime;
-  const start = Math.min(first, ...deltas.map(e => e.t));
-  const end = Math.max(last, ...deltas.map(e => e.t));
+  const start = deltas.reduce((min, e) => Math.min(min, e.t), first);
+  const end = deltas.reduce((max, e) => Math.max(max, e.t), last);
   const breaks = [
     ...map.breaks,
     ...(start < first ? [{ start, end: first }] : []),
