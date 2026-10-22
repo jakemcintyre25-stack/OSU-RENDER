@@ -53,7 +53,11 @@ export function verboseRows(map, judgement) {
   return map.objects.map((object, index) => {
     const j = judgement.objects[index];
     const parts = object.kind === 'slider' ? ` parts=${(j.parts ?? []).map((ok) => ok ? '✓' : '×').join('')}` : '';
-    return `${String(index + 1).padStart(5)}  ${String(Math.round(object.start)).padStart(8)} ms  ${clockTime(object.start).padStart(10)}  ${object.kind.padEnd(7)} ${String(j.result).padStart(3)}${parts}`;
+    const offset = typeof j.hitTime === 'number' ? j.hitTime - object.start : null;
+    const press = offset === null ? '' : ` press=${clockTime(j.hitTime)} delta=${offset >= 0 ? '+' : ''}${Math.round(offset)}ms`;
+    const spins = object.kind === 'spinner' && Number.isFinite(j.spins)
+      ? ` spins=${j.spins.toFixed(2)}/${object.spinsRequired}` : '';
+    return `${String(index + 1).padStart(5)}  ${String(Math.round(object.start)).padStart(8)} ms  ${clockTime(object.start).padStart(10)}  ${object.kind.padEnd(7)} ${String(j.result).padStart(3)}${parts}${press}${spins}`;
   });
 }
 
