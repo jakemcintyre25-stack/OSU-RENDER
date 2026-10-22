@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { readLimitedResponse } from '../src/api';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getOsuFile, readLimitedResponse } from '../src/api';
 
 const response = (chunks: number[][], headers: HeadersInit = {}) => new Response(
   new ReadableStream<Uint8Array>({
@@ -39,5 +39,21 @@ describe('client-side bounded download streaming', () => {
     expect([...bytes]).toEqual([8, 9]);
     expect(seen).toEqual([-1, -1]);
     expect([...await readLimitedResponse(response([]), 5)]).toEqual([]);
+  });
+});
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe('browser .osu-only fallback byte cap', () => {
+  it('decodes a bounded osu response as UTF-8 text', async () => {
+    vi.stubGlobal('fetch', async () => new Response('osu file format v14'));
+    expect(await getOsuFile(42)).toBe('osu file format v14');
+  });
+
+  it('rejects a forged overlarge Content-Length before text decoding', async () => {
+    vi.stubGlobal('fetch', async () => new Response('osu file format v14', {
+      headers: { 'content-length': String(9 * 1024 * 1024) },
+    }));
+    await expect(getOsuFile(42)).rejects.toThrow(/too large/i);
   });
 });
