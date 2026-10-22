@@ -47,7 +47,7 @@ describe('M7 .osk visual skin loading', () => {
   });
   it('handles BOM, case-insensitive sections, comments, and a capped animation count', () => {
     const archive = skin({ 'SKIN.INI': strToU8(
-      '\uFEFF[general]\\nCURSORCENTRE: false // top-left anchor\\nSLIDERBALLFRAMES: 128\\n; ignored\\nCursorRotate: 0'
+      '\uFEFF[general]\nCURSORCENTRE: false // top-left anchor\nSLIDERBALLFRAMES: 128\n; ignored\nCursorRotate: 0'
     ) });
     expect(visualSkinConfig(archive)).toMatchObject({
       cursorCentre: false, sliderBallFrames: 128, cursorRotate: false,
