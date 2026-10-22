@@ -195,6 +195,13 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - `f8d84e55`: auto-save the recording at 59 seconds, before the hard 60-second safety stop.
 - **M9 IN PROGRESS:** CI on final batch pending. Browser encoder acceptance, synchronized audio, deterministic fixed-FPS offline rendering, full replay export, MP4 container/codec and download-quality tests are OPEN. This is a limited video-only capture, not a completed export milestone.
 
+### M9 browser recorder lifecycle hardening (23 October 2026)
+
+- Prior `af9b7aa6` checkpoint passed both CI workflows after M9 WebM capture implementation.
+- `478992cf`: safely handle the duration safety-timer's asynchronous stop rejection and clear pending callback state after encoder startup failure.
+- `f35184e9`: integration-style fake browser recorder tests covering captured Blob data, stream-track release, stopped state and encoder startup errors.
+- **M9 IN PROGRESS:** CI for this hardening pending. Browser device/codec acceptance, capture playback, synchronized audio, deterministic fixed-frame-rate full replay and MP4 encoding are OPEN. WebM remains video-only.
+
 ## Immediate next implementation work
 
 1. **Independent:** finish M3's calibrated HP drain/gain, no-drain-during-breaks and HP-zero failure checks. Maintain explicit stable parity uncertainty until real evidence exists.
