@@ -48,6 +48,8 @@ interface Display {
   follow?: Graphics;
   skinBall?: Sprite;
   skinFollow?: Sprite;
+  reverseStart?: Sprite;
+  reverseEnd?: Sprite;
   // spinners
   spinnerDisc?: Graphics;
   spinnerRing?: Graphics;
@@ -373,6 +375,23 @@ export class PlayfieldRenderer {
         d.skinBall.tint = o.comboColor;
         d.skinBall.visible = false;
       }
+      if (this.skinTextures.reversearrow) {
+        d.reverseStart = new Sprite(this.skinTextures.reversearrow);
+        d.reverseEnd = new Sprite(this.skinTextures.reversearrow);
+        for (const sprite of [d.reverseStart, d.reverseEnd]) {
+          sprite.anchor.set(0.5);
+          sprite.width = sprite.height = r * 1.3;
+          sprite.visible = false;
+        }
+        const path = o.path;
+        const a = path[0], b = path[path.length - 1];
+        const nearA = path[Math.min(path.length - 1, 3)];
+        const nearB = path[Math.max(0, path.length - 4)];
+        d.reverseStart.position.set(a.x, a.y);
+        d.reverseEnd.position.set(b.x, b.y);
+        d.reverseStart.rotation = Math.atan2(nearA.y - a.y, nearA.x - a.x) - Math.PI / 2;
+        d.reverseEnd.rotation = Math.atan2(nearB.y - b.y, nearB.x - b.x) - Math.PI / 2;
+      }
       if (this.skinTextures.sliderfollowcircle) {
         d.skinFollow = new Sprite(this.skinTextures.sliderfollowcircle);
         d.skinFollow.anchor.set(0.5);
@@ -387,6 +406,8 @@ export class PlayfieldRenderer {
       root.addChild(d.follow, d.ball);
       if (d.skinFollow) root.addChild(d.skinFollow);
       if (d.skinBall) root.addChild(d.skinBall);
+      if (d.reverseStart) root.addChild(d.reverseStart);
+      if (d.reverseEnd) root.addChild(d.reverseEnd);
     }
     d.approach = new Graphics();
     d.approach.circle(0, 0, r).stroke({ width: r * 0.08, color: o.comboColor });
@@ -496,8 +517,11 @@ export class PlayfieldRenderer {
       const key = atEnd ? 1 : 0;
       if (drawn.has(key) || (atEnd && snake < 1)) continue;
       drawn.add(key);
-      this.drawArrow(g, s, atEnd, r);
+      if (!this.skinTextures.reversearrow) this.drawArrow(g, s, atEnd, r);
     }
+
+    if (d.reverseStart) d.reverseStart.visible = drawn.has(0);
+    if (d.reverseEnd) d.reverseEnd.visible = drawn.has(1);
 
     // Ball and follow circle while the slider is running.
     const running = t >= s.start && t <= s.end;
