@@ -195,25 +195,51 @@ function judgeSlider(s: SliderObj, j: ObjectJudgement, head: Hit, frames: Replay
   j.resultTime = s.end;
 }
 
-function judgeSpinner(s: SpinnerObj, j: ObjectJudgement, frames: ReplayFrame[]) {
-  let total = 0;
-  let prevAngle: number | null = null;
-  for (const f of frames) {
-    if (f.t < s.start || f.t > s.end) continue;
-    if (!(f.keys & PRESS_MASK)) {
-      prevAngle = null;
+/**
+ * Integrate held cursor movement into spinner revolutions.
+ *
+ * Stable supports spinning in either direction and caps speed at 477 RPM.
+ * Integrating signed angles and taking abs at the end cancels legitimate spins
+ * after a reversal; instead, count each direction's angular displacement.
+ *
+ * stable: this is a per-frame capped integration; the original client's
+ * velocity smoothing and frame-rate-specific behaviour still require
+ * reference-replay parity checks before M2 can be marked complete.
+ */
+export function spinnerRotations(frames: ReplayFrame[], start: number, end: number): number {
+  const maxRadiansPerMs = (2 * Math.PI * (477 / 60)) / 1000;
+  const pressMask = KEY.M1 | KEY.M2;
+  let previousAngle: number | null = null;
+  let previousTime: number | null = null;
+  let accumulated = 0;
+
+  for (const frame of frames) {
+    if (frame.t < start) continue;
+    if (frame.t > end) break;
+    if (!(frame.keys & pressMask) ||
+        !Number.isFinite(frame.x) || !Number.isFinite(frame.y)) {
+      previousAngle = null;
+      previousTime = null;
       continue;
     }
-    const a = Math.atan2(f.y - 192, f.x - 256);
-    if (prevAngle !== null) {
-      let d = a - prevAngle;
-      if (d > Math.PI) d -= Math.PI * 2;
-      if (d < -Math.PI) d += Math.PI * 2;
-      total += d;
+    const angle = Math.atan2(frame.y - 192, frame.x - 256);
+    if (previousAngle !== null && previousTime !== null) {
+      const elapsed = frame.t - previousTime;
+      if (elapsed > 0) {
+        let difference = angle - previousAngle;
+        if (difference > Math.PI) difference -= 2 * Math.PI;
+        else if (difference < -Math.PI) difference += 2 * Math.PI;
+        accumulated += Math.min(Math.abs(difference), elapsed * maxRadiansPerMs);
+      }
     }
-    prevAngle = a;
+    previousAngle = angle;
+    previousTime = frame.t;
   }
-  const spins = Math.abs(total) / (Math.PI * 2);
+  return accumulated / (2 * Math.PI);
+}
+
+function judgeSpinner(s: SpinnerObj, j: ObjectJudgement, frames: ReplayFrame[]) {
+  const spins = spinnerRotations(frames, s.start, s.end);
   j.spins = spins;
   const need = s.spinsRequired;
   j.result = spins >= need ? 300 : spins >= need - 1 ? 100 : spins >= need * 0.25 ? 50 : 0;
