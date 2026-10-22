@@ -5,7 +5,7 @@ class TestAudioContext {
   currentTime = 10;
   state: AudioContextState = 'running';
   destination = {} as AudioDestinationNode;
-  gain = { gain: { value: 1 }, connect: vi.fn() };
+  gain = { gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() };
   sources: Array<{ playbackRate: { value: number }; start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }> = [];
   createGain(): GainNode { return this.gain as unknown as GainNode; }
   createBufferSource(): AudioBufferSourceNode {
@@ -96,4 +96,32 @@ describe('Web Audio master clock seek, rate, pause and visual offset', () => {
     expect(clock.now()).toBeCloseTo(3150, 6);
     clock.dispose();
   });
+  it('integrates loaded map sample cues with playback, pause and seek', async () => {
+    const clock = new Clock();
+    audio.decodeAudioData.mockResolvedValue({ duration: 0.1 } as AudioBuffer);
+    const plan = {
+      samples: new Map([['map/sample.wav', new Uint8Array([1, 2]).buffer]]),
+      events: [
+        { t: 1000, sample: 'map/sample.wav', gain: 0.8 },
+        { t: 2000, sample: 'map/sample.wav', gain: 0.8 },
+      ],
+      unavailable: 0,
+    };
+    expect(await clock.loadHitsounds(plan)).toEqual({ loaded: 1, failed: 0 });
+    clock.seek(900);
+    await clock.play();
+    clock.scheduleHitsounds();
+    expect(audio.sources).toHaveLength(1);
+    expect(audio.sources[0].start.mock.calls[0][0]).toBeCloseTo(10.15, 6);
+    clock.pause();
+    expect(audio.sources[0].stop).toHaveBeenCalledTimes(1);
+    clock.seek(1900);
+    await clock.play();
+    clock.scheduleHitsounds();
+    expect(audio.sources).toHaveLength(2);
+    expect(audio.sources[1].start.mock.calls[0][0]).toBeCloseTo(10.15, 6);
+    clock.dispose();
+    expect(audio.sources[1].stop).toHaveBeenCalledTimes(1);
+  });
+
 });
