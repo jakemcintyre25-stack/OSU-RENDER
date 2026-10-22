@@ -36,12 +36,23 @@ export async function sessionFromReplay(replayBytes: Uint8Array, osz: OszArchive
   if (replay.rulesetId !== 0) throw new Error('This replay is not osu!standard — only standard is supported for now');
   let diff: Difficulty | null = null;
   if (osz) {
-    diff = pickDifficulty(osz, replay.beatmapMD5, beatmapId);
-    if (!diff) warnings.push('The downloaded map does not match this replay exactly (it may have been updated). Timing could be off.');
+    // A beatmap ID is not a content identity: maps can be updated while
+    // retaining their ID. Never silently judge a replay on different hit objects.
+    diff = pickDifficulty(osz, replay.beatmapMD5);
+    if (!diff) {
+      const sameId = beatmapId ? pickDifficulty(osz, null, beatmapId) : null;
+      if (sameId) {
+        throw new Error('Beatmap was updated: the downloaded difficulty has the same ID but a different MD5 checksum. Supply the exact .osz revision used by this replay.');
+      }
+      throw new Error('Beatmap archive does not contain a difficulty matching this replay MD5 checksum. Supply the exact .osz revision.');
+    }
   }
   const osuText = diff?.text ?? osuFallback;
   if (!osuText) throw new Error('Could not find the difficulty this replay was played on');
-  if (!osz) warnings.push('No beatmap mirror had this map, so there is no music or background.');
+  if (!osz) {
+    warnings.push('No beatmap mirror had this map, so there is no music or background.');
+    warnings.push('The .osu-only fallback has not been verified against the replay MD5; judgement and timing may differ.');
+  }
   const map = prepareMap(osuText, replay.mods);
   const s = await finish(map, replay.frames, osz, replay.player || 'Player', warnings);
   s.replay = replay;
