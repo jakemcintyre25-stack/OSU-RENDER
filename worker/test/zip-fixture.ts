@@ -1,6 +1,6 @@
 /** A tiny well-formed stored ZIP fixture built from bytes, not a mock signature. */
-export function storedZip(payload = new Uint8Array([1, 2, 3])): Uint8Array {
-  const filename = new TextEncoder().encode('map.osu');
+export function storedZip(payload = new Uint8Array([1, 2, 3]), path = 'map.osu'): Uint8Array {
+  const filename = new TextEncoder().encode(path);
   const localLength = 30 + filename.length + payload.length;
   const centralLength = 46 + filename.length;
   const out = new Uint8Array(localLength + centralLength + 22);
