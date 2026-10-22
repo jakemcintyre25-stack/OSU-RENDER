@@ -66,6 +66,7 @@ export class PlayfieldRenderer {
   private cursorLayer = new Container();
   private cursorGfx = new Graphics();
   private cursorSprite = new Sprite(Texture.EMPTY);
+  private cursorBaseScale = { x: 1, y: 1 };
   private hud = new Container();
   private comboText!: Text;
   private accText!: Text;
@@ -117,6 +118,7 @@ export class PlayfieldRenderer {
       // Playfield coordinates: osu!standard skin cursors use 128px at 1x.
       this.cursorSprite.width = 64;
       this.cursorSprite.height = 64;
+      this.cursorBaseScale = { x: this.cursorSprite.scale.x, y: this.cursorSprite.scale.y };
     }
   }
 
@@ -530,7 +532,8 @@ export class PlayfieldRenderer {
     const pressed = (c.keys & (KEY.M1 | KEY.M2)) !== 0;
     if (this.cursorSprite.visible) {
       this.cursorSprite.position.set(c.x, c.y);
-      this.cursorSprite.scale.set(pressed ? 1.12 : 1);
+      const factor = pressed ? 1.12 : 1;
+      this.cursorSprite.scale.set(this.cursorBaseScale.x * factor, this.cursorBaseScale.y * factor);
     } else {
       g.circle(c.x, c.y, pressed ? 11 : 9.5).fill({ color: 0xffe08a, alpha: 0.95 }).stroke({ width: 2, color: 0xffffff });
     }
