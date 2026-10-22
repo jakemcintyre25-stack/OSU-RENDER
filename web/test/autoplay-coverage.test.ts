@@ -57,6 +57,22 @@ describe('autoplay integration without private fixtures', () => {
     expect(j.totalScore).toBeGreaterThan(300 * map.objects.length);
   });
 
+  it('keeps replay frames chronological when two 2B circles share an exact timestamp', () => {
+    const header = osu.slice(0, osu.indexOf('[HitObjects]'));
+    const double = header + '[HitObjects]\\n'
+      + '100,100,1000,1,0,0:0:0:0:\\n'
+      + '200,200,1000,1,0,0:0:0:0:\\n';
+    const map = prepareMap(double);
+    const frames = generateAutoplay(map);
+    expect(map.objects).toHaveLength(2);
+    for (let i = 1; i < frames.length; i++) {
+      expect(frames[i].t).toBeGreaterThanOrEqual(frames[i - 1].t);
+    }
+    const judged = judge(map, frames);
+    expect(judged.objects.map((o) => o.result)).toEqual([300, 300]);
+    expect(judged.maxCombo).toBe(2);
+  });
+
   it('preserves 300/full combo under HR+DT on the synthetic map', () => {
     const map = prepareMap(osu, ['HR', 'DT']);
     const replay = generateAutoplay(map);
