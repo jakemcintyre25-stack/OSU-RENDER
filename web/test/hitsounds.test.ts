@@ -95,6 +95,24 @@ describe('M5 beatmap-sourced hitsounds', () => {
     expect(planned.unavailable).toBeGreaterThan(1);
   });
 
+  it('selects a head sample using object timing even when the press arrives before a timing change', () => {
+    const transition = chart.replace('1600,-100,4,3,3,80,0,0', '995,-100,4,3,3,80,0,0');
+    const osz = archive(transition);
+    const map = prepareMap(transition);
+    const frames = [
+      { t: 970, x: 100, y: 100, keys: 0 },
+      { t: 980, x: 100, y: 100, keys: 1 },
+      { t: 990, x: 100, y: 100, keys: 0 },
+    ];
+    const judged = judge(map, frames);
+    expect(judged.objects[0].hitTime).toBe(980);
+    const planned = planHitsounds(transition, map, judged, osz, 'folder/diff.osu');
+    const first = planned.events.filter(e => e.t === 980);
+    expect(first.map(e => e.sample))
+      .toEqual(['folder/drum-hitnormal3.wav', 'folder/drum-hitwhistle3.wav']);
+    expect(first.map(e => e.gain)).toEqual([0.8, 0.8]);
+  });
+
   it('does not play notes that were missed in the replay', () => {
     const osz = archive();
     const map = prepareMap(chart);
