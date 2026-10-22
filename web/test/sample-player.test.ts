@@ -50,9 +50,13 @@ describe('M5 Web Audio sample scheduling and lifecycle', () => {
     expect(await player.load(namedPlan([1000, 1150]))).toEqual({ loaded: 1, failed: 0 });
     player.reset(900);
     player.schedule(900, 10.05, 1, 0);
+    // The scheduler deliberately queues only 250ms ahead of AudioContext time.
+    expect(context.sources).toHaveLength(1);
+    expect(context.sources[0].start.mock.calls[0][0]).toBeCloseTo(10.15, 6);
+    context.currentTime = 10.10;
+    player.schedule(900, 10.05, 1, 0);
     expect(context.sources).toHaveLength(2);
-    expect(context.sources[0].start).toHaveBeenCalledWith(10.15);
-    expect(context.sources[1].start).toHaveBeenCalledWith(10.3);
+    expect(context.sources[1].start.mock.calls[0][0]).toBeCloseTo(10.30, 6);
     expect(context.sources[0].playbackRate.value).toBe(1);
     expect(context.gains[0].gain.value).toBe(0.75);
     player.schedule(900, 10.05, 1, 0);
@@ -81,7 +85,7 @@ describe('M5 Web Audio sample scheduling and lifecycle', () => {
     context.currentTime = 10.15;
     player.schedule(1900, 10.2, 1, 0);
     expect(context.sources).toHaveLength(3);
-    expect(context.sources[2].start).toHaveBeenCalledWith(10.3);
+    expect(context.sources[2].start.mock.calls[0][0]).toBeCloseTo(10.3, 6);
   });
 
   it('skips events after a stalled frame and never starts a sound in the past', async () => {
