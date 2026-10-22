@@ -1,0 +1,22 @@
+{
+  // Cloudflare Worker: serves the built web app and proxies osu! API / beatmap mirror requests.
+  "name": "osu-render",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-20",
+  "assets": {
+    "directory": "../web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "ratelimits": [
+    {
+      "name": "LIMITER",
+      "namespace_id": "2001",
+      "simple": { "limit": 60, "period": 60 }
+    }
+  ],
+  "observability": { "enabled": true }
+  // Secrets (set with `npx wrangler secret put NAME`):
+  //   OSU_CLIENT_ID, OSU_CLIENT_SECRET  — an osu! OAuth application (client credentials only, no callback needed)
+}

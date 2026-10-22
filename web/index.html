@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>osu! Replay Renderer</title>
+    <meta name="description" content="Watch your osu! replays right in the browser." />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="home">
+      <header class="top">
+        <h1>osu! replay renderer</h1>
+        <p class="sub">Pick a play. The replay, beatmap and music are pulled automatically and played back here — nothing to install.</p>
+      </header>
+
+      <section class="card">
+        <h2>Recent plays</h2>
+        <form id="user-form" class="row">
+          <input id="username" name="username" placeholder="osu! username" autocomplete="off" maxlength="15" required />
+          <button type="submit">Show plays</button>
+        </form>
+        <p id="user-status" class="muted"></p>
+        <ul id="plays" class="plays"></ul>
+      </section>
+
+      <div class="grid">
+        <section class="card">
+          <h2>Have a replay file?</h2>
+          <label class="drop" id="osr-drop">
+            <input type="file" id="osr-input" accept=".osr" hidden />
+            <span>Drop a <b>.osr</b> here or click to choose</span>
+          </label>
+          <p class="muted small">The map is found automatically from the replay.</p>
+        </section>
+
+        <section class="card">
+          <h2>Preview a map with autoplay</h2>
+          <label class="drop" id="osz-drop">
+            <input type="file" id="osz-input" accept=".osz" hidden />
+            <span>Drop an <b>.osz</b> here or click to choose</span>
+          </label>
+          <div id="osz-options" class="osz-options" hidden>
+            <select id="osz-diff"></select>
+            <div id="osz-mods" class="mods"></div>
+            <button id="osz-play">Watch autoplay</button>
+          </div>
+        </section>
+      </div>
+      <footer class="muted small">Not affiliated with ppy. Beatmaps are downloaded from community mirrors.</footer>
+    </div>
+
+    <div id="player" hidden>
+      <div id="stage"></div>
+      <div class="controls">
+        <button id="back" title="Back (Esc)">←</button>
+        <button id="playpause" title="Play / pause (Space)">▶</button>
+        <span id="time" class="time">0:00 / 0:00</span>
+        <div class="seek-wrap">
+          <div id="markers" class="markers"></div>
+          <input id="seek" type="range" min="0" max="1000" step="1" value="0" />
+        </div>
+        <label class="ctl" title="Background dim">Dim <input id="dim" type="range" min="0" max="100" value="80" /></label>
+        <label class="ctl" title="Volume">Vol <input id="volume" type="range" min="0" max="100" value="60" /></label>
+        <button id="info-btn" title="Details">i</button>
+      </div>
+      <div id="info" class="info" hidden></div>
+    </div>
+
+    <div id="loading" class="loading" hidden>
+      <div class="loading-box">
+        <div class="spinner"></div>
+        <p id="loading-text">Loading…</p>
+        <div class="bar"><div id="loading-bar"></div></div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
