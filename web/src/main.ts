@@ -109,7 +109,7 @@ async function openPlay(p: RecentPlay) {
     const replayBytes = await getReplayFile(p.scoreId);
     const { osz, osuFallback } = await downloadMap(p.beatmapsetId, p.beatmapId);
     loading('Preparing…');
-    const s = await sessionFromReplay(replayBytes, osz, osuFallback, p.beatmapId);
+    const s = await sessionFromReplay(replayBytes, osz, osuFallback, p.beatmapId, localSkin);
     history.replaceState(null, '', `?score=${p.scoreId}`);
     await startPlayer(s);
   } catch (err) {
@@ -162,7 +162,7 @@ wireDrop('osr-drop', 'osr-input', async (file) => {
     const local = localOsz?.difficulties.find((d) => d.md5.toLowerCase() === md5);
     if (localOsz && local) {
       loading('Preparing…');
-      await startPlayer(await sessionFromReplay(bytes, localOsz, null, local.beatmapId ?? 0));
+      await startPlayer(await sessionFromReplay(bytes, localOsz, null, local.beatmapId ?? 0, localSkin));
       return;
     }
     let found: { beatmapId: number; beatmapsetId: number };
@@ -173,15 +173,34 @@ wireDrop('osr-drop', 'osr-input', async (file) => {
     }
     const { osz, osuFallback } = await downloadMap(found.beatmapsetId, found.beatmapId);
     loading('Preparing…');
-    await startPlayer(await sessionFromReplay(bytes, osz, osuFallback, found.beatmapId));
+    await startPlayer(await sessionFromReplay(bytes, osz, osuFallback, found.beatmapId, localSkin));
   } catch (err) {
     loading(null);
     toast((err as Error).message);
   }
 });
 
+let localSkin: OszArchive | null = null;
 let localOsz: OszArchive | null = null;
 const MOD_CHOICES = ['EZ', 'HR', 'HD', 'DT', 'NC', 'HT'];
+
+wireDrop('osk-drop', 'osk-input', async (file) => {
+  try {
+    loading('Checking skin archive…');
+    const archive = openOsz(new Uint8Array(await file.arrayBuffer()));
+    const usable = [...archive.files.keys()].filter((name) =>
+      /^(normal|soft|drum)-hit(?:normal|whistle|finish|clap)(?:[0-9]+)?\.(wav|mp3|ogg)$/i.test(name));
+    if (!usable.length) throw new Error('This skin contains no supported hitsound audio files.');
+    localSkin = archive;
+    $('osk-status').textContent = `${file.name}: ${usable.length} available hitsound files. The next replay will use these for missing beatmap sounds.`;
+    $('osk-drop').querySelector('span')!.textContent = file.name;
+    loading(null);
+    toast('Skin hitsounds loaded for the next replay.', true);
+  } catch (error) {
+    loading(null);
+    toast((error as Error).message);
+  }
+});
 
 wireDrop('osz-drop', 'osz-input', async (file) => {
   try {
@@ -215,7 +234,7 @@ $('osz-play').addEventListener('click', async () => {
     const diff = std[Number(($('osz-diff') as HTMLSelectElement).value)];
     const mods = [...$('osz-mods').querySelectorAll<HTMLInputElement>('input:checked')].map((c) => c.value);
     loading('Preparing…');
-    await startPlayer(await sessionFromAutoplay(localOsz, diff, mods));
+    await startPlayer(await sessionFromAutoplay(localOsz, diff, mods, localSkin));
   } catch (err) {
     loading(null);
     toast((err as Error).message);
@@ -246,7 +265,7 @@ async function startPlayer(s: Session) {
   loading('Decoding beatmap hitsounds…');
   const samples = await clock.loadHitsounds(s.hitsounds);
   if (samples.failed > 0) s.warnings.push(`${samples.failed} beatmap hitsound files could not be decoded by this browser.`);
-  if (s.hitsounds.unavailable > 0) s.warnings.push('Some hitsounds are missing; default skin samples are not yet supported.');
+  if (s.hitsounds.unavailable > 0) s.warnings.push('Some hitsounds are unavailable from this beatmap and your selected skin; bundled defaults are not included.');
   clock.rate = s.map.rate;
   clock.volume = Number(($('volume') as HTMLInputElement).value) / 100;
   clock.offset = Number(($('sync-offset') as HTMLInputElement).value);
@@ -411,7 +430,7 @@ if (scoreParam && /^\d+$/.test(scoreParam)) {
       const { beatmapId, beatmapsetId } = await lookupBeatmap(replay.beatmapMD5);
       const { osz, osuFallback } = await downloadMap(beatmapsetId, beatmapId);
       loading('Preparing…');
-      await startPlayer(await sessionFromReplay(replayBytes, osz, osuFallback, beatmapId));
+      await startPlayer(await sessionFromReplay(replayBytes, osz, osuFallback, beatmapId, localSkin));
     } catch (err) {
       loading(null);
       toast((err as Error).message);
