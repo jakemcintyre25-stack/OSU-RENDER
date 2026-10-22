@@ -35,7 +35,9 @@ export function validateMirrorZip(bytes: Uint8Array): void {
   let offset = centralOffset;
   let totalInflated = 0;
   const names = new Set<string>();
-  const decoder = new TextDecoder('utf-8', { fatal: true });
+  // Cloudflare Workers TextDecoder typings do not expose the browser's fatal option.
+  // Reject the decoder replacement character instead of accepting ambiguous paths.
+  const decoder = new TextDecoder();
   for (let n = 0; n < count; n++) {
     if (offset + 46 > eocd || u32(offset) !== 0x02014b50) invalid('corrupt central directory');
     const flags = u16(offset + 8);
@@ -63,6 +65,7 @@ export function validateMirrorZip(bytes: Uint8Array): void {
     } catch {
       return invalid('invalid UTF-8 filename');
     }
+    if (name.includes('\uFFFD')) invalid('invalid UTF-8 filename');
     const normalized = name.replace(/\\/g, '/').toLowerCase();
     const parts = (normalized.endsWith('/') ? normalized.slice(0, -1) : normalized).split('/');
     if (!normalized || normalized.startsWith('/') || /^[a-z]:/.test(normalized) ||
