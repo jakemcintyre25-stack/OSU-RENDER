@@ -52,7 +52,9 @@ describe('M7 .osk visual skin loading', () => {
     expect(visualSkinConfig(archive)).toMatchObject({
       cursorCentre: false, sliderBallFrames: 128, cursorRotate: false,
     });
-    const tooLarge = skin({ 'skin.ini': new Uint8Array(256 * 1024 + 1) });
+    // Exercise the parser limit directly: a 256 KiB zero-filled ZIP is correctly
+    // rejected by the independent archive compression-ratio guard.
+    const tooLarge = { files: new Map([['skin.ini', new Uint8Array(256 * 1024 + 1)]]), difficulties: [] };
     expect(visualSkinConfig(tooLarge).cursorCentre).toBe(true);
   });
   it('supports visual-only archives with no chart or audio files', () => {
