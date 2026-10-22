@@ -45,6 +45,16 @@ describe('M7 .osk visual skin loading', () => {
     expect(visualSkinConfig(invalid).cursorRotate).toBe(true);
     expect(visualSkinConfig(invalid).sliderBallFrames).toBe(1);
   });
+  it('handles BOM, case-insensitive sections, comments, and a capped animation count', () => {
+    const archive = skin({ 'SKIN.INI': strToU8(
+      '\uFEFF[general]\\nCURSORCENTRE: false // top-left anchor\\nSLIDERBALLFRAMES: 128\\n; ignored\\nCursorRotate: 0'
+    ) });
+    expect(visualSkinConfig(archive)).toMatchObject({
+      cursorCentre: false, sliderBallFrames: 128, cursorRotate: false,
+    });
+    const tooLarge = skin({ 'skin.ini': new Uint8Array(256 * 1024 + 1) });
+    expect(visualSkinConfig(tooLarge).cursorCentre).toBe(true);
+  });
   it('supports visual-only archives with no chart or audio files', () => {
     const archive = skin({ 'hitcircle.png': png(9) });
     expect(archive.difficulties).toHaveLength(0);
