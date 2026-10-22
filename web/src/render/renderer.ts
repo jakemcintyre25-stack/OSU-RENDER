@@ -71,6 +71,7 @@ export class PlayfieldRenderer {
   private cursorLayer = new Container();
   private cursorGfx = new Graphics();
   private cursorSprite = new Sprite(Texture.EMPTY);
+  private cursorTrailSprites: Sprite[] = [];
   private cursorBaseScale = { x: 1, y: 1 };
   private hud = new Container();
   private comboText!: Text;
@@ -106,6 +107,13 @@ export class PlayfieldRenderer {
     this.cursorLayer.addChild(this.cursorGfx, this.cursorSprite);
     this.cursorSprite.anchor.set(0.5);
     this.cursorSprite.visible = false;
+    for (let i = 0; i < 12; i++) {
+      const trail = new Sprite(Texture.EMPTY);
+      trail.anchor.set(0.5);
+      trail.visible = false;
+      this.cursorTrailSprites.push(trail);
+      this.cursorLayer.addChildAt(trail, 0);
+    }
     this.buildHud();
     this.app.renderer.on('resize', () => this.relayout());
     this.relayout();
@@ -115,6 +123,15 @@ export class PlayfieldRenderer {
     this.skinTextures = {};
     for (const [name, image] of Object.entries(images)) {
       this.skinTextures[name as VisualSkinKey] = Texture.from(image);
+    }
+    const trail = this.skinTextures.cursortrail;
+    for (const sprite of this.cursorTrailSprites) {
+      sprite.texture = trail ?? Texture.EMPTY;
+      sprite.visible = false;
+      if (trail) {
+        sprite.width = 24;
+        sprite.height = 24;
+      }
     }
     const cursor = this.skinTextures.cursor;
     this.cursorSprite.texture = cursor ?? Texture.EMPTY;
@@ -587,13 +604,26 @@ export class PlayfieldRenderer {
   private updateCursor(t: number) {
     const g = this.cursorGfx;
     g.clear();
-    if (!this.frames.length) return;
+    if (!this.frames.length) {
+      for (const sprite of this.cursorTrailSprites) sprite.visible = false;
+      this.cursorSprite.visible = false;
+      return;
+    }
     const c = cursorAt(this.frames, t, this.frameHint);
     this.frameHint = c.index;
+    const customTrail = Boolean(this.skinTextures.cursortrail);
+    for (const sprite of this.cursorTrailSprites) sprite.visible = false;
     if (this.options.showCursorTrail) {
       for (let k = 12; k >= 1; k--) {
         const p = cursorAt(this.frames, t - k * 6, Math.max(0, c.index - 8));
-        g.circle(p.x, p.y, 7 * (1 - k / 16)).fill({ color: 0xffe08a, alpha: 0.35 * (1 - k / 13) });
+        if (customTrail) {
+          const sprite = this.cursorTrailSprites[k - 1];
+          sprite.visible = true;
+          sprite.position.set(p.x, p.y);
+          sprite.alpha = 0.8 * (1 - k / 13);
+        } else {
+          g.circle(p.x, p.y, 7 * (1 - k / 16)).fill({ color: 0xffe08a, alpha: 0.35 * (1 - k / 13) });
+        }
       }
     }
     const pressed = (c.keys & (KEY.M1 | KEY.M2)) !== 0;
