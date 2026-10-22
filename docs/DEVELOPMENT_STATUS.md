@@ -136,6 +136,15 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - `6e584ba9`, `90a6f538`: test arbitrary backward/forward seeks, overlap boundaries and compare against exhaustive visibility over 4,000 mixed objects and hundreds of timestamps. CI pending; do not claim frame-rate improvements without browser profiling.
 - **M6 IN PROGRESS:** Visual sprite parity, shaders, custom skin layout, Flashlight and browser performance profiling remain OPEN.
 
+### Larger M7 implementation batch — real .osk hitcircle sprites (23 October 2026)
+
+- Previous M6 renderer indexing checkpoint `fd8b4fa4` passed both GitHub Actions workflows.
+- `3db89b0a`: add root-level .osk PNG visual asset resolution, including @2x preference and per-sprite decode failure isolation.
+- `933f4191`: integrate actual custom hitcircle and overlay textures into the Pixi renderer, retaining fallback graphics for unsupported assets.
+- `358b2d38`: wire visual-only .osk acceptance and image decoding to the real replay startup lifecycle with request-gate cancellation.
+- `9bbe7f3d`: tests for case-insensitive matching, retina precedence, path exclusion, corrupt sprites and visual-only archives.
+- **M7 IN PROGRESS:** Only hitcircle and hitcircleoverlay sprites are rendered so far; remaining enumerated assets are parsed but not rendered. Image alignment, tint semantics, @2x pixel density, animated sprites, complete skin.ini settings and real-browser visual parity are OPEN. CI pending for integration and tests.
+
 ## Immediate next implementation work
 
 1. **Independent:** finish M3's calibrated HP drain/gain, no-drain-during-breaks and HP-zero failure checks. Maintain explicit stable parity uncertainty until real evidence exists.
