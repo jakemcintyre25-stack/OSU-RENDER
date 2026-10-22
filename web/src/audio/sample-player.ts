@@ -127,7 +127,9 @@ export class HitSoundPlayer {
       if (until <= now || this.active.size >= MAX_ACTIVE_VOICES) continue;
       const buffer = this.buffers.get(loop.sample);
       if (!buffer || buffer.duration <= 0) continue;
-      const when = Math.max(now, begin);
+      // After seeking into an active slider, the original loop began in the
+      // past. Never start it before this playback's scheduled music origin.
+      const when = Math.max(now, startContextSeconds, begin);
       const elapsedSampleSeconds = Math.max(0, when - begin) * rate;
       const sampleOffset = elapsedSampleSeconds % buffer.duration;
       const source = this.context.createBufferSource();
