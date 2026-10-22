@@ -6,6 +6,7 @@ import type { HitSoundPlan } from './hitsounds';
 export class Clock {
   private ctx: AudioContext;
   private gain: GainNode;
+  private effectsGain: GainNode;
   private hitsounds: HitSoundPlayer;
   private buffer: AudioBuffer | null = null;
   private source: AudioBufferSourceNode | null = null;
@@ -25,7 +26,9 @@ export class Clock {
     this.ctx = new AudioContext();
     this.gain = this.ctx.createGain();
     this.gain.connect(this.ctx.destination);
-    this.hitsounds = new HitSoundPlayer(this.ctx, this.gain);
+    this.effectsGain = this.ctx.createGain();
+    this.effectsGain.connect(this.ctx.destination);
+    this.hitsounds = new HitSoundPlayer(this.ctx, this.effectsGain);
   }
 
   async load(data: ArrayBuffer | null) {
@@ -59,7 +62,12 @@ export class Clock {
   }
 
   set volume(v: number) {
-    this.gain.gain.value = v;
+    if (Number.isFinite(v)) this.gain.gain.value = Math.max(0, Math.min(1, v));
+  }
+
+  /** Sound effects use an independent output bus from beatmap music. */
+  set effectsVolume(v: number) {
+    if (Number.isFinite(v)) this.effectsGain.gain.value = Math.max(0, Math.min(1, v));
   }
 
   /** Current visual map time in ms, including user audio/visual offset. */
