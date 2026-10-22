@@ -53,7 +53,7 @@
           <input type="file" id="osk-input" accept=".osk" hidden />
           <span>Drop a <b>.osk</b> skin archive or click to choose</span>
         </label>
-        <p id="osk-status" class="muted small">Uses your own skin audio for sounds missing from the beatmap. Visual skin graphics are not supported yet. Applies to the next replay you open.</p>
+        <p id="osk-status" class="muted small">Uses your own skin audio for sounds missing from the beatmap. Supported visual skin sprites also apply to the next replay you open.</p>
       </section>
       <footer class="muted small">Not affiliated with ppy. Beatmaps are downloaded from community mirrors.</footer>
     </div>
@@ -88,6 +88,7 @@
         </label>
         <label class="ctl option-ctl" title="Show the recent cursor trail"><input type="checkbox" id="cursor-trail" checked />Trail</label>
         <label class="ctl option-ctl" title="Show keyboard and mouse input overlay"><input type="checkbox" id="key-overlay" checked />Keys</label>
+        <button id="capture-video" title="Record up to 60 seconds of video-only WebM from the current replay" disabled>Record WebM</button>
         <button id="share-score" title="Copy a shareable link to this osu! score" disabled>Share replay</button>
         <button id="info-btn" title="Details">i</button>
       </div>
