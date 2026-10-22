@@ -7,7 +7,7 @@ Updated: 22 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 | Milestone | Status | Verification and outstanding work |
 |---|---|---|
 | M1 Judgement harness | **PASS** | `npm run judge-check`, verbose diagnostics and CI implemented. Empty optional fixtures exit zero. Real replay fixtures stay local. |
-| M2 Stable judgement parity | **IN PROGRESS** | Slider follow/part timestamps, combo breaks, explicit early misses, spinner capped integration, 2B autoplay edge tested. Provisional 1ms 300 window, spinner velocity smoothing, stacked 2B/note-lock edge rules and **all real stable replay-header matches** remain unverified. |
+| M2 Stable judgement parity | **IN PROGRESS** | Slider follow/part timestamps, combo breaks, explicit early misses, spinner capped integration, 2B autoplay edge tested. Official strict rounded-error/truncated-OD window edges are implemented, but spinner velocity smoothing, stacked 2B/note-lock edge rules and **all real stable replay-header matches** remain unverified. |
 | M3 HP and fail | **OPEN** | Stable HP drain, gains, breaks, NF/SD/PF and failTime not implemented. |
 | M4 Score V1 | **IN PROGRESS** | Running ScoreV1, mod multipliers, slider/spinner part scoring implemented. Fixed 30-point slider heads and clamped difficulty multiplier to 2–6. Real header parity remains unverified; older M4 replay comparison values are stale. |
 | M5 Audio timing and hitsounds | **OPEN** | Base Web Audio master clock exists, but map/user offset, hitsounds and pitch-preserving DT/HT still required. |
@@ -28,13 +28,14 @@ Updated: 22 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 - `13ab6e8`: optional Renatus acceptance test across *all* standard difficulties. Requires local copyrighted fixture, so is skipped in CI.
 - `20d0eca`: prevent backwards replay frames for two simultaneous 2B circles.
 - `9165d17`: clamp ScoreV1 difficulty multiplier to the specified 2–6 range.
+- `6a0bbc5`: replace the fitted 1ms window reduction with stable's officially documented rounded-error, truncated-window and strict-less-than judgement. Synthetic fractional-boundary tests pass.
 
-The latest verified GitHub Actions head at the time of this update is `9165d1702f27f38fb6dfd6edf29e0bc75e3f3dd2`. Both push and pull-request CI runs passed the normal tests, typecheck, build and empty-fixture judge-check. This does **not** prove real-replay or desktop executable acceptance.
+The latest verified GitHub Actions head at the time of this update is `6a0bbc515580a478ba0dc18c8a02a1f7e457cd18`. Both push and pull-request CI runs passed the normal tests, typecheck, build and empty-fixture judge-check. This does **not** prove real-replay or desktop executable acceptance.
 
 ## Immediate next implementation work
 
 1. Run `npm run judge-check` and `npm run judge-check -- --verbose <replay.osr>` using the local exact-MD5-matched real osu!stable replay fixture set (not committed); resolve count/combo mismatches before marking M2 PASS.
-2. Independently establish and test the exact stable 300-window boundary and spinner velocity/RPM smoothing; do not extrapolate a fitted 1ms offset as proven fact.
+2. Validate the now documented-and-unit-tested strict rounded-error 300/100/50 windows against the real replay set; independently establish exact stable spinner velocity/RPM smoothing.
 3. Run the optional all-difficulties Renatus autoplay acceptance test locally and fix any map-specific issues.
 4. Only after M2 parity, proceed through M3 HP/fail and complete M4 ScoreV1 header parity, then audio/skin/export milestones.
 
