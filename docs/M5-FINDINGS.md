@@ -9,7 +9,7 @@ Updated 23 October 2026. **Status: IN PROGRESS (subset implemented and unit/inte
 - Files are read from the **actual .osz archive**, respecting a difficulty's containing subfolder. The session also finds song/background assets relative to that directory.
 - The `HitSoundPlayer` decodes real sample bytes with the same Web Audio context as music; its 250ms lookahead uses the music clock, mod rate and visual synchronization offset. Playback seeks, pauses, rate changes and disposal cancel pending sounds; past events are not replayed.
 - Guardrails include max 8 MiB/sample, 64 MiB total sound data, 256 unique clips, 50,000 scheduled events, at most four concurrent decoder operations, and 48 simultaneously active voices.
-- Missing beatmap samples can now be resolved from an optional **user-loaded .osk skin archive**. Only actual root-level Normal/Soft/Drum hitnormal/whistle/finish/clap audio files are supported (WAV/MP3/OGG); indexed beatmap sample takes precedence, a skin's unindexed version is used only for absent chart samples. Explicit custom filenames do not fall back to a skin. No third-party sound files are bundled.
+- Missing beatmap samples can now be resolved from an optional **user-loaded .osk skin archive**. Only actual root-level Normal/Soft/Drum hitnormal/whistle/finish/clap audio files are supported (WAV/MP3/OGG); indexed beatmap sample takes precedence, a skin's unindexed version is used only for absent chart samples. Explicit custom filenames do not fall back to a skin. The skin.ini `LayeredHitSounds` setting is respected for combining normal/addition layers. No third-party sound files are bundled.
 - If decoding fails or assets are missing, playback of the replay and music continues. Missing bundled defaults are **not** silently replaced by fabricated samples. A warning is shown.
 
 ## Functional/robustness/integration verification
@@ -17,7 +17,7 @@ Updated 23 October 2026. **Status: IN PROGRESS (subset implemented and unit/inte
 - `web/test/hitsounds.test.ts`: actual compressed synthetic .osz loaded via `openOsz`, full `prepareMap` → `generateAutoplay` → `judge` → hitsound plan, sample-set and volume transitions, custom filenames, nested archive path, malformed/oversized samples, missed-object suppression and overlap-safe timing point lookup.
 - `web/test/sample-player.test.ts`: instrumented AudioContext play scheduling, bounded lookahead, seek cancellation, DT-rate and sync offset calculations, missing/undecodable data, per-source voice limits, bounded concurrent decoding and cancellation of stale async loads.
 - `web/test/hitsounds-spinner.test.ts`: actual layered .osu spinner-end sound, no sound on misses and no fabricated missing layers.
-- `web/test/skin-hitsounds.test.ts`: real .osk ZIP loading, indexed beatmap priority over skin, filename override protection, MP3 fallback, .osu-only mode and integration through sessionFromAutoplay.
+- `web/test/skin-hitsounds.test.ts`: real .osk ZIP loading, indexed beatmap priority over skin, filename override protection, MP3 fallback, .osu-only mode, skin.ini LayeredHitSounds on/off and integration through sessionFromAutoplay.
 - `web/test/audio-clock.test.ts`: integration through the actual `Clock` API, AudioContext start-time, pause, seek and disposal checks.
 - `web/test/timeline.test.ts`: preserve audio outro, silent maps and safe bounds for missing/invalid duration.
 - GitHub Actions on `b9fc495e547d139e0a2d693951f470795a8ce24f`: regular automated suites, TypeScript and Vite build passed on push; check the current PR workflow conclusion before accepting branch integration.
@@ -25,7 +25,7 @@ Updated 23 October 2026. **Status: IN PROGRESS (subset implemented and unit/inte
 
 ## Not yet implemented or accepted
 
-- Bundled default skin sound resources (no licensed default assets included), complete user-skin.ini customization, hitsound sample routing from nested skin subfolders and persistent .osk loading. User-provided .osk **audio only** works; visual skin graphics are still M7 OPEN.
+- Bundled default skin sound resources (no licensed default assets included), complete user-skin.ini customization beyond LayeredHitSounds, hitsound routing from nested skin subfolders and persistent .osk loading. User-provided .osk **audio only** works; visual skin graphics are still M7 OPEN.
 - Continuous tracking-dependent slider slide/whistle loops, spinner spin/bonus sound effects, and storyboard hitsounds (successful spinner completion samples are now supported).
 - Full inherited timing point/sample edge behaviour on complex real beatmaps, sound pan, audio normalization, and skin.ini sound options.
 - Pitch-preserving audio time stretch at DT/HT rates (current source playbackRate changes pitch).
