@@ -52,6 +52,8 @@ export interface Judgement {
   totalScore: number;
   /** Every point-scoring hit in time order, for checking score formulas against headers. */
   scoring: { t: number; base: number; before: number; flat: number }[];
+  /** First special-mod failure (SD/PF) on the judgement timeline; HP drain is M3 follow-up. */
+  failTime: number | null;
 }
 
 const MISS_WINDOW = 400;
@@ -329,11 +331,21 @@ function buildEvents(map: PreparedMap, objects: ObjectJudgement[], w50: number):
   const mod = modMultiplier(map.mods);
   const events: ComboEvent[] = [];
   const scoring: Judgement['scoring'] = [];
+  const noFail = map.mods.includes('NF');
+  const perfect = map.mods.includes('PF');
+  const suddenDeath = perfect || map.mods.includes('SD');
+  let failTime: number | null = null;
   const acc = () => {
     const n = counts.c300 + counts.c100 + counts.c50 + counts.miss;
     return n === 0 ? 1 : (300 * counts.c300 + 100 * counts.c100 + 50 * counts.c50) / (300 * n);
   };
   for (const e of raw) {
+    // stable: SD fails on a missed head/tick/repeat or an overall MISS, but not
+    // a missed tail. PF also fails on non-300 final judgements. NF overrides both.
+    if (!noFail && suddenDeath && failTime === null && (
+      e.kind === 'break' ||
+      (e.kind === 'result' && (e.result === 0 || (perfect && e.result !== 300)))
+    )) failTime = e.t;
     const before = combo;
     if (e.kind === 'combo+') {
       combo++;
@@ -365,7 +377,7 @@ function buildEvents(map: PreparedMap, objects: ObjectJudgement[], w50: number):
     maxCombo = Math.max(maxCombo, combo);
     events.push({ t: e.t, combo, accuracy: acc(), counts: { ...counts }, score, result: e.kind === 'result' ? e.result : undefined, x: e.x, y: e.y });
   }
-  return { objects, events, maxCombo, counts, totalScore: score, scoring };
+  return { objects, events, maxCombo, counts, totalScore: score, scoring, failTime };
 }
 
 /** Latest combo event at or before t (binary search). */
