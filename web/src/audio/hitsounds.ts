@@ -158,8 +158,13 @@ export function planHitsounds(
     }
     plan.events.push({ t, sample: resource.path, gain: Math.max(0, Math.min(1, volume / 100)) });
   };
-  const scheduleHit = (t: number, bits: number, settings: SampleSettings, normalOverride = 0, addOverride = 0) => {
-    const tp = activeSample(t);
+  const scheduleHit = (
+    t: number, bits: number, settings: SampleSettings,
+    normalOverride = 0, addOverride = 0, metadataTime = t,
+  ) => {
+    // The sample is defined by the hit object's timing section; its playback
+    // occurs at the actual successful press timestamp (which may be early).
+    const tp = activeSample(metadataTime);
     const normalChoice = normalOverride || settings.normal || tp.set || metadataSet;
     const normal = names[normalChoice] ? normalChoice : metadataSet;
     const addChoice = addOverride || settings.addition || normal;
@@ -192,18 +197,18 @@ export function planHitsounds(
     if (kind === 'spinner') continue;
     const bits = int(row[4]);
     if (kind === 'circle') {
-      if (judged.hitTime !== null) scheduleHit(judged.hitTime, bits, sampleSettings(row[5]));
+      if (judged.hitTime !== null) scheduleHit(judged.hitTime, bits, sampleSettings(row[5]), 0, 0, object.start);
       continue;
     }
     if (object.kind !== 'slider') continue;
     const base = sampleSettings(row[10]);
     const edgeBits = row[8]?.split('|').map((v) => int(v)) ?? [];
     const edgeSets = row[9]?.split('|').map((v) => v.split(':').map((x) => int(x))) ?? [];
-    const playEdge = (t: number, edge: number) => {
+    const playEdge = (t: number, edge: number, metadataTime = t) => {
       const sets = edgeSets[edge] ?? [0, 0];
-      scheduleHit(t, edgeBits[edge] ?? bits, base, sets[0], sets[1]);
+      scheduleHit(t, edgeBits[edge] ?? bits, base, sets[0], sets[1], metadataTime);
     };
-    if (judged.hitTime !== null) playEdge(judged.hitTime, 0);
+    if (judged.hitTime !== null) playEdge(judged.hitTime, 0, object.start);
     let edge = 1;
     for (let k = 0; k < object.parts.length; k++) {
       if (!judged.parts?.[k]) {
