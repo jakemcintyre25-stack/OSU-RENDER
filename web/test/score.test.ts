@@ -20,11 +20,11 @@ describe('ScoreV1 helpers', () => {
     expect(modMultiplier(['DT'])).toBe(1.12);
   });
 
-  it('slider parts are flat: ticks 10, repeats and tails 30, heads 0', () => {
+  it('slider parts are flat: ticks 10, heads, repeats and tails 30', () => {
     expect(sliderPartPoints('tick')).toBe(10);
     expect(sliderPartPoints('repeat')).toBe(30);
     expect(sliderPartPoints('tail')).toBe(30);
-    expect(sliderPartPoints('head')).toBe(0);
+    expect(sliderPartPoints('head')).toBe(30);
   });
 
   it('spinner: 100 per spin up to the requirement, 1100 per bonus spin', () => {
