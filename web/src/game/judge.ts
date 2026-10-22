@@ -132,29 +132,65 @@ function judgeSlider(s: SliderObj, j: ObjectJudgement, head: Hit, frames: Replay
   const startFrom = j.hitTime ?? s.start;
   let trackStart: number | null = null;
   let hint = 0;
-  const isTracking = (t: number, wasTracking: boolean) => {
-    const c = cursorAt(frames, t, hint);
-    hint = c.index;
-    if (!(c.keys & PRESS_MASK)) return false;
-    const ball = sliderBallAt(s, t);
-    return Math.hypot(c.x - ball.x, c.y - ball.y) <= (wasTracking ? r * FOLLOW_SCALE : r);
-  };
-  // Sample tracking state through the slider's lifetime.
+
+  // stable: tracking must first begin within the slider-ball radius; only an
+  // already tracked slider uses the larger 2.4x follow area. Key-up always
+  // cancels tracking, even if another key is pressed immediately afterwards.
+  //
+  // Include exact part and replay-frame timestamps in addition to our 4ms
+  // samples. A tick on a key-up timestamp must not be awarded because a nearby
+  // sample happened to be tracking.
+  const times = new Set<number>([startFrom, s.end]);
+  for (let t = startFrom; t < s.end; t += 4) times.add(t);
+  s.parts.forEach((part) => {
+    if (part.t >= startFrom && part.t <= s.end) times.add(part.t);
+  });
+  // Frames are time-sorted by the replay loader. Find the first frame at or
+  // after the slider starts without scanning the entire replay per slider.
+  let lo = 0;
+  let hi = frames.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (frames[mid].t < startFrom) lo = mid + 1;
+    else hi = mid;
+  }
+  for (let i = lo; i < frames.length && frames[i].t <= s.end; i++) {
+    times.add(frames[i].t);
+  }
+
+  const partIndexes = new Map<number, number[]>();
+  s.parts.forEach((part, index) => {
+    const previous = partIndexes.get(part.t) ?? [];
+    previous.push(index);
+    partIndexes.set(part.t, previous);
+  });
+  const collected = s.parts.map(() => false);
   let tracked = false;
-  for (let t = startFrom; t <= s.end; t += 4) {
-    tracked = isTracking(t, tracked || t === startFrom);
-    if (tracked && trackStart === null) trackStart = t;
-    if (!tracked && trackStart !== null) {
+  for (const t of [...times].sort((a, b) => a - b)) {
+    if (t < startFrom || t > s.end) continue;
+    const cursor = cursorAt(frames, t, hint);
+    hint = cursor.index;
+    const ball = sliderBallAt(s, t);
+    const held = (cursor.keys & PRESS_MASK) !== 0;
+    const distance = Math.hypot(cursor.x - ball.x, cursor.y - ball.y);
+    const next = held && distance <= (tracked ? r * FOLLOW_SCALE : r);
+
+    if (next && trackStart === null) trackStart = t;
+    if (!next && trackStart !== null) {
       tracking.push([trackStart, t]);
       trackStart = null;
     }
+    tracked = next;
+    for (const index of partIndexes.get(t) ?? []) {
+      collected[index] = tracked;
+    }
   }
   if (trackStart !== null) tracking.push([trackStart, s.end]);
-  const trackedAt = (t: number) => tracking.some(([a, b]) => t >= a - 2 && t <= b + 2);
+
   j.tracking = tracking;
-  j.parts = s.parts.map((p) => trackedAt(p.t));
+  j.parts = collected;
   const total = 1 + s.parts.length;
-  const got = (head > 0 ? 1 : 0) + j.parts.filter(Boolean).length;
+  const got = (head > 0 ? 1 : 0) + collected.filter(Boolean).length;
   j.result = got === total ? 300 : got * 2 >= total ? 100 : got > 0 ? 50 : 0;
   j.resultTime = s.end;
 }
