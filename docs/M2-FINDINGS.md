@@ -60,7 +60,7 @@ Thirteen replay files, ten unique plays. Two replays are duplicates of the same 
 ### What changed in the judge
 
 1. **Click matching (structural).** A click now goes to the earliest still-open circle it lands on, inside its radius and window. It no longer waits for the first open object. Evidence: in `16558c56`, circle 567 was clicked while 566 was still open. The header shows that as a hit, not a miss, which the old note-lock rejected. Covered by `web/test/judge-matching.test.ts`.
-2. **Slider part misses no longer break combo (structural).** Stable only resets combo on a missed head or a whole-slider miss. Evidence: `5053251` has one slider with a missed tick and a header max combo of 986 with no misses.
+2. **Historical hypothesis — later corrected:** This iteration assumed missed slider ticks/repeats did not break combo, inferred from replay `5053251`. This was incorrect relative to documented osu!stable slider-break rules; see the correction below.
 3. **300 window offset of 1 ms (provisional).** `PROVISIONAL_WINDOW300_OFFSET_MS = 1` in `judge.ts`. The 300 window at OD 8–10 is 28–32 ms, so 1 ms is about 3%. This is a fit to ten replays, not a confirmed rule. Multiplying all windows by 0.95 fits worse, because on the FC replays the error changes sign.
 4. **Options added** for experiments: `windowScale`, `radiusScale`, `window300Offset`. `scripts/sweep-judge.mjs` sweeps them across the local fixtures.
 
@@ -93,7 +93,7 @@ A radius of 1.02 cuts combo error from 409 to 37, but only because it removes on
 
 ### Combo model confirmed
 
-On every replay with no misses, our max combo equals the header's, or is within a few. Sliders contribute head, ticks, repeats and tail as combo, which is why a full combo on the 1907933 map is 1888. Combo errors come only from misses.
+On every replay with no misses, our max combo equals the header's, or is within a few. Sliders contribute head, ticks, repeats and tail as combo, which is why a full combo on the 1907933 map is 1888. This sentence was based on the earlier experimental implementation. Slider breaks can reset combo without increasing the MISS count; see the correction below.
 
 ### Still open
 
@@ -105,3 +105,19 @@ On every replay with no misses, our max combo equals the header's, or is within 
 ### Caveat
 
 Ten replays is still a small set, and every test here compares totals, not individual objects. The provisional offset and the sweep numbers may not hold on new maps. Re-run `npm run judge-check` and `node scripts/sweep-judge.mjs` every time new replays arrive.
+
+
+---
+
+## M2 correction: slider breaks (22 October 2026)
+
+The previous assertion that missed ticks and repeats preserve combo contradicted the official osu!standard judgement documentation:
+
+- https://osu.ppy.sh/wiki/en/Gameplay/Judgement/Slider_break
+- https://github.com/ppy/osu-wiki/blob/master/wiki/Gameplay/Judgement/osu%21/en.md
+
+**Implemented in `d786ab0`:** Missing a slider **tick or repeat resets combo** at the nested part's timestamp, but does not by itself produce an overall slider MISS; the slider's overall judgement still depends on its collected parts. Missing **only the tail does not break combo**. Synthetic regression tests now cover all three cases and have passed GitHub Actions.
+
+The earlier `5053251` observation (header max combo 986, claimed missed tick) is **unresolved**, not evidence that stable ignores slider breaks. The source replay's slider-part inference needs to be revisited; replay headers only provide aggregate counts. The earlier sweep/table above predates this correction and must **not** be treated as current results. Rerun `npm run judge-check` and `node scripts/sweep-judge.mjs` on the local, non-committed fixture set before claiming parity.
+
+**Current milestone status:** M2 remains in progress, M3 HP is not implemented, and M4 ScoreV1 has been partly implemented on `main` but still has mismatches.
