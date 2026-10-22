@@ -16,7 +16,7 @@ Updated: 22 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 | M8 Player page | **IN PROGRESS** | Basic browsing, replay loading and controls exist. Settings, timeline enhancements, loading retries and mobile acceptance remain. |
 | M9 MP4 export | **OPEN** | No WebCodecs/offline audio export yet. |
 | M10 Lazer | **OPEN** | Legacy/stable only; lazer detection and rule set remain. |
-| M11 Hardening | **IN PROGRESS** | Added ZIP central-directory safety limits, traversal/duplicate/encryption checks, CRC32 integrity, finite bounded replay-frame validation, and streaming byte caps in worker/browser. Regression tests and CI pass; R2, mirror breaker, deeper decompression limits, real-browser security and load testing remain. |
+| M11 Hardening | **IN PROGRESS** | Added ZIP central-directory resource/path checks, CRC32, bounded replay frames, and streaming byte limits for .osz, .osr and .osu fallbacks on worker/browser. Negative-case tests pass; R2, mirror breaker, deeper decompression limits, security reviews and production load tests remain. |
 | M12 One Miss Merchants links | **OPEN** | Parameterized integration and INTEGRATION.md remain. |
 
 ## Verified recent commits
@@ -42,8 +42,9 @@ Updated: 22 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 - `7cd860a`: exact replay/map checksum matching and explicit unverified fallback, with generated .osr integration tests.
 - `3eebade`, `6ec900c`: capped streamed download sizes in worker and browser even when Content-Length is wrong or absent; streamed mock tests.
 - `6e47153`: added `npm run judge-check:strict`. It must check at least one real stable replay and fails otherwise; the ordinary `npm run judge-check` remains CI-friendly for missing optional fixtures.
+- `b45c27c`: completed 8 MiB streamed limits for .osu-only fallback text on browser and worker, with valid-text and oversized-input tests.
 
-GitHub Actions covers Node web+worker tests, TypeScript checks, web build and the ordinary no-fixture judge-check. The latest complete CI code head recorded here is `6e47153172c357b490f975aed233cd8694794569` (push success at documentation time; confirm both workflows before considering this branch ready). This is **not proof of human-replay parity, browser audio quality, Windows EXE correctness or complete security**.
+GitHub Actions covers Node web+worker tests, TypeScript checks, web build and the ordinary no-fixture judge-check. The latest verified implementation head recorded here is `b45c27ca7d81758f5f3a95b1970740a9b765db14` (GitHub Actions push checks passed; PR check was still in progress when this line was written). This is **not proof of human-replay parity, browser audio quality, Windows EXE correctness or complete security**.
 
 The critical real-data acceptance command is now `npm run judge-check:strict` after placing exact-MD5-matched real files in gitignored `fixtures/replays/` and `fixtures/maps/`. It deliberately fails in normal CI without those private fixtures.
 
