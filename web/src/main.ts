@@ -7,6 +7,7 @@ import { sessionFromReplay, sessionFromAutoplay, type Session } from './session'
 import { PlayfieldRenderer } from './render/renderer';
 import { Clock } from './audio/clock';
 import { supportedSkinAudioFiles } from './audio/skin-assets';
+import { parseLaunchTarget, scoreShareUrl, userShareUrl } from './launch';
 import { playbackEndTime } from './audio/timeline';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -85,24 +86,32 @@ function playItem(p: RecentPlay): HTMLLIElement {
   return li;
 }
 
-$('user-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const name = ($('username') as HTMLInputElement).value.trim();
-  if (!name) return;
-  store.set('username', name);
+let recentRequestId = 0;
+async function showRecent(name: string, updateUrl = false) {
+  const requestId = ++recentRequestId;
   const status = $('user-status');
   const list = $('plays');
   status.textContent = 'Loading…';
   list.replaceChildren();
   try {
     const { user, plays } = await getRecent(name);
+    if (requestId !== recentRequestId) return;
+    ($('username') as HTMLInputElement).value = user.username;
+    store.set('username', user.username);
     status.textContent = plays.length
       ? `${user.username}'s last ${plays.length} plays (last 24 hours, including fails)`
       : `${user.username} has no osu!standard plays in the last 24 hours.`;
     list.replaceChildren(...plays.map(playItem));
+    if (updateUrl) history.replaceState(null, '', userShareUrl(location.href, user.id));
   } catch (err) {
-    status.textContent = (err as Error).message;
+    if (requestId === recentRequestId) status.textContent = (err as Error).message;
   }
+}
+
+$('user-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const name = ($('username') as HTMLInputElement).value.trim();
+  if (name) void showRecent(name, true);
 });
 
 async function openPlay(p: RecentPlay) {
@@ -112,8 +121,8 @@ async function openPlay(p: RecentPlay) {
     const { osz, osuFallback } = await downloadMap(p.beatmapsetId, p.beatmapId);
     loading('Preparing…');
     const s = await sessionFromReplay(replayBytes, osz, osuFallback, p.beatmapId, localSkin);
-    history.replaceState(null, '', `?score=${p.scoreId}`);
-    await startPlayer(s);
+    await startPlayer(s, p.scoreId);
+    history.replaceState(null, '', scoreShareUrl(location.href, p.scoreId));
   } catch (err) {
     loading(null);
     toast((err as Error).message);
@@ -252,9 +261,12 @@ let clock: Clock | null = null;
 let session: Session | null = null;
 let raf = 0;
 let seeking = false;
+let activeScoreId: number | null = null;
 
-async function startPlayer(s: Session) {
+async function startPlayer(s: Session, scoreId: number | null = null) {
   stopPlayer();
+  activeScoreId = scoreId;
+  ($('share-score') as HTMLButtonElement).disabled = scoreId === null;
   session = s;
   $('home').hidden = true;
   $('player').hidden = false;
@@ -310,6 +322,8 @@ const clamp = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);
 const endTime = () => session ? playbackEndTime(session.map.lastObjectTime, clock?.duration ?? 0) : 1;
 
 function stopPlayer() {
+  activeScoreId = null;
+  ($('share-score') as HTMLButtonElement).disabled = true;
   cancelAnimationFrame(raf);
   clock?.dispose();
   clock = null;
@@ -374,6 +388,17 @@ function fillInfo(s: Session) {
 $('playpause').addEventListener('click', () => void togglePlay());
 $('back').addEventListener('click', closePlayer);
 $('info-btn').addEventListener('click', () => ($('info').hidden = !$('info').hidden));
+$('share-score').addEventListener('click', async () => {
+  if (activeScoreId === null) return;
+  const url = scoreShareUrl(location.href, activeScoreId);
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+    await navigator.clipboard.writeText(url);
+    toast('Replay link copied to clipboard.', true);
+  } catch {
+    toast('Unable to copy automatically. Copy the ?score= link from the address bar.');
+  }
+});
 const seek = $('seek') as HTMLInputElement;
 seek.addEventListener('input', () => {
   seeking = true;
@@ -425,17 +450,19 @@ showOffset();
 const savedUser = store.get('username');
 if (savedUser) ($('username') as HTMLInputElement).value = savedUser;
 
-const scoreParam = new URLSearchParams(location.search).get('score');
-if (scoreParam && /^\d+$/.test(scoreParam)) {
+const launch = parseLaunchTarget(location.search);
+if (launch.kind === 'user') {
+  void showRecent(String(launch.id));
+} else if (launch.kind === 'score') {
   void (async () => {
     try {
       loading('Downloading replay…');
-      const replayBytes = await getReplayFile(Number(scoreParam));
+      const replayBytes = await getReplayFile(launch.id);
       const replay = await decodeReplay(replayBytes);
       const { beatmapId, beatmapsetId } = await lookupBeatmap(replay.beatmapMD5);
       const { osz, osuFallback } = await downloadMap(beatmapsetId, beatmapId);
       loading('Preparing…');
-      await startPlayer(await sessionFromReplay(replayBytes, osz, osuFallback, beatmapId, localSkin));
+      await startPlayer(await sessionFromReplay(replayBytes, osz, osuFallback, beatmapId, localSkin), launch.id);
     } catch (err) {
       loading(null);
       toast((err as Error).message);
