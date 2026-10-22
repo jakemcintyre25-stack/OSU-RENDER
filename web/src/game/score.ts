@@ -11,9 +11,17 @@ const MOD_MULTIPLIERS: Record<string, number> = {
   SO: 0.9,
 };
 
-/** Product of the ScoreV1 multipliers for the active mods. */
+/** Product of ScoreV1 multipliers; speed-mod aliases are never applied twice. */
 export function modMultiplier(mods: string[]): number {
-  return mods.reduce((m, mod) => m * (MOD_MULTIPLIERS[mod] ?? 1), 1);
+  // NC includes DT, and DC is the pitch-shifted variant of HT.
+  // Using a Set also guards duplicate names from external callers.
+  const active = new Set(mods);
+  if (active.has('NC')) active.delete('DT');
+  if (active.has('DC')) {
+    active.delete('DC');
+    active.add('HT');
+  }
+  return [...active].reduce((m, mod) => m * (MOD_MULTIPLIERS[mod] ?? 1), 1);
 }
 
 /**
