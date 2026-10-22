@@ -220,7 +220,9 @@ export function planHitsounds(
       } else if (part.kind === 'repeat') {
         playEdge(part.t, edge++);
       } else {
-        playEdge(part.t, object.spans);
+        // Stable judges the slider tail a little early for leniency, while
+        // the physical tail hitsound is an edge at the slider's actual end.
+        playEdge(object.end, object.spans);
       }
     }
   }
