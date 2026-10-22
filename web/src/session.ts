@@ -5,6 +5,7 @@ import { decodeReplay, type LoadedReplay, type ReplayFrame } from './load/replay
 import { prepareMap, type PreparedMap } from './game/prepare';
 import { generateAutoplay } from './game/autoplay';
 import { judge, type Judgement } from './game/judge';
+import { planHitsounds, type HitSoundPlan } from './audio/hitsounds';
 
 export interface Session {
   map: PreparedMap;
@@ -13,6 +14,7 @@ export interface Session {
   replay: LoadedReplay | null;
   player: string;
   audio: ArrayBuffer | null;
+  hitsounds: HitSoundPlan;
   background: ImageBitmap | null;
   warnings: string[];
 }
@@ -54,29 +56,41 @@ export async function sessionFromReplay(replayBytes: Uint8Array, osz: OszArchive
     warnings.push('The .osu-only fallback has not been verified against the replay MD5; judgement and timing may differ.');
   }
   const map = prepareMap(osuText, replay.mods);
-  const s = await finish(map, replay.frames, osz, replay.player || 'Player', warnings);
+  const s = await finish(map, replay.frames, osz, replay.player || 'Player', warnings, osuText, diff?.fileName ?? '');
   s.replay = replay;
   return s;
 }
 
 export async function sessionFromAutoplay(osz: OszArchive, diff: Difficulty, mods: string[]): Promise<Session> {
   const map = prepareMap(diff.text, mods);
-  return finish(map, generateAutoplay(map), osz, 'osu! (autoplay)', []);
+  return finish(map, generateAutoplay(map), osz, 'osu! (autoplay)', [], diff.text, diff.fileName);
 }
 
-async function finish(map: PreparedMap, frames: ReplayFrame[], osz: OszArchive | null, player: string, warnings: string[]): Promise<Session> {
-  const audioBytes = osz ? findFile(osz, map.audioFile) : null;
-  if (osz && !audioBytes) warnings.push(`The map's audio file (${map.audioFile}) is missing from the download.`);
-  const background = osz ? await decodeImage(findFile(osz, map.backgroundFile)) : null;
+async function finish(
+  map: PreparedMap, frames: ReplayFrame[], osz: OszArchive | null,
+  player: string, warnings: string[], osuText: string, beatmapPath: string,
+): Promise<Session> {
+  const directory = beatmapPath.replace(/\\/g, '/').replace(/[^/]*$/, '');
+  const asset = (name: string | null) => osz && name
+    ? findFile(osz, directory + name) ?? findFile(osz, name)
+    : null;
+  const audioBytes = asset(map.audioFile);
+  if (osz && map.audioFile && !audioBytes) warnings.push(`The map's audio file (${map.audioFile}) is missing from the download.`);
+  const background = await decodeImage(asset(map.backgroundFile));
+  const judgement = judge(map, frames);
+  let hitsounds: HitSoundPlan = { events: [], samples: new Map(), unavailable: 0 };
+  if (osz) {
+    try {
+      hitsounds = planHitsounds(osuText, map, judgement, osz, beatmapPath);
+    } catch (error) {
+      // A sample planner must not make the user's replay inaccessible.
+      warnings.push('Beatmap-provided hitsounds could not be mapped safely: ' + (error as Error).message);
+    }
+  }
   return {
-    map,
-    frames,
-    judgement: judge(map, frames),
-    replay: null,
-    player,
+    map, frames, judgement, replay: null, player,
     audio: audioBytes ? toArrayBuffer(audioBytes) : null,
-    background,
-    warnings,
+    hitsounds, background, warnings,
   };
 }
 
