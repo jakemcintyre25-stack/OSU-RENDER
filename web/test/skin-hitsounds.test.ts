@@ -57,6 +57,26 @@ describe('M5/M7 user-supplied .osk sample lookup', () => {
     expect(result.unavailable).toBe(0);
   });
 
+  it('respects LayeredHitSounds=0 in skin.ini without suppressing explicit normal notes', () => {
+    const skin = skinArchive({ 'skin.ini': strToU8('[General]\\nLayeredHitSounds: 0\\n') });
+    const result = plan(mapArchive(), skin);
+    expect(result.events.map(e => e.sample)).toEqual(['skin:normal-hitwhistle.wav']);
+
+    const normalChart = chart.replace('100,100,1000,1,2', '100,100,1000,1,0');
+    const map = prepareMap(normalChart);
+    const normalPlan = planHitsounds(
+      normalChart, map, judge(map, generateAutoplay(map)),
+      mapArchive(), 'map/diff.osu', skin,
+    );
+    expect(normalPlan.events.map(e => e.sample)).toEqual(['skin:normal-hitnormal.wav']);
+  });
+
+  it('preserves layering for explicit LayeredHitSounds=1 and absent setting', () => {
+    const enabled = skinArchive({ 'skin.ini': strToU8('[General]\\nLayeredHitSounds: 1\\n') });
+    expect(plan(mapArchive(), enabled).events).toHaveLength(2);
+    expect(plan().events).toHaveLength(2);
+  });
+
   it('prefers indexed beatmap audio when present and uses skin only for missing layers', () => {
     const result = plan(mapArchive({ 'map/normal-hitnormal3.wav': audio }));
     expect(result.events.map(e => e.sample)).toEqual([
