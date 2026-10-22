@@ -5,6 +5,7 @@ import { planHitsounds } from '../src/audio/hitsounds';
 import { prepareMap } from '../src/game/prepare';
 import { generateAutoplay } from '../src/game/autoplay';
 import { judge } from '../src/game/judge';
+import { sessionFromAutoplay } from '../src/session';
 
 const chart = `osu file format v14
 [General]
@@ -73,6 +74,16 @@ describe('M5/M7 user-supplied .osk sample lookup', () => {
     );
     expect(result.events).toEqual([]);
     expect(result.unavailable).toBe(1);
+  });
+
+  it('carries skin sample files through the complete autoplay Session contract', async () => {
+    const osz = mapArchive();
+    const skin = skinArchive();
+    const session = await sessionFromAutoplay(osz, osz.difficulties[0], [], skin);
+    expect(session.judgement.counts.c300).toBe(1);
+    expect(session.hitsounds.events.map(event => event.sample))
+      .toEqual(['skin:normal-hitnormal.wav', 'skin:normal-hitwhistle.wav']);
+    expect(session.hitsounds.samples.size).toBe(2);
   });
 
   it('provides real skin sounds even when .osu fallback has no map archive', () => {
