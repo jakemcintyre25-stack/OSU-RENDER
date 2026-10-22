@@ -14,13 +14,13 @@ export function activeDrainIntervals(
   if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start) {
     throw new RangeError('Invalid HP drain timeline');
   }
-  if (start === end) return [];
   const clipped = breaks.map(b => {
     if (!Number.isFinite(b.start) || !Number.isFinite(b.end) || b.start < 0 || b.end < b.start) {
       throw new RangeError('Invalid beatmap break');
     }
     return [Math.max(start, b.start), Math.min(end, b.end)] as const;
   }).filter(([a,b]) => a < b).sort((a,b) => a[0] - b[0]);
+  if (start === end) return [];
   const out: TimeInterval[] = [];
   let cursor = start;
   for (const [a,b] of clipped) {
