@@ -520,8 +520,14 @@ export class PlayfieldRenderer {
       if (!this.skinTextures.reversearrow) this.drawArrow(g, s, atEnd, r);
     }
 
-    if (d.reverseStart) d.reverseStart.visible = drawn.has(0);
-    if (d.reverseEnd) d.reverseEnd.visible = drawn.has(1);
+    if (d.reverseStart) {
+      d.reverseStart.visible = drawn.has(0);
+      d.reverseStart.alpha = bodyAlpha;
+    }
+    if (d.reverseEnd) {
+      d.reverseEnd.visible = drawn.has(1);
+      d.reverseEnd.alpha = bodyAlpha;
+    }
 
     // Ball and follow circle while the slider is running.
     const running = t >= s.start && t <= s.end;
