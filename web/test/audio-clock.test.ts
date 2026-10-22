@@ -153,6 +153,7 @@ describe('Web Audio master clock seek, rate, pause and visual offset', () => {
     audio.resume.mockImplementation(() => new Promise<void>(resolve => { resume = resolve; }));
     const p1 = clock.play();
     const p2 = clock.play();
+    expect(audio.resume).toHaveBeenCalledTimes(1);
     resume();
     await Promise.all([p1, p2]);
     expect(clock.isPlaying).toBe(true);
