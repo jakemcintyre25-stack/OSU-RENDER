@@ -70,6 +70,17 @@
         </div>
         <label class="ctl" title="Background dim">Dim <input id="dim" type="range" min="0" max="100" value="80" /></label>
         <label class="ctl" title="Volume">Vol <input id="volume" type="range" min="0" max="100" value="60" /></label>
+        <label class="ctl" title="Playback speed; applies in addition to DT/HT mods">Speed
+          <select id="playback-speed" aria-label="Viewer playback speed">
+            <option value="0.25">0.25×</option>
+            <option value="0.5">0.5×</option>
+            <option value="0.75">0.75×</option>
+            <option value="1" selected>1×</option>
+            <option value="1.25">1.25×</option>
+            <option value="1.5">1.5×</option>
+            <option value="2">2×</option>
+          </select>
+        </label>
         <label class="ctl offset-ctl" title="Audio / visual synchronization: positive values display gameplay later than the audio">Sync
           <input id="sync-offset" type="range" min="-250" max="250" step="5" value="0" aria-label="Visual timing offset in milliseconds" />
           <output id="sync-offset-label" for="sync-offset">0ms</output>
