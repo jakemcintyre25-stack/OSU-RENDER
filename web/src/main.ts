@@ -242,6 +242,10 @@ async function startPlayer(s: Session) {
     s.warnings.push('The audio could not be decoded by this browser.');
     await clock.load(null);
   }
+  loading('Decoding beatmap hitsounds…');
+  const samples = await clock.loadHitsounds(s.hitsounds);
+  if (samples.failed > 0) s.warnings.push(`${samples.failed} beatmap hitsound files could not be decoded by this browser.`);
+  if (s.hitsounds.unavailable > 0) s.warnings.push('Some hitsounds are missing; default skin samples are not yet supported.');
   clock.rate = s.map.rate;
   clock.volume = Number(($('volume') as HTMLInputElement).value) / 100;
   clock.offset = Number(($('sync-offset') as HTMLInputElement).value);
@@ -265,6 +269,7 @@ async function startPlayer(s: Session) {
     raf = requestAnimationFrame(loop);
     if (!clock || !renderer || !session) return;
     const t = clock.now();
+    clock.scheduleHitsounds();
     renderer.render(t);
     const end = endTime();
     if (!seeking) ($('seek') as HTMLInputElement).value = String(Math.round((clamp(t, 0, end) / end) * 1000));
@@ -364,7 +369,7 @@ const showOffset = () => {
   $('sync-offset-label').textContent = `${value > 0 ? '+' : ''}${value}ms`;
 };
 syncOffset.addEventListener('input', () => {
-  if (clock) clock.offset = Number(syncOffset.value);
+  if (clock) clock.setOffset(Number(syncOffset.value));
   store.set('sync-offset', syncOffset.value);
   showOffset();
 });
