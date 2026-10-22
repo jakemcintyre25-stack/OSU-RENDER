@@ -120,6 +120,14 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - `1ea4fd45`, `5ae764a3`: add `hpAt(trace, mapTime)` to query deterministic HP between judgement events, on break intervals, and after simultaneous event deltas; HP traces now preserve normalized active drain intervals and calibration rate. Regression tests cover seeking backward, overlapping breaks, zero crossings, bounds, and invalid times. CI pending for these changes.
 - **M3 IN PROGRESS:** Seekable HP is an internal engine, not a reference-validated stable HP meter. Coefficients, break recovery, spinner events, and HP-zero failure remain OPEN.
 
+### M3 HP break validation and drain-index optimization (23 October 2026)
+
+- Both workflows passed at prior `0e4bbc56` checkpoint.
+- `400e1ef3`, `4a30aa69`: fix zero-duration HP traces incorrectly accepting malformed break ranges, with regression coverage.
+- `bf0e70fc`: replace repeated break-union traversal per judgement event with an indexed cumulative-drain lookup, preserving deterministic HP semantics. This improves simulation scaling on maps with many breaks and judgements; the seek query still builds an index per call and is not claimed to be globally O(log n).
+- `6ecda751`: independently compare indexed drain to direct break arithmetic on 120 breaks and 300 events. CI pending at time of writing.
+- **M3 IN PROGRESS:** No verified osu!stable HP coefficients, HP-zero player failure, or real-replay parity. Optimization and synthetic tests do not satisfy these acceptance criteria.
+
 ## Immediate next implementation work
 
 1. **Independent:** finish M3's calibrated HP drain/gain, no-drain-during-breaks and HP-zero failure checks. Maintain explicit stable parity uncertainty until real evidence exists.
