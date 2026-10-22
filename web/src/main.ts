@@ -5,7 +5,7 @@ import { assertLocalUploadSize } from './load/upload-limits';
 import { decodeReplay } from './load/replay';
 import { sessionFromReplay, sessionFromAutoplay, type Session } from './session';
 import { PlayfieldRenderer } from './render/renderer';
-import { decodeVisualSkin, visualSkinFiles } from './render/skin-visuals';
+import { decodeVisualSkin, visualSkinFiles, visualSkinConfig } from './render/skin-visuals';
 import { Clock } from './audio/clock';
 import { supportedSkinAudioFiles } from './audio/skin-assets';
 import { parseLaunchTarget, scoreShareUrl, userShareUrl } from './launch';
@@ -351,7 +351,7 @@ async function startPlayer(s: Session, scoreId: number | null = null, lease = pl
           createImageBitmap(new Blob([Uint8Array.from(bytes)], { type: 'image/png' })))
       : {};
     if (!active() || !renderer) return;
-    renderer.setSkinVisuals(visuals);
+    renderer.setSkinVisuals(visuals, localSkin ? visualSkinConfig(localSkin) : undefined);
     renderer.setBackground(s.background);
     renderer.load(s.map, s.frames, s.judgement, { player: s.player });
     playerClock.seek(initialPlaybackTime(s.map.firstObjectTime, s.map.audioLeadIn));
