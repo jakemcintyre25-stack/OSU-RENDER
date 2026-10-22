@@ -22,7 +22,7 @@ export function modMultiplier(mods: string[]): number {
  */
 export function difficultyMultiplier(hp: number, cs: number, od: number, objectCount: number, drainSeconds: number): number {
   const density = Math.min(16, Math.max(0, (objectCount / Math.max(1, drainSeconds)) * 8));
-  return Math.round(((hp + cs + od + density) / 38) * 5);
+  return Math.max(2, Math.min(6, Math.round(((hp + cs + od + density) / 38) * 5)));
 }
 
 /**
