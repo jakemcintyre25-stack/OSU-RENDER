@@ -35,13 +35,13 @@ describe('M7 .osk visual skin loading', () => {
   });
   it('parses known skin.ini options and ignores unsupported or malformed values', () => {
     const archive = skin({ 'skin.ini': strToU8(
-      '[General]\\nCursorRotate: false\\nCursorExpand: 0\\nCursorCentre: true\\nSliderBallFlip: false\\nSliderBallFrames: 12\\n[Colours]\\nCursorRotate: true'
+      '[General]\nCursorRotate: false\nCursorExpand: 0\nCursorCentre: true\nSliderBallFlip: false\nSliderBallFrames: 12\n[Colours]\nCursorRotate: true'
     ) });
     expect(visualSkinConfig(archive)).toEqual({
       cursorRotate: false, cursorExpand: false, cursorCentre: true,
       sliderBallFlip: false, sliderBallFrames: 12,
     });
-    const invalid = skin({ 'skin.ini': strToU8('[General]\\nCursorRotate: banana\\nSliderBallFrames: 99999') });
+    const invalid = skin({ 'skin.ini': strToU8('[General]\nCursorRotate: banana\nSliderBallFrames: 99999') });
     expect(visualSkinConfig(invalid).cursorRotate).toBe(true);
     expect(visualSkinConfig(invalid).sliderBallFrames).toBe(1);
   });
