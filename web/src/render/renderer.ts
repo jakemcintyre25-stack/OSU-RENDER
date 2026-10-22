@@ -65,6 +65,7 @@ export class PlayfieldRenderer {
   private judgementLayer = new Container();
   private cursorLayer = new Container();
   private cursorGfx = new Graphics();
+  private cursorSprite = new Sprite(Texture.EMPTY);
   private hud = new Container();
   private comboText!: Text;
   private accText!: Text;
@@ -96,7 +97,9 @@ export class PlayfieldRenderer {
     host.appendChild(this.app.canvas);
     this.app.stage.addChild(this.bg, this.field, this.hud);
     this.field.addChild(this.objectLayer, this.approachLayer, this.judgementLayer, this.cursorLayer);
-    this.cursorLayer.addChild(this.cursorGfx);
+    this.cursorLayer.addChild(this.cursorGfx, this.cursorSprite);
+    this.cursorSprite.anchor.set(0.5);
+    this.cursorSprite.visible = false;
     this.buildHud();
     this.app.renderer.on('resize', () => this.relayout());
     this.relayout();
@@ -106,6 +109,14 @@ export class PlayfieldRenderer {
     this.skinTextures = {};
     for (const [name, image] of Object.entries(images)) {
       this.skinTextures[name as VisualSkinKey] = Texture.from(image);
+    }
+    const cursor = this.skinTextures.cursor;
+    this.cursorSprite.texture = cursor ?? Texture.EMPTY;
+    this.cursorSprite.visible = Boolean(cursor);
+    if (cursor) {
+      // Playfield coordinates: osu!standard skin cursors use 128px at 1x.
+      this.cursorSprite.width = 64;
+      this.cursorSprite.height = 64;
     }
   }
 
@@ -517,7 +528,12 @@ export class PlayfieldRenderer {
       }
     }
     const pressed = (c.keys & (KEY.M1 | KEY.M2)) !== 0;
-    g.circle(c.x, c.y, pressed ? 11 : 9.5).fill({ color: 0xffe08a, alpha: 0.95 }).stroke({ width: 2, color: 0xffffff });
+    if (this.cursorSprite.visible) {
+      this.cursorSprite.position.set(c.x, c.y);
+      this.cursorSprite.scale.set(pressed ? 1.12 : 1);
+    } else {
+      g.circle(c.x, c.y, pressed ? 11 : 9.5).fill({ color: 0xffe08a, alpha: 0.95 }).stroke({ width: 2, color: 0xffffff });
+    }
   }
 
   private updateHud(t: number) {
