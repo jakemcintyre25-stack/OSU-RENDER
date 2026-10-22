@@ -2,17 +2,15 @@
   "name": "osu-render",
   "private": true,
   "description": "Browser-based osu!standard replay renderer",
-  "workspaces": [
-    "web",
-    "worker"
-  ],
+  "workspaces": ["web", "worker"],
   "scripts": {
     "dev": "npm run dev --workspace web",
     "dev:worker": "npm run dev --workspace worker",
     "build": "npm run build --workspace web",
-    "test": "npm test --workspace web && npm test --workspace worker",
+    "test": "npm test --workspace web && npm test --workspace worker && node --test scripts/judge-check.test.mjs",
     "typecheck": "npm run typecheck --workspace web && npm run typecheck --workspace worker",
     "fixtures": "node scripts/fetch-fixtures.mjs",
+    "judge-check": "node scripts/judge-check.mjs",
     "deploy": "npm run build && npm run deploy --workspace worker"
   }
 }
