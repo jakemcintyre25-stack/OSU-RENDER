@@ -1,7 +1,7 @@
-// osu!stable beatmap-provided hitsound planning (M5, first playable subset).
-// Reads .osu hit sample metadata and uses only actual .osz assets. Missing
-// default skin samples are NOT fabricated; layered skins and slider loops
-// require later M5/M7 work.
+// osu!standard beatmap-provided hitsound planning (M5/M7 partial).
+// Reads .osu hit sample metadata and plays actual archive samples; missing
+// map samples can fall back to real files in a user-supplied .osk skin.
+// No default skin assets are fabricated or bundled.
 import type { PreparedMap } from '../game/prepare';
 import type { Judgement } from '../game/judge';
 import { findFile, type OszArchive } from '../load/osz';
@@ -81,9 +81,10 @@ export function planHitsounds(
   judgement: Judgement,
   archive: OszArchive | null,
   beatmapPath = '',
+  skinArchive: OszArchive | null = null,
 ): HitSoundPlan {
   const plan: HitSoundPlan = { events: [], samples: new Map(), unavailable: 0 };
-  if (!archive) return plan;
+  if (!archive && !skinArchive) return plan;
   const directory = beatmapPath.replace(/\\/g, '/').replace(/[^/]*$/, '');
   const timing: TimingSample[] = [];
   const objects: string[][] = [];
@@ -119,13 +120,27 @@ export function planHitsounds(
     throw new Error('Hitsound preparation failed: parsed and prepared hit-object counts disagree');
   }
 
-  const lookupSample = (file: string) => {
+  const lookupSample = (file: string, allowSkin: boolean) => {
     const path = safePath(file);
     if (!path) return null;
     // Beatmap-relative: a map in "folder/diff.osu" looks for "folder/sample.wav".
     const qualified = safePath(directory + path);
     if (!qualified) return null;
-    return { path: qualified, bytes: findFile(archive, qualified) };
+    const beatmapBytes = archive ? findFile(archive, qualified) : null;
+    if (beatmapBytes) return { path: qualified, bytes: beatmapBytes };
+    if (!allowSkin || !skinArchive) return null;
+
+    // A user's skin provides unindexed samples, regardless of the chart's
+    // index. osu! skins may use WAV or other browser-decodable audio formats.
+    // Explicit hitSample filenames never fall back to skin names.
+    const base = path.replace(/\\/g, '/').split('/').at(-1)!;
+    const stem = base.replace(/\d+(?=\.(?:wav|mp3|ogg)$)/i, '').replace(/\.(?:wav|mp3|ogg)$/i, '');
+    for (const extension of ['wav', 'mp3', 'ogg']) {
+      const name = stem + '.' + extension;
+      const bytes = findFile(skinArchive, name);
+      if (bytes) return { path: 'skin:' + name, bytes };
+    }
+    return null;
   };
   const activeSample = (t: number): TimingSample => {
     // Overlapping objects can request sounds out of chronological order.
@@ -140,9 +155,9 @@ export function planHitsounds(
     return low ? timing[low - 1] : { t, set: metadataSet, index: 0, volume: 100 };
   };
   let totalSamplesBytes = 0;
-  const scheduleFile = (t: number, file: string, volume: number) => {
+  const scheduleFile = (t: number, file: string, volume: number, allowSkin = true) => {
     if (plan.events.length >= MAX_HITSOUND_EVENTS) { plan.unavailable++; return; }
-    const resource = lookupSample(file);
+    const resource = lookupSample(file, allowSkin);
     if (!resource?.bytes || resource.bytes.byteLength > MAX_SAMPLE_FILE_BYTES) {
       plan.unavailable++;
       return;
@@ -173,7 +188,7 @@ export function planHitsounds(
     const volume = settings.volume || tp.volume;
     if (settings.filename) {
       // A named custom sample entirely replaces the layered hit sound.
-      scheduleFile(t, settings.filename, volume);
+      scheduleFile(t, settings.filename, volume, false);
       return;
     }
     const suffix = sampleIndex > 1 ? String(sampleIndex) : '';
