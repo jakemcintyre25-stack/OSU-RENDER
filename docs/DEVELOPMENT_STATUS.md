@@ -168,6 +168,15 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - `c27b269a`: align custom reverse-arrow alpha with Hidden and slider fades.
 - **Verification:** CI pending on these new changes; no real-browser visual comparison. M7 remains IN PROGRESS. Next: fix any CI failures, add real renderer regression coverage and verify skin.ini and sprite geometry.
 
+### M7 skin.ini configuration integration (23 October 2026)
+
+- Prior reverse-arrow checkpoint `f1d681e6` passed both CI workflows.
+- `970771db`: parse bounded, explicitly supported [General] skin.ini cursor and slider settings; both CI workflows passed.
+- `fad2a984`: apply CursorRotate and CursorExpand in the actual renderer (other parsed settings not yet applied).
+- `f1502bd4`: wire parsed settings from the selected .osk into player startup.
+- `e7633264`: regression coverage for boolean values, out-of-section overrides and malformed settings.
+- **M7 IN PROGRESS:** CursorCentre and slider options are parsed but not yet implemented; complete skin.ini parity, real browser sprite comparison and remaining skin assets are OPEN. Latest CI pending.
+
 ## Immediate next implementation work
 
 1. **Independent:** finish M3's calibrated HP drain/gain, no-drain-during-breaks and HP-zero failure checks. Maintain explicit stable parity uncertainty until real evidence exists.
