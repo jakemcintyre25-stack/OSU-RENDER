@@ -32,6 +32,14 @@ describe('ScoreV1 helpers', () => {
     expect(spinnerSpinPoints(7, 5)).toBe(5 * 100 + 2 * 1100);
   });
 
+  it('clamps the stable ScoreV1 difficulty multiplier to 2..6', () => {
+    // Very easy maps must not produce a zero score multiplier.
+    expect(difficultyMultiplier(0, 0, 0, 0, 60)).toBe(2);
+    expect(difficultyMultiplier(1, 1, 1, 1, 600)).toBe(2);
+    // Extreme density and max HP/CS/OD should never exceed six.
+    expect(difficultyMultiplier(10, 10, 10, 2000, 60)).toBe(6);
+  });
+
   it('difficulty multiplier from original values, density clamped to 16', () => {
     // density 2000/60×8 = 266 → clamped to 16; (5 + 4 + 9 + 16) / 38 × 5 = 4.47 → 4
     expect(difficultyMultiplier(5, 4, 9, 2000, 60)).toBe(4);
