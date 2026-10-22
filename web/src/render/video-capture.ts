@@ -56,14 +56,14 @@ export class ReplayVideoCapture {
         this.bytes += event.data.size;
         if (this.bytes > MAX_CAPTURE_BYTES) {
           this.failed = new Error('Capture exceeded the 256 MiB limit');
-          this.stop();
+          void this.stop().catch(() => {});
           return;
         }
         this.chunks.push(event.data);
       };
       recorder.onerror = () => {
         this.failed = new Error('Browser video encoding failed');
-        this.stop();
+        void this.stop().catch(() => {});
       };
       recorder.onstop = () => {
         if (this.timeout) clearTimeout(this.timeout);
