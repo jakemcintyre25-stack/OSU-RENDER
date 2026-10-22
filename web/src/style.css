@@ -82,9 +82,14 @@ footer { margin-top: 24px; text-align: center; }
 .time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; white-space: nowrap; }
 .seek-wrap { position: relative; flex: 1; display: flex; align-items: center; }
 .seek-wrap input { width: 100%; accent-color: var(--accent); position: relative; z-index: 1; }
-.markers { position: absolute; left: 8px; right: 8px; top: 0; bottom: 0; pointer-events: none; }
-.markers i { position: absolute; top: 2px; bottom: 2px; width: 2px; background: var(--bad); opacity: 0.85; }
-.markers i.m100 { background: #5fe36b; opacity: 0.5; }
+.markers { position: absolute; left: 8px; right: 8px; top: 0; bottom: 0; pointer-events: none; z-index: 2; }
+.markers .marker {
+  pointer-events: auto; position: absolute; top: -5px; bottom: -5px; width: 7px;
+  transform: translateX(-50%); padding: 0; min-width: 0; border: 0;
+  border-radius: 2px; background: var(--bad); opacity: 0.85; cursor: pointer;
+}
+.markers .marker.m100 { background: #5fe36b; opacity: 0.75; }
+.markers .marker:hover, .markers .marker:focus-visible { opacity: 1; outline: 2px solid white; outline-offset: 2px; }
 .ctl { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
 .ctl input { width: 80px; accent-color: var(--accent); }
 .offset-ctl output { min-width: 47px; font-variant-numeric: tabular-nums; text-align: right; }
