@@ -14,13 +14,13 @@ describe('M9 browser video capture', () => {
     expect(safeCaptureFilename('***')).toBe('osu-replay-player.webm');
     expect(safeCaptureFilename('A'.repeat(100))).toBe(`osu-replay-${'A'.repeat(48)}.webm`);
   });
-  it('rejects invalid framerates before touching browser APIs', () => {
+  it('rejects invalid framerates before touching browser APIs', async () => {
     const capture = new ReplayVideoCapture();
     const canvas = {} as HTMLCanvasElement;
     for (const fps of [0, -1, 61, 29.5, Infinity, NaN]) {
       expect(() => capture.start(canvas, fps)).toThrow(RangeError);
     }
     expect(capture.active).toBe(false);
-    expect(capture.stop()).rejects.toThrow('No active capture');
+    await expect(capture.stop()).rejects.toThrow('No active capture');
   });
 });
