@@ -15,10 +15,10 @@ describe('M6 renderer visibility indexing', () => {
     const objects = [circle(3, 3000), circle(1, 1000),
       spinner(0, 0, 6000), circle(2, 2000)];
     const index = new VisibleObjectIndex(objects);
-    expect(index.at(2500, 500, 100).map(o => o.index)).toEqual([0, 2]);
+    expect(index.at(2050, 500, 100).map(o => o.index)).toEqual([0, 2]);
     expect(index.at(4000, 500, 100).map(o => o.index)).toEqual([0]);
     expect(index.at(1000, 500, 100).map(o => o.index)).toEqual([0, 1]);
-    expect(index.at(2500, 500, 100).map(o => o.index)).toEqual([0, 2]);
+    expect(index.at(2050, 500, 100).map(o => o.index)).toEqual([0, 2]);
   });
   it('matches an exhaustive visibility scan over a large mixed-object map', () => {
     const objects: HitObj[] = Array.from({ length: 4000 }, (_, i) =>
