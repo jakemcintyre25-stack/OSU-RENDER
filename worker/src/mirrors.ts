@@ -3,6 +3,7 @@
 
 import { HttpError } from './osu';
 import { validateMirrorZip } from './zip-envelope';
+import { MirrorHealth, mirrorHealth } from './mirror-health';
 
 export const MIRRORS: { name: string; url: (setId: string) => string }[] = [
   { name: 'catboy', url: (id) => `https://catboy.best/d/${id}` },
@@ -57,9 +58,18 @@ export async function readBoundedResponse(response: Response, maxBytes: number):
 
 
 /** Tries each mirror in turn and returns the first response that is really a zip. */
-export async function fetchBeatmapset(setId: string, fetchImpl: typeof fetch = fetch): Promise<{ body: ArrayBuffer; mirror: string }> {
+export async function fetchBeatmapset(
+  setId: string,
+  fetchImpl: typeof fetch = fetch,
+  health: MirrorHealth = mirrorHealth,
+  now: () => number = Date.now,
+): Promise<{ body: ArrayBuffer; mirror: string }> {
   const errors: string[] = [];
   for (const m of MIRRORS) {
+    if (!health.canAttempt(m.name, now())) {
+      errors.push(`${m.name}: skipped during 10-minute cooldown`);
+      continue;
+    }
     try {
       const res = await fetchImpl(m.url(setId), {
         headers: { 'User-Agent': 'osu-render (+https://github.com/jakemcintyre25-stack/osu-render)' },
@@ -67,11 +77,17 @@ export async function fetchBeatmapset(setId: string, fetchImpl: typeof fetch = f
         signal: AbortSignal.timeout(45000),
       });
       if (!res.ok) {
+        // 404 means this beatmap may be absent, not that the host is unhealthy.
+        // Backoff only for server, rate-limit or access failures.
+        if (res.status >= 500 || res.status === 429 || res.status === 403) {
+          health.recordFailure(m.name, now());
+        }
         errors.push(`${m.name}: HTTP ${res.status}`);
         continue;
       }
       const len = Number(res.headers.get('content-length') ?? 0);
       if (len > MAX_OSZ_BYTES) {
+        health.recordFailure(m.name, now());
         errors.push(`${m.name}: too large`);
         continue;
       }
@@ -79,8 +95,10 @@ export async function fetchBeatmapset(setId: string, fetchImpl: typeof fetch = f
       // A PK header is not enough. Check the central directory before returning
       // success, otherwise malformed downloads are cached and block fallbacks.
       validateMirrorZip(new Uint8Array(body));
+      health.recordSuccess(m.name);
       return { body, mirror: m.name };
     } catch (e) {
+      health.recordFailure(m.name, now());
       errors.push(`${m.name}: ${(e as Error).message}`);
     }
   }
