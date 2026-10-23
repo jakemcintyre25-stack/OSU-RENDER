@@ -15,6 +15,7 @@
     "fixtures": "node scripts/fetch-fixtures.mjs",
     "judge-check": "node scripts/judge-check.mjs",
     "deploy": "npm run build && npm run deploy --workspace worker",
-    "desktop": "bun desktop/build.ts"
+    "desktop": "bun desktop/build.ts",
+    "judge-check:strict": "node scripts/judge-check.mjs --require-fixtures"
   }
 }

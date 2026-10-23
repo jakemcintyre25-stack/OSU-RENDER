@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import worker from '../src/index';
 import { resetTokenCache, toRecentPlay } from '../src/osu';
-import { fetchBeatmapset } from '../src/mirrors';
+import { fetchBeatmapset, fetchOsuFile, readBoundedResponse } from '../src/mirrors';
+import { resetMirrorHealth } from '../src/mirror-health';
+import { storedZip } from './zip-fixture';
 
 const env = { OSU_CLIENT_ID: '1', OSU_CLIENT_SECRET: 's', ASSETS: { fetch: async () => new Response('asset') } } as never;
 const ctx = { waitUntil() {}, passThroughOnException() {} } as never;
@@ -38,6 +40,7 @@ const newFormatScore = {
 
 beforeEach(() => {
   resetTokenCache();
+  resetMirrorHealth();
   vi.unstubAllGlobals();
 });
 
@@ -107,14 +110,74 @@ describe('replays', () => {
     expect(((await res.json()) as { error: string }).error).toMatch(/no replay/);
   });
 
+  it('rejects replay bodies whose Content-Length exceeds the Worker ceiling', async () => {
+    mockFetch([
+      tokenRoute,
+      [/\/scores\/4567\/download$/, () => new Response(new Uint8Array([1, 2]), {
+        headers: { 'Content-Length': String(65 * 1024 * 1024) },
+      })],
+    ]);
+    const result = await call('/api/scores/4567/replay');
+    expect(result.status).toBe(502);
+    expect(((await result.json()) as { error: string }).error).toMatch(/too large/i);
+  });
+
+  it('rejects streaming replay overruns even if the source underreports Content-Length', async () => {
+    mockFetch([
+      tokenRoute,
+      [/\/scores\/4567\/download$/, () => new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(63 * 1024 * 1024));
+          controller.enqueue(new Uint8Array(2 * 1024 * 1024));
+          controller.close();
+        },
+      }), { headers: { 'Content-Length': '5' } })],
+    ]);
+    const result = await call('/api/scores/4567/replay');
+    expect(result.status).toBe(502);
+    expect(((await result.json()) as { error: string }).error).toMatch(/too large/i);
+  });
+
   it('rejects non-numeric IDs', async () => {
     mockFetch([]);
     expect((await call('/api/scores/abc/replay')).status).toBe(400);
   });
 });
 
+describe('bounded mirror download streaming', () => {
+  it('rejects an oversized declared body without buffering it', async () => {
+    const response = new Response(new Uint8Array([1, 2]), {
+      headers: { 'Content-Length': '100' },
+    });
+    await expect(readBoundedResponse(response, 5)).rejects.toThrow(/too large/i);
+  });
+
+  it('stops a stream that grows beyond the limit without trusting Content-Length', async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2, 3]));
+        controller.enqueue(new Uint8Array([4, 5, 6]));
+        controller.close();
+      },
+    });
+    await expect(readBoundedResponse(new Response(stream), 5)).rejects.toThrow(/too large/i);
+  });
+
+  it('assembles a bounded stream byte-for-byte', async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([0x50, 0x4b]));
+        controller.enqueue(new Uint8Array([3, 4]));
+        controller.close();
+      },
+    });
+    expect([...new Uint8Array(await readBoundedResponse(new Response(stream), 4))])
+      .toEqual([0x50, 0x4b, 3, 4]);
+  });
+});
+
 describe('beatmap mirrors', () => {
-  const zip = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 9, 9]);
+  const zip = storedZip();
   it('falls back to the next mirror when one fails or returns HTML', async () => {
     const calls: string[] = [];
     const f = (async (u: string) => {
@@ -128,6 +191,37 @@ describe('beatmap mirrors', () => {
     expect(calls).toHaveLength(3);
   });
 
+  it('falls back from a truncated signature-only response to a valid mirror ZIP', async () => {
+    const attempts: string[] = [];
+    const f = (async (u: string) => {
+      attempts.push(u);
+      if (u.includes('catboy')) return new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04, 9, 9]));
+      return new Response(zip);
+    }) as unknown as typeof fetch;
+    const out = await fetchBeatmapset('1', f);
+    expect(out.mirror).toBe('nerinyan');
+    expect(attempts).toHaveLength(2);
+    expect(new Uint8Array(out.body)).toEqual(zip);
+  });
+
+  it('rejects fake EOCD metadata and retries instead of reporting success', async () => {
+    const corrupted = zip.slice();
+    corrupted[corrupted.length - 6] ^= 0x01; // Central directory start offset in EOCD
+    const f = (async (u: string) => new Response(u.includes('catboy') ? corrupted : zip)) as unknown as typeof fetch;
+    expect((await fetchBeatmapset('1', f)).mirror).toBe('nerinyan');
+  });
+
+  it('retries when a ZIP contains no .osu difficulty', async () => {
+    const bad = storedZip(undefined, 'cover.jpg');
+    const attempts: string[] = [];
+    const f = (async (u: string) => {
+      attempts.push(u);
+      return new Response(u.includes('catboy') ? bad : zip);
+    }) as unknown as typeof fetch;
+    expect((await fetchBeatmapset('123', f)).mirror).toBe('nerinyan');
+    expect(attempts).toHaveLength(2);
+  });
+
   it('errors with every mirror reason when all fail', async () => {
     const f = (async () => new Response('', { status: 500 })) as unknown as typeof fetch;
     await expect(fetchBeatmapset('1', f)).rejects.toThrow(/catboy: HTTP 500.*nerinyan.*osu.direct/);
@@ -137,6 +231,20 @@ describe('beatmap mirrors', () => {
     mockFetch([[/catboy\.best\/d\/1$/, () => new Response(zip)]]);
     const res = await call('/api/beatmapsets/1/download');
     expect(res.headers.get('X-Mirror')).toBe('catboy');
+  });
+});
+
+describe('bare .osu fallback download safety', () => {
+  it('accepts normal UTF-8 osu map text', async () => {
+    const f = (async () => new Response('osu file format v14\\n[General]\\nMode: 0')) as typeof fetch;
+    expect(await fetchOsuFile('1234', f)).toMatch(/^osu file format v14/);
+  });
+
+  it('rejects oversized declared bare-map downloads before buffering the body', async () => {
+    const f = (async () => new Response('osu file format v14', {
+      headers: { 'content-length': String(9 * 1024 * 1024) },
+    })) as typeof fetch;
+    await expect(fetchOsuFile('1234', f)).rejects.toThrow(/too large/i);
   });
 });
 

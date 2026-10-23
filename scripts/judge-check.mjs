@@ -14,11 +14,18 @@ const FIELDS = [
 ];
 
 export function parseArgs(args) {
-  if (args.length === 0) return { verbose: null };
-  if (args.length === 2 && args[0] === '--verbose' && args[1].toLowerCase().endsWith('.osr')) {
-    return { verbose: basename(args[1]) };
+  const strict = args.filter((arg) => arg === '--require-fixtures');
+  const other = args.filter((arg) => arg !== '--require-fixtures');
+  if (strict.length > 1) {
+    throw new Error('Usage: npm run judge-check -- [--require-fixtures] [--verbose <file.osr>]');
   }
-  throw new Error('Usage: npm run judge-check -- [--verbose <file.osr>]');
+  let verbose = null;
+  if (other.length === 2 && other[0] === '--verbose' && other[1].toLowerCase().endsWith('.osr')) {
+    verbose = basename(other[1]);
+  } else if (other.length !== 0) {
+    throw new Error('Usage: npm run judge-check -- [--require-fixtures] [--verbose <file.osr>]');
+  }
+  return strict.length ? { verbose, requireFixtures: true } : { verbose };
 }
 
 export function clockTime(milliseconds) {
@@ -53,7 +60,14 @@ export function verboseRows(map, judgement) {
   return map.objects.map((object, index) => {
     const j = judgement.objects[index];
     const parts = object.kind === 'slider' ? ` parts=${(j.parts ?? []).map((ok) => ok ? '✓' : '×').join('')}` : '';
-    return `${String(index + 1).padStart(5)}  ${String(Math.round(object.start)).padStart(8)} ms  ${clockTime(object.start).padStart(10)}  ${object.kind.padEnd(7)} ${String(j.result).padStart(3)}${parts}`;
+    const offset = typeof j.hitTime === 'number' ? j.hitTime - object.start : null;
+    const press = offset === null ? '' : ` press=${clockTime(j.hitTime)} delta=${offset >= 0 ? '+' : ''}${Math.round(offset)}ms`;
+    const spins = object.kind === 'spinner' && Number.isFinite(j.halfSpins)
+      ? ` halfSpins=${j.halfSpins}/${j.halfSpinsRequired}`
+      : object.kind === 'spinner' && Number.isFinite(j.spins)
+        ? ` spins=${j.spins.toFixed(2)}/${object.spinsRequired}`
+        : '';
+    return `${String(index + 1).padStart(5)}  ${String(Math.round(object.start)).padStart(8)} ms  ${clockTime(object.start).padStart(10)}  ${object.kind.padEnd(7)} ${String(j.result).padStart(3)}${parts}${press}${spins}`;
   });
 }
 
@@ -95,13 +109,17 @@ export async function runJudgeCheck(args = [], options = {}) {
   const write = options.write ?? console.log;
   const warn = options.warn ?? console.error;
   const root = options.fixturesRoot ?? join(projectRoot, 'fixtures');
-  const { verbose } = parseArgs(args);
+  const { verbose, requireFixtures = false } = parseArgs(args);
   const replayDir = join(root, 'replays');
   const mapsDir = join(root, 'maps');
   const replays = await filesWithExtension(replayDir, '.osr');
   const maps = await filesWithExtension(mapsDir, '.osz');
   if (!replays?.length || !maps?.length) {
     write('No local replay/map fixtures to check. Add .osr files to fixtures/replays/ and matching .osz files to fixtures/maps/ (both gitignored).');
+    if (requireFixtures) {
+      warn('Strict parity check failed: no replay/map fixtures available');
+      return 2;
+    }
     return 0;
   }
   if (verbose && !replays.includes(verbose)) {
@@ -146,6 +164,11 @@ export async function runJudgeCheck(args = [], options = {}) {
           skipped++;
           continue;
         }
+        if (replay.scoreV2) {
+          write(`${name} | skipped (ScoreV2; M4 tracks ScoreV1)`);
+          skipped++;
+          continue;
+        }
         const found = byHash.get(replay.beatmapMD5?.toLowerCase());
         if (!found) {
           warn(`${name}: no .osz difficulty matches replay MD5 ${replay.beatmapMD5 || '(missing)'}`);
@@ -176,6 +199,10 @@ export async function runJudgeCheck(args = [], options = {}) {
     await close();
   }
   write(`Checked ${checked} replay(s), skipped ${skipped}, failures ${failures}.`);
+  if (requireFixtures && checked === 0) {
+    warn('Strict parity check failed: zero osu!stable replays checked');
+    return 2;
+  }
   return failures ? 1 : 0;
 }
 

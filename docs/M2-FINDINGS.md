@@ -60,7 +60,7 @@ Thirteen replay files, ten unique plays. Two replays are duplicates of the same 
 ### What changed in the judge
 
 1. **Click matching (structural).** A click now goes to the earliest still-open circle it lands on, inside its radius and window. It no longer waits for the first open object. Evidence: in `16558c56`, circle 567 was clicked while 566 was still open. The header shows that as a hit, not a miss, which the old note-lock rejected. Covered by `web/test/judge-matching.test.ts`.
-2. **Slider part misses no longer break combo (structural).** Stable only resets combo on a missed head or a whole-slider miss. Evidence: `5053251` has one slider with a missed tick and a header max combo of 986 with no misses.
+2. **Historical hypothesis — later corrected:** This iteration assumed missed slider ticks/repeats did not break combo, inferred from replay `5053251`. This was incorrect relative to documented osu!stable slider-break rules; see the correction below.
 3. **300 window offset of 1 ms (provisional).** `PROVISIONAL_WINDOW300_OFFSET_MS = 1` in `judge.ts`. The 300 window at OD 8–10 is 28–32 ms, so 1 ms is about 3%. This is a fit to ten replays, not a confirmed rule. Multiplying all windows by 0.95 fits worse, because on the FC replays the error changes sign.
 4. **Options added** for experiments: `windowScale`, `radiusScale`, `window300Offset`. `scripts/sweep-judge.mjs` sweeps them across the local fixtures.
 
@@ -93,7 +93,7 @@ A radius of 1.02 cuts combo error from 409 to 37, but only because it removes on
 
 ### Combo model confirmed
 
-On every replay with no misses, our max combo equals the header's, or is within a few. Sliders contribute head, ticks, repeats and tail as combo, which is why a full combo on the 1907933 map is 1888. Combo errors come only from misses.
+On every replay with no misses, our max combo equals the header's, or is within a few. Sliders contribute head, ticks, repeats and tail as combo, which is why a full combo on the 1907933 map is 1888. This sentence was based on the earlier experimental implementation. Slider breaks can reset combo without increasing the MISS count; see the correction below.
 
 ### Still open
 
@@ -105,3 +105,67 @@ On every replay with no misses, our max combo equals the header's, or is within 
 ### Caveat
 
 Ten replays is still a small set, and every test here compares totals, not individual objects. The provisional offset and the sweep numbers may not hold on new maps. Re-run `npm run judge-check` and `node scripts/sweep-judge.mjs` every time new replays arrive.
+
+
+---
+
+## M2 correction: slider breaks (22 October 2026)
+
+The previous assertion that missed ticks and repeats preserve combo contradicted the official osu!standard judgement documentation:
+
+- https://osu.ppy.sh/wiki/en/Gameplay/Judgement/Slider_break
+- https://github.com/ppy/osu-wiki/blob/master/wiki/Gameplay/Judgement/osu%21/en.md
+
+**Implemented in `d786ab0`:** Missing a slider **tick or repeat resets combo** at the nested part's timestamp, but does not by itself produce an overall slider MISS; the slider's overall judgement still depends on its collected parts. Missing **only the tail does not break combo**. Synthetic regression tests now cover all three cases and have passed GitHub Actions.
+
+The earlier `5053251` observation (header max combo 986, claimed missed tick) is **unresolved**, not evidence that stable ignores slider breaks. The source replay's slider-part inference needs to be revisited; replay headers only provide aggregate counts. The earlier sweep/table above predates this correction and must **not** be treated as current results. Rerun `npm run judge-check` and `node scripts/sweep-judge.mjs` on the local, non-committed fixture set before claiming parity.
+
+**Current milestone status:** M2 remains in progress, M3 HP is not implemented, and M4 ScoreV1 has been partly implemented on `main` but still has mismatches.
+
+---
+
+## M2 correction: exact timing-window boundary implementation
+
+The earlier fitted `PROVISIONAL_WINDOW300_OFFSET_MS = 1` has been removed in `6a0bbc5`. It was an empirical workaround, **not** the stable rule.
+
+The official osu!standard judgement documentation specifies: **round the hit error**, **truncate each OD-based window to an integer**, and require **rounded error < truncated window**:
+
+https://osu.ppy.sh/wiki/en/Gameplay/Judgement/osu%21
+
+The judge now implements that rule for 300/100/50. For OD5, the 300 window is 50ms: `49.4ms` is a 300, whereas `49.5ms` is a 100. Synthetic tests also cover fractional OD windows, 100/50 edges and the optional experimental offset override. GitHub Actions passed.
+
+This corrects the known boundary algorithm without claiming all real human replay header counts are now exact; the local fixture set must be re-run, and the earlier comparison tables above are historical.
+
+---
+
+## M2 correction: stable half-spin spinner model
+
+Date: 23 October 2026. Source for the stable behaviour: the stable `SpinnerOsu` excerpts collected in [ppy/osu#24661](https://github.com/ppy/osu/pull/24661) and the [spinner judgement wiki](https://osu.ppy.sh/wiki/en/Gameplay/Judgement/osu%21). This is a source-derived implementation, not a fit to the small local replay set.
+
+The previous judge used full spins and a per-millisecond 477 RPM cap. That is not how stable counts spinners:
+
+- `rotationRequirement = (int)(lengthSeconds * MapDifficultyRange(OD, 3, 5, 7.5))` is measured in **half-spins**.
+- Each held replay frame adds at most `min(1, |angleDelta| / π)` half-spins.
+- The resulting `scoringRotationCount` is an integer half-spin count.
+- A bonus tick (1100) is awarded when `count > rotationRequirement + 3` and `(count - (rotationRequirement + 3)) % 2 == 0`; ordinary full-spin ticks (100) are awarded on the other even counts. This creates stable's 1.5-spin bonus gap.
+- Result: requirement zero auto-clears; below 25% is a miss; `count > requirement` is 300; `count > requirement - 2` is 100; otherwise 50.
+
+Implemented in `web/src/game/prepare.ts` (`spinnerHalfSpinsRequired`), `web/src/game/judge.ts` (`spinnerHalfSpins`, `judgeSpinner`) and `web/src/game/score.ts` (`spinnerSpinPoints`). Synthetic tests cover the requirement formula, both spin directions, direction reversal, the one-half-spin-per-frame cap, key-up gaps, the 300/100/50/miss boundaries and the 1.5-spin bonus gap.
+
+**Still open:** stable's original per-frame acceleration smoothing is not reconstructed, and no rights-cleared real replay has been rerun through `judge-check:strict` for these changes. The spinner fix must be validated against real headers before M2 can claim parity; the synthetic tests only prove the implemented rules match the quoted source logic.
+
+---
+
+## M2 correction: stable note-lock
+
+Date: 23 October 2026. Reference: the [Notelock wiki](https://osu.ppy.sh/wiki/en/Gameplay/Judgement/Notelock).
+
+Round 2's headline structural change — "a click goes to the earliest still-open circle it lands on" — contradicts stable's note-lock. The wiki is explicit: when two hit-object windows overlap and the earlier object is still unjudged, input on the later object is ignored until the earlier object's hit window passes.
+
+The judge now enforces that rule: only the earliest live head (circle or slider head) can receive a press. A click that lands on a later object or on empty space is wasted; it cannot skip an unjudged earlier object. Expiry still releases the lock at the earlier object's MEH-window end. Slider heads remain individually lockable, and a hit slider head immediately releases the lock so later objects can be hit while the slider body is still active.
+
+Tests updated in `judge-matching.test.ts` and `judge-head.test.ts`: a later-object click during the lock is ignored, and the same click succeeds after the earlier object is judged.
+
+The narrow simultaneous-object (2B) tolerance is implemented as a 3 ms window: objects whose start times are at most 3 ms apart may be hit independently while the first is still open. Objects farther apart remain locked. `judge-matching.test.ts` covers both the locked 20 ms case and the 2 ms simultaneous case.
+
+**Still open:** the previous synthetic/real-replay totals still need a fixture rerun. The round-2 tables above predate this correction.

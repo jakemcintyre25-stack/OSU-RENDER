@@ -3,11 +3,11 @@
 //   ✓ hit windows from OD, circle radius check, note-lock (only the earliest live object can be hit)
 //   ✓ early clicks inside the miss window count as misses
 //   ✓ slider tracking with a 2.4× follow area, parts-ratio slider result, spinner spin counting
-//   ✗ not yet exact: stable's slider-start leniency, 2B edge cases, spinner rpm smoothing, score V1, HP
+//   ✗ not yet exact: stable's slider-start leniency, 2B edge cases, spinner rpm smoothing, HP
 // Phase 6 replaces the ✗ items; header stats in the replay are the yardstick.
 
 import type { PreparedMap, SliderObj, SpinnerObj } from './prepare';
-import { hitWindows, sliderBallAt } from './prepare';
+import { hitWindows, sliderBallAt, spinnerHalfSpinsRequired } from './prepare';
 import { cursorAt, KEY, type ReplayFrame } from '../load/replay';
 import { hitPoints, modMultiplier, sliderPartPoints, spinnerSpinPoints } from './score';
 
@@ -18,14 +18,24 @@ export interface ObjectJudgement {
   result: Hit;
   /** When the head was hit (circles, slider heads); null if missed. */
   hitTime: number | null;
+  /** When a slider-head was explicitly clicked too early to hit; separate from final resultTime. */
+  headMissTime?: number;
   /** When the final result is decided (head miss time for circles, end for sliders/spinners). */
   resultTime: number;
   /** Slider only: whether each part (in SliderObj.parts order) was collected. */
   parts?: boolean[];
   /** Slider only: time ranges when the follow circle was active. */
   tracking?: [number, number][];
-  /** Spinner only: completed rotations. */
+  /** Spinner only: completed full rotations (for display). */
   spins?: number;
+  /** Spinner only: completed HALF-spins, as osu!stable counts them. */
+  halfSpins?: number;
+  /** Spinner only: stable's truncated half-spin completion requirement. */
+  halfSpinsRequired?: number;
+  /** Spinner only: judged window between the first and last half-spin. */
+  spinnerSpinRange?: [number, number];
+  /** Spinner only: timestamps of half-spins that award a stable 1100-point bonus. */
+  spinnerBonusTicks?: number[];
 }
 
 export interface ComboEvent {
@@ -38,6 +48,8 @@ export interface ComboEvent {
   score: number;
   /** The result that caused this event, if it was an object result. */
   result?: Hit;
+  /** Whether this final result belongs to a slider (its parts are separate). */
+  slider?: boolean;
   x?: number;
   y?: number;
 }
@@ -50,12 +62,11 @@ export interface Judgement {
   totalScore: number;
   /** Every point-scoring hit in time order, for checking score formulas against headers. */
   scoring: { t: number; base: number; before: number; flat: number }[];
+  /** First special-mod failure (SD/PF) on the judgement timeline; HP drain is M3 follow-up. */
+  failTime: number | null;
 }
 
 const MISS_WINDOW = 400;
-// PROVISIONAL (M2): 1 ms off the 300 window. Fitted to 10 real replays (see docs/M2-FINDINGS.md).
-// Replace with the exact stable rule once more replays confirm it.
-export const PROVISIONAL_WINDOW300_OFFSET_MS = 1;
 const FOLLOW_SCALE = 2.4;
 const PRESS_MASK = KEY.M1 | KEY.M2; // K1 sets M1 and K2 sets M2 in the replay bitfield
 
@@ -84,10 +95,12 @@ export function findPresses(frames: ReplayFrame[]): Press[] {
 }
 
 function headResult(offset: number, w: ReturnType<typeof hitWindows>): Hit {
-  const a = Math.abs(offset);
-  if (a <= w.w300) return 300;
-  if (a <= w.w100) return 100;
-  if (a <= w.w50) return 50;
+  // stable: round the measured error, truncate each OD window, and use strict <.
+  // At OD5, 49.4ms is a 300, 49.5ms is a 100, 99.5ms is a 50.
+  const a = Math.round(Math.abs(offset));
+  if (a < Math.trunc(w.w300)) return 300;
+  if (a < Math.trunc(w.w100)) return 100;
+  if (a < Math.trunc(w.w50)) return 50;
   return 0;
 }
 
@@ -96,7 +109,7 @@ export interface JudgeOptions {
   windowScale?: number;
   /** Multiplies the circle hit radius for head clicks. Experimental, default 1. */
   radiusScale?: number;
-  /** Milliseconds removed from the 300 window only (after scaling). Experimental, default 0. */
+  /** Optional experimental reduction of the 300 window before truncation, default 0. */
   window300Offset?: number;
   /** Count a click as on a circle if the cursor was within radius on the frame before or after the press. */
   pressPositionFrames?: boolean;
@@ -105,7 +118,7 @@ export interface JudgeOptions {
 export function judge(map: PreparedMap, frames: ReplayFrame[], options: JudgeOptions = {}): Judgement {
   const base = hitWindows(map.od);
   const ws = options.windowScale ?? 1;
-  const off = options.window300Offset ?? PROVISIONAL_WINDOW300_OFFSET_MS;
+  const off = options.window300Offset ?? 0;
   const w = { w300: Math.max(0, base.w300 * ws - off), w100: base.w100 * ws, w50: base.w50 * ws };
   const r = map.radius * (options.radiusScale ?? 1);
   const presses = findPresses(frames);
@@ -124,21 +137,36 @@ export function judge(map: PreparedMap, frames: ReplayFrame[], options: JudgeOpt
       }
       first++;
     }
-    // A click goes to the earliest still-open object it lands on (inside its radius and window).
-    // A click that lands on nothing is wasted; it does not hit a later object (osu! behaviour).
-    for (let k = first; k < map.objects.length; k++) {
-      const o = map.objects[k];
-      if (o.start - MISS_WINDOW > p.t) break; // later objects can't be reached yet
+    // osu!stable note-lock: while the earliest unjudged object is still live,
+    // input on any later overlapping object is ignored. A click that lands on
+    // empty space or on a later object is wasted; it must not skip the lock.
+    if (first >= map.objects.length) continue;
+    const firstObject = map.objects[first];
+    if (headDone[first]) continue;
+    if (firstObject.start - MISS_WINDOW > p.t) continue; // too early to interact at all
+    // Stable tolerates a narrow simultaneous-object window (3 ms) so two
+    // objects stacked/ended together are not artificially note-locked. It does
+    // not permit skipping an earlier object whose start is more than 3 ms away.
+    const simultaneousEnd = (() => {
+      let k = first + 1;
+      while (k < map.objects.length && map.objects[k].start <= firstObject.start + 3) k++;
+      return k;
+    })();
+    for (let k = first; k < simultaneousEnd; k++) {
       if (headDone[k]) continue;
+      const o = map.objects[k];
       const offset = p.t - o.start;
-      if (offset > w.w50) continue; // too late for this object; it will expire
+      if (offset > w.w50) continue; // too late; the object will expire
       const cands = options.pressPositionFrames ? [p, ...p.nearby] : [p];
       if (!cands.some((c) => Math.hypot(c.x - o.x, c.y - o.y) <= r)) continue; // click missed this circle's area
       const res = headResult(offset, w); // early clicks inside MISS_WINDOW count as a miss
       headDone[k] = true;
       headHit[k] = res;
       if (res > 0) objects[k].hitTime = p.t;
-      else objects[k].resultTime = p.t;
+      else {
+        objects[k].resultTime = p.t;
+        if (o.kind === 'slider') objects[k].headMissTime = p.t;
+      }
       break;
     }
   }
@@ -154,7 +182,7 @@ export function judge(map: PreparedMap, frames: ReplayFrame[], options: JudgeOpt
     } else if (o.kind === 'slider') {
       judgeSlider(o, j, headHit[i] ?? 0, frames, r);
     } else {
-      judgeSpinner(o, j, frames);
+      judgeSpinner(o, j, frames, map.od);
     }
   });
 
@@ -166,55 +194,146 @@ function judgeSlider(s: SliderObj, j: ObjectJudgement, head: Hit, frames: Replay
   const startFrom = j.hitTime ?? s.start;
   let trackStart: number | null = null;
   let hint = 0;
-  const isTracking = (t: number, wasTracking: boolean) => {
-    const c = cursorAt(frames, t, hint);
-    hint = c.index;
-    if (!(c.keys & PRESS_MASK)) return false;
-    const ball = sliderBallAt(s, t);
-    return Math.hypot(c.x - ball.x, c.y - ball.y) <= (wasTracking ? r * FOLLOW_SCALE : r);
-  };
-  // Sample tracking state through the slider's lifetime.
+
+  // stable: tracking must first begin within the slider-ball radius; only an
+  // already tracked slider uses the larger 2.4x follow area. Key-up always
+  // cancels tracking, even if another key is pressed immediately afterwards.
+  //
+  // Include exact part and replay-frame timestamps in addition to our 4ms
+  // samples. A tick on a key-up timestamp must not be awarded because a nearby
+  // sample happened to be tracking.
+  const times = new Set<number>([startFrom, s.end]);
+  for (let t = startFrom; t < s.end; t += 4) times.add(t);
+  s.parts.forEach((part) => {
+    if (part.t >= startFrom && part.t <= s.end) times.add(part.t);
+  });
+  // Frames are time-sorted by the replay loader. Find the first frame at or
+  // after the slider starts without scanning the entire replay per slider.
+  let lo = 0;
+  let hi = frames.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (frames[mid].t < startFrom) lo = mid + 1;
+    else hi = mid;
+  }
+  for (let i = lo; i < frames.length && frames[i].t <= s.end; i++) {
+    times.add(frames[i].t);
+  }
+
+  const partIndexes = new Map<number, number[]>();
+  s.parts.forEach((part, index) => {
+    const previous = partIndexes.get(part.t) ?? [];
+    previous.push(index);
+    partIndexes.set(part.t, previous);
+  });
+  const collected = s.parts.map(() => false);
   let tracked = false;
-  for (let t = startFrom; t <= s.end; t += 4) {
-    tracked = isTracking(t, tracked || t === startFrom);
-    if (tracked && trackStart === null) trackStart = t;
-    if (!tracked && trackStart !== null) {
+  for (const t of [...times].sort((a, b) => a - b)) {
+    if (t < startFrom || t > s.end) continue;
+    const cursor = cursorAt(frames, t, hint);
+    hint = cursor.index;
+    const ball = sliderBallAt(s, t);
+    const held = (cursor.keys & PRESS_MASK) !== 0;
+    const distance = Math.hypot(cursor.x - ball.x, cursor.y - ball.y);
+    const trackingNow: boolean = held && distance <= (tracked ? r * FOLLOW_SCALE : r);
+
+    if (trackingNow && trackStart === null) trackStart = t;
+    if (!trackingNow && trackStart !== null) {
       tracking.push([trackStart, t]);
       trackStart = null;
     }
+    tracked = trackingNow;
+    for (const index of partIndexes.get(t) ?? []) {
+      collected[index] = tracked;
+    }
   }
   if (trackStart !== null) tracking.push([trackStart, s.end]);
-  const trackedAt = (t: number) => tracking.some(([a, b]) => t >= a - 2 && t <= b + 2);
+
   j.tracking = tracking;
-  j.parts = s.parts.map((p) => trackedAt(p.t));
+  j.parts = collected;
   const total = 1 + s.parts.length;
-  const got = (head > 0 ? 1 : 0) + j.parts.filter(Boolean).length;
+  const got = (head > 0 ? 1 : 0) + collected.filter(Boolean).length;
   j.result = got === total ? 300 : got * 2 >= total ? 100 : got > 0 ? 50 : 0;
   j.resultTime = s.end;
 }
 
-function judgeSpinner(s: SpinnerObj, j: ObjectJudgement, frames: ReplayFrame[]) {
-  let total = 0;
-  let prevAngle: number | null = null;
-  for (const f of frames) {
-    if (f.t < s.start || f.t > s.end) continue;
-    if (!(f.keys & PRESS_MASK)) {
-      prevAngle = null;
+/**
+ * osu!stable spinner rotation accumulation, in HALF-spins.
+ *
+ * Stable adds `min(1, |angleDelta| / π)` per held frame, then truncates the
+ * running total when it scores a half-spin. This is deliberately not the old
+ * per-millisecond 477 RPM clamp: stable counts half-spins and allows at most
+ * one half-spin per frame. The original client's acceleration smoothing is a
+ * separate open parity item, not something this function claims to emulate.
+ */
+export function spinnerHalfSpinProgress(
+  frames: ReplayFrame[],
+  start: number,
+  end: number,
+): { halfSpins: number; tickTimes: number[] } {
+  const pressMask = KEY.M1 | KEY.M2;
+  let previousAngle: number | null = null;
+  let accumulated = 0;
+  let counted = 0;
+  const tickTimes: number[] = [];
+
+  for (const frame of frames) {
+    if (frame.t < start) continue;
+    if (frame.t > end) break;
+    if (!(frame.keys & pressMask) ||
+        !Number.isFinite(frame.x) || !Number.isFinite(frame.y)) {
+      previousAngle = null;
       continue;
     }
-    const a = Math.atan2(f.y - 192, f.x - 256);
-    if (prevAngle !== null) {
-      let d = a - prevAngle;
-      if (d > Math.PI) d -= Math.PI * 2;
-      if (d < -Math.PI) d += Math.PI * 2;
-      total += d;
+    const angle = Math.atan2(frame.y - 192, frame.x - 256);
+    if (previousAngle !== null) {
+      let difference = angle - previousAngle;
+      if (difference > Math.PI) difference -= 2 * Math.PI;
+      else if (difference < -Math.PI) difference += 2 * Math.PI;
+      accumulated += Math.min(1, Math.abs(difference) / Math.PI);
+      // Stable increments scoringRotationCount when the truncated half-spin
+      // count rises. The epsilon keeps an exact ±180° frame from being lost
+      // to floating-point representation.
+      const next = Math.floor(accumulated + 1e-9);
+      while (counted < next) {
+        tickTimes.push(frame.t);
+        counted++;
+      }
     }
-    prevAngle = a;
+    previousAngle = angle;
   }
-  const spins = Math.abs(total) / (Math.PI * 2);
-  j.spins = spins;
-  const need = s.spinsRequired;
-  j.result = spins >= need ? 300 : spins >= need - 1 ? 100 : spins >= need * 0.25 ? 50 : 0;
+  return { halfSpins: counted, tickTimes };
+}
+
+export function spinnerHalfSpins(frames: ReplayFrame[], start: number, end: number): number {
+  return spinnerHalfSpinProgress(frames, start, end).halfSpins;
+}
+
+function judgeSpinner(s: SpinnerObj, j: ObjectJudgement, frames: ReplayFrame[], od: number) {
+  const progress = spinnerHalfSpinProgress(frames, s.start, s.end);
+  const halfSpins = progress.halfSpins;
+  const required = spinnerHalfSpinsRequired(od, s.end - s.start);
+  j.halfSpins = halfSpins;
+  j.halfSpinsRequired = required;
+  j.spins = halfSpins / 2;
+  if (progress.tickTimes.length) {
+    j.spinnerSpinRange = [progress.tickTimes[0], progress.tickTimes[progress.tickTimes.length - 1]];
+    const bonusThreshold = required + 3;
+    j.spinnerBonusTicks = [];
+    for (let count = 1; count <= halfSpins; count++) {
+      if (count > bonusThreshold && (count - bonusThreshold) % 2 === 0) {
+        j.spinnerBonusTicks.push(progress.tickTimes[count - 1]);
+      }
+    }
+  }
+  // stable SpinnerOsu.Hit(): requirement 0 auto-clears; below 25% misses;
+  // > requirement is 300; > requirement - 2 is 100; otherwise 50.
+  const minimum = Math.trunc(required * 0.25);
+  if (required === 0) j.result = 300;
+  else if (halfSpins < minimum) j.result = 0;
+  else if (halfSpins > required) j.result = 300;
+  else if (halfSpins > required - 2) j.result = 100;
+  else j.result = 50;
   j.resultTime = s.end;
 }
 
@@ -237,16 +356,25 @@ function buildEvents(map: PreparedMap, objects: ObjectJudgement[], w50: number):
     const j = objects[i];
     if (o.kind === 'slider') {
       if (j.hitTime !== null) raw.push({ t: j.hitTime, kind: 'combo+', flat: sliderPartPoints('head') });
-      else raw.push({ t: Math.min(o.start + w50, o.end), kind: 'break' });
+      else raw.push({ t: j.headMissTime ?? Math.min(o.start + w50, o.end), kind: 'break' });
       o.parts.forEach((p, k) => {
         const got = j.parts?.[k];
-        // A missed tick, repeat or tail only lowers the slider's result (stable does not break combo
-        // on slider-part misses). Only a missed head or a whole-slider miss resets combo.
+        // stable: a missed tick or repeat is a slider break even when the overall
+        // slider judgement is 100/50 rather than MISS. A missed tail reduces
+        // accuracy but does NOT break combo. Its true event time is p.t.
         if (got) raw.push({ t: p.t, kind: 'combo+', flat: sliderPartPoints(p.kind) });
+        else if (p.kind !== 'tail') raw.push({ t: p.t, kind: 'break' });
       });
       raw.push({ t: j.resultTime, kind: 'result', result: j.result, x: o.parts.at(-1)?.x ?? o.x, y: o.parts.at(-1)?.y ?? o.y, slider: true });
     } else if (o.kind === 'spinner') {
-      raw.push({ t: j.resultTime, kind: 'result', result: j.result, x: o.x, y: o.y, flat: spinnerSpinPoints(j.spins ?? 0, o.spinsRequired) });
+      raw.push({
+        t: j.resultTime,
+        kind: 'result',
+        result: j.result,
+        x: o.x,
+        y: o.y,
+        flat: spinnerSpinPoints(j.halfSpins ?? 0, j.halfSpinsRequired ?? 0),
+      });
     } else {
       raw.push({ t: j.result > 0 ? (j.hitTime ?? j.resultTime) : j.resultTime, kind: 'result', result: j.result, x: o.x, y: o.y });
     }
@@ -261,11 +389,21 @@ function buildEvents(map: PreparedMap, objects: ObjectJudgement[], w50: number):
   const mod = modMultiplier(map.mods);
   const events: ComboEvent[] = [];
   const scoring: Judgement['scoring'] = [];
+  const noFail = map.mods.includes('NF');
+  const perfect = map.mods.includes('PF');
+  const suddenDeath = perfect || map.mods.includes('SD');
+  let failTime: number | null = null;
   const acc = () => {
     const n = counts.c300 + counts.c100 + counts.c50 + counts.miss;
     return n === 0 ? 1 : (300 * counts.c300 + 100 * counts.c100 + 50 * counts.c50) / (300 * n);
   };
   for (const e of raw) {
+    // stable: SD fails on a missed head/tick/repeat or an overall MISS, but not
+    // a missed tail. PF also fails on non-300 final judgements. NF overrides both.
+    if (!noFail && suddenDeath && failTime === null && (
+      e.kind === 'break' ||
+      (e.kind === 'result' && (e.result === 0 || (perfect && e.result !== 300)))
+    )) failTime = e.t;
     const before = combo;
     if (e.kind === 'combo+') {
       combo++;
@@ -295,9 +433,9 @@ function buildEvents(map: PreparedMap, objects: ObjectJudgement[], w50: number):
       else if (!e.slider) combo++;
     }
     maxCombo = Math.max(maxCombo, combo);
-    events.push({ t: e.t, combo, accuracy: acc(), counts: { ...counts }, score, result: e.kind === 'result' ? e.result : undefined, x: e.x, y: e.y });
+    events.push({ t: e.t, combo, accuracy: acc(), counts: { ...counts }, score, result: e.kind === 'result' ? e.result : undefined, slider: e.kind === 'result' ? e.slider : undefined, x: e.x, y: e.y });
   }
-  return { objects, events, maxCombo, counts, totalScore: score, scoring };
+  return { objects, events, maxCombo, counts, totalScore: score, scoring, failTime };
 }
 
 /** Latest combo event at or before t (binary search). */

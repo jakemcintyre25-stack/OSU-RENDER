@@ -49,10 +49,69 @@ but the mods bitmask has no ScoreV2 flag (bit 29), so that is not the explanatio
 check whether these replays use a different ruleset, build or difficulty than the map we
 matched by MD5.
 
+## Slider-head ScoreV1 correction (22 October 2026)
+
+The earlier implementation accidentally awarded **zero** flat points for a successfully hit slider head. Stable grants **30 flat points** for the head (plus 10 for each tick and 30 for each repeat/tail), independently of the slider's final 300/100/50 judgement.
+
+- Fixed `sliderPartPoints('head')` to return 30 in commit `27c3485`.
+- Added fixture-independent helper and full slider-judgement tests, including the running score at the head timestamp.
+- GitHub Actions tests, typecheck, build, and empty-fixture judge-check pass for the correction.
+- **The score comparison tables above are historical** and predate this fix; these scores have not been recomputed against real replay files.
+- The previous observation of near-exact scores differing by ~6,140 to ~8,740 points may reflect hundreds of omitted 30-point slider heads, but this explanation still needs replay-by-replay verification.
+
 ## Open items
 
 - Explain the NM and 3f4e99ff gap above before calling M4 done.
-- Residual −0.006% on exact-count replays: probably per-hit rounding or spinner points. Check
+- Residual −0.006% on exact-count replays (historical, before slider-head fix): recompute with updated head points; then check
   whether stable floors the total or each part.
 - Judge count errors (M2) now dominate the score error on near-match replays.
 - HP (M3) is still not implemented.
+
+## Spinner ScoreV1 correction: half-spins and the 1.5-spin bonus gap (23 October 2026)
+
+The previous helper awarded `100` per full spin up to the requirement and switched to `1100` immediately after it. Stable's actual `SpinnerOsu.GetScorePoints()` instead counts half-spins and awards:
+
+- `1100` when `count > requirement + 3` and the parity condition matches;
+- otherwise `100` on the other even half-spin counts;
+- nothing on the remaining odd half-spins.
+
+This means the first bonus arrives after a 1.5-spin gap beyond completion, not on the first spin after completion. It also means an even/odd half-spin asymmetry that a full-spin model cannot reproduce.
+
+Implemented in `spinnerSpinPoints(halfSpins, requiredHalfSpins)`, fed by the real judged half-spin total. Synthetic tests cover counts before, at and after the bonus threshold.
+
+**Still open:** no historical replay score table above has been recomputed because the rights-cleared replays are not in this environment. The correction is source-derived and unit-tested, not proven against real headers. Spinner bonus points should now stop inflating scores on spinner-heavy maps, but M4 remains IN PROGRESS until the local fixture set is rerun.
+
+## Difficulty multiplier correction: stable drain quirks and banker's rounding (23 October 2026)
+
+Source: [`OsuLegacyScoreSimulator`](https://github.com/ppy/osu/blob/master/osu.Game.Rulesets.Osu/Difficulty/OsuLegacyScoreSimulator.cs) and the stable-compatibility notes in [ppy/osu@02975b9](https://github.com/ppy/osu/commit/02975b94985b5327bd2c953013ed4e6c01bc385d).
+
+The previous implementation used the union of clipped breaks, a floating-point drain time with a one-second floor, `Math.round`, and a 2–6 clamp. None of those match stable's score path:
+
+- Every break is summed, including overlapping and out-of-range breaks. Stable does **not** union or clip them.
+- Break and object endpoints use banker's rounding (`Math.Round` default), then the first-to-last span minus summed breaks is integer-divided by 1000.
+- A zero drain length means density 16, not a divide-by-one guard.
+- The final multiplier uses banker's rounding.
+- The stable path has **no 2–6 clamp**; the rounded value is used directly.
+
+Implemented as `roundTiesEven`, `stableDrainSeconds` and a rewritten `difficultyMultiplier`. Integration tests parse a real `.osu` with three overlapping breaks and assert the 29-second summed drain, not the previous 50-second union.
+
+**Still open:** the exact-count replay score tables have not been recomputed, and the 3–23× `16558c56` / `2c6d18da` / `3f4e99ff` gap remains unexplained. The no-clamp and banker's-rounding changes are source-derived but still need real-header confirmation. M4 remains IN PROGRESS.
+
+## Combo-bonus integer truncation (23 October 2026)
+
+Stable's per-object score code casts the combined combo × difficulty × mod multiplier to an integer **before** multiplying by the hit value and dividing by 25:
+
+```csharp
+m_iScoreV1 += hitValue + ((hitValue * (unsigned long long)((double)scoreComboMultiplier
+    * (double)difficultyMultiplier * (double)m_osu->getScoreMultiplier())) / 25);
+```
+
+The previous `hitPoints()` kept the full fractional product, which over-scores objects whenever the combined multiplier is fractional (for example HD/HR's 1.06). At combo 10, difficulty 4, HD 1.06: `10 × 4 × 1.06 = 42.4`, stable truncates to 42 and awards 804 for a 300; the old code awarded 808.
+
+`hitPoints()` now truncates the combined multiplier first. This is a small per-object difference that accumulates over thousands of objects and is a plausible contributor to the residual −0.006% on exact-count replays, but those tables still have not been rerun against real headers.
+
+## ScoreV2 detection (23 October 2026)
+
+Stable stores ScoreV2 as mod bit 29. `decodeReplay()` now exposes `scoreV2`, and `judge-check` skips those replays explicitly with `(ScoreV2; M4 tracks ScoreV1)` instead of reporting a misleading score mismatch.
+
+This does **not** explain the three 3–23× gaps: those replay headers had no ScoreV2 bit. They remain unresolved and likely need a different explanation (ruleset/build/header provenance or a non-standard score source). The detection only prevents future ScoreV2 fixtures from being scored as ScoreV1.

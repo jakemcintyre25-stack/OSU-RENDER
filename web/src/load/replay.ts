@@ -10,6 +10,27 @@ export interface ReplayFrame {
 
 export const KEY = { M1: 1, M2: 2, K1: 4, K2: 8, SMOKE: 16 } as const;
 
+/** Operational input safety ceilings; not official osu! format limits. */
+export const REPLAY_LIMITS = Object.freeze({
+  compressedBytes: 64 * 1024 * 1024,
+  frames: 1_000_000,
+  timeAbsMs: 1_000_000_000,
+  positionAbs: 100_000,
+  maxKeyMask: 65535,
+});
+
+/**
+ * osu!lazer's legacy `.osr` encoder writes its score database version
+ * (`30000000+`) into the header's game-version field. Stable writes a
+ * `YYYYMMDD` build date, so this boundary identifies lazer-origin replays
+ * without guessing from filenames or mod bits.
+ */
+export const FIRST_LAZER_GAME_VERSION = 30_000_000;
+
+export function isLazerGameVersion(gameVersion: number): boolean {
+  return Number.isFinite(gameVersion) && gameVersion >= FIRST_LAZER_GAME_VERSION;
+}
+
 export interface ReplayHeaderStats {
   count300: number;
   count100: number;
@@ -24,15 +45,33 @@ export interface LoadedReplay {
   rulesetId: number;
   beatmapMD5: string;
   rawMods: number;
+  /** The replay's stored total is ScoreV2, not ScoreV1. */
+  scoreV2: boolean;
   mods: string[];
+  /** Header game-version / lazer total-score-version field. */
+  gameVersion: number;
+  /** True when the header version is lazer's 30000000+ range. */
+  isLazer: boolean;
   stats: ReplayHeaderStats | null;
   frames: ReplayFrame[];
   date: Date | null;
 }
 
+/** Stable's ScoreV2 mod bit. ScoreV2 totals are not comparable with ScoreV1. */
+export const SCORE_V2_MOD_BIT = 1 << 29;
+
+export function isScoreV2Mods(rawMods: number): boolean {
+  return (rawMods & SCORE_V2_MOD_BIT) !== 0;
+}
+
 export async function decodeReplay(data: Uint8Array): Promise<LoadedReplay> {
+  if (data.byteLength === 0 || data.byteLength > REPLAY_LIMITS.compressedBytes) {
+    throw new Error('Invalid replay: .osr file size outside safe limits');
+  }
   const score = await new ScoreDecoder().decodeFromBuffer(data, true);
   const info = score.info;
+  const rawMods = Number(info.rawMods) || 0;
+  const gameVersion = Number(score.replay?.gameVersion ?? 0);
   const frames = cleanFrames(
     (score.replay?.frames ?? []).map((f) => {
       const lf = f as unknown as { startTime: number; position: { x: number; y: number }; buttonState?: number };
@@ -43,8 +82,11 @@ export async function decodeReplay(data: Uint8Array): Promise<LoadedReplay> {
     player: info.username ?? '',
     rulesetId: info.rulesetId ?? 0,
     beatmapMD5: (info.beatmapHashMD5 ?? '').toLowerCase(),
-    rawMods: info.rawMods as number,
-    mods: modsFromBits(Number(info.rawMods) || 0),
+    rawMods,
+    scoreV2: isScoreV2Mods(rawMods),
+    mods: modsFromBits(rawMods),
+    gameVersion,
+    isLazer: isLazerGameVersion(gameVersion),
     stats: {
       count300: info.count300,
       count100: info.count100,
@@ -58,11 +100,27 @@ export async function decodeReplay(data: Uint8Array): Promise<LoadedReplay> {
   };
 }
 
-/** Drops the RNG-seed frame and stable's off-screen placeholder frames, and sorts by time. */
+/** Drop known osu!stable placeholders; reject malformed gameplay data, then sort. */
 export function cleanFrames(frames: ReplayFrame[]): ReplayFrame[] {
-  return frames
-    .filter((f) => Number.isFinite(f.t) && !(f.y === -500 && f.x === 256) && f.t !== -12345)
-    .sort((a, b) => a.t - b.t);
+  // Limit before copying or sorting to protect against decompression expansion.
+  if (frames.length > REPLAY_LIMITS.frames) {
+    throw new Error('Invalid replay: too many replay frames');
+  }
+  const valid: ReplayFrame[] = [];
+  for (const frame of frames) {
+    // Replay seed and legacy off-screen sentinel are not cursor samples.
+    if (frame && ((frame.y === -500 && frame.x === 256) || frame.t === -12345)) continue;
+    if (!frame || !Number.isFinite(frame.t) ||
+        !Number.isFinite(frame.x) || !Number.isFinite(frame.y) ||
+        Math.abs(frame.t) > REPLAY_LIMITS.timeAbsMs ||
+        Math.abs(frame.x) > REPLAY_LIMITS.positionAbs ||
+        Math.abs(frame.y) > REPLAY_LIMITS.positionAbs ||
+        !Number.isInteger(frame.keys) || frame.keys < 0 || frame.keys > REPLAY_LIMITS.maxKeyMask) {
+      throw new Error('Invalid replay: non-finite or out-of-range frame data');
+    }
+    valid.push(frame);
+  }
+  return valid.sort((a, b) => a.t - b.t);
 }
 
 const MOD_BITS: [number, string][] = [

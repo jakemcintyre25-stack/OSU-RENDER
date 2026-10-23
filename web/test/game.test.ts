@@ -100,6 +100,33 @@ describe('hit windows', () => {
 });
 
 describe.skipIf(!have)('autoplay + judgement', () => {
+  it('judges every standard difficulty in the optional Renatus archive as full combo', () => {
+    // M2 acceptance gate: run locally with npm run fixtures; CI skips copyrighted fixtures.
+    const standard = osz.difficulties.filter((d) => d.mode === 0);
+    expect(standard.length).toBeGreaterThan(0);
+    const failures: string[] = [];
+    for (const difficulty of standard) {
+      const map = prepareMap(difficulty.text);
+      const judged = judge(map, generateAutoplay(map));
+      const expected = map.objects.reduce(
+        (combo, object) => combo + (object.kind === 'slider' ? 1 + object.parts.length : 1),
+        0,
+      );
+      if (judged.counts.c300 !== map.objects.length ||
+          judged.counts.c100 !== 0 ||
+          judged.counts.c50 !== 0 ||
+          judged.counts.miss !== 0 ||
+          judged.maxCombo !== expected) {
+        failures.push(difficulty.version + ': ' + JSON.stringify({
+          counts: judged.counts,
+          maxCombo: judged.maxCombo,
+          expected,
+        }));
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
   it('judges a perfect autoplay as all 300s with full combo', () => {
     const m = prepareMap(insane);
     const frames = generateAutoplay(m);
@@ -161,6 +188,7 @@ describe('replay files', () => {
     const buf = await new ScoreEncoder().encodeToBuffer(score);
     const r = await decodeReplay(new Uint8Array(buf));
     expect(r.player).toBe('Shaxi');
+    expect(r.isLazer).toBe(false);
     expect(r.beatmapMD5).toBe('abcdef0123456789abcdef0123456789');
     expect(r.mods).toEqual(['HD', 'HR', 'DT']);
     expect(r.stats?.count300).toBe(10);
