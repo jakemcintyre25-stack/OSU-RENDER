@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { judge } from '../src/game/judge';
-import type { PreparedMap, SpinnerObj } from '../src/game/prepare';
+import { spinnerHalfSpinsRequired, type PreparedMap, type SpinnerObj } from '../src/game/prepare';
 import { KEY, type ReplayFrame } from '../src/load/replay';
 
 const START = 1000;
@@ -9,7 +9,7 @@ const CENTER_X = 256;
 const CENTER_Y = 192;
 const RADIUS = 70;
 
-function spinnerMap(spinsRequired = 8): PreparedMap {
+function spinnerMap(spinsRequired = 5): PreparedMap {
   const spinner: SpinnerObj = {
     index: 0, kind: 'spinner', start: START, end: END,
     x: CENTER_X, y: CENTER_Y, comboNumber: 1,
@@ -45,7 +45,13 @@ function spinFrames(
 
 const rotations = (frames: ReplayFrame[]) => judge(spinnerMap(), frames).objects[0].spins ?? 0;
 
-describe('spinner rotation accumulation and RPM limit', () => {
+describe('stable half-spin spinner accumulation and thresholds', () => {
+  it('uses stable half-spin requirement from OD and duration', () => {
+    expect(spinnerHalfSpinsRequired(5, 2000)).toBe(10); // 5 half-spins/s × 2s
+    expect(spinnerHalfSpinsRequired(8, 2000)).toBe(13); // (2.5 + 0.5 × 8) × 2
+    expect(spinnerHalfSpinsRequired(0, 2000)).toBe(6); // 3 half-spins/s × 2s
+  });
+
   it('awards equal spins in clockwise and counterclockwise directions', () => {
     const clockwise = rotations(spinFrames((s) => s * 5));
     const counterClockwise = rotations(spinFrames((s) => -s * 5));
@@ -59,20 +65,25 @@ describe('spinner rotation accumulation and RPM limit', () => {
     expect(judge(spinnerMap(), frames).objects[0].result).toBe(300);
   });
 
-  it('caps implausibly fast movement to approximately 477 RPM', () => {
-    // 25 rps at 1ms gives unambiguous per-frame angles but exceeds stable's cap.
-    const fast = rotations(spinFrames((s) => s * 25, 1));
-    expect(fast).toBeLessThanOrEqual(2 * 477 / 60 + 0.01);
-    expect(fast).toBeGreaterThan(2 * 7.5);
+  it('adds at most one half-spin for a single frame, as stable does', () => {
+    const frames: ReplayFrame[] = [
+      { t: START, x: CENTER_X + RADIUS, y: CENTER_Y, keys: KEY.M1 },
+      { t: END, x: CENTER_X - RADIUS, y: CENTER_Y, keys: KEY.M1 },
+    ];
+    const judged = judge(spinnerMap(), frames);
+    expect(judged.objects[0].halfSpins).toBe(1);
+    expect(judged.objects[0].result).toBe(0); // below the 25% miss threshold
   });
 
   it('does not credit time spent with no key held', () => {
     const frames = spinFrames((s) => s * 5, 10, (t) => t < 2000);
-    expect(rotations(frames)).toBeGreaterThan(4.8);
-    expect(rotations(frames)).toBeLessThan(5.1);
+    // One second of held spinning at 5 rps. The first frame establishes the
+    // reference angle, so the counted total is one sampling step short.
+    expect(rotations(frames)).toBeGreaterThan(4.4);
+    expect(rotations(frames)).toBeLessThan(4.6);
   });
 
-  it('passes accumulated spins and bonus points into ScoreV1 after a reversal', () => {
+  it('passes accumulated half-spins and bonus points into ScoreV1 after a reversal', () => {
     const normal = judge(spinnerMap(), spinFrames((s) => s * 4.6));
     const reversing = judge(spinnerMap(), spinFrames((s) => s <= 1 ? s * 4.6 : 4.6 - (s - 1) * 4.6));
     expect(reversing.objects[0].result).toBe(300);
@@ -82,11 +93,13 @@ describe('spinner rotation accumulation and RPM limit', () => {
     expect(reversing.scoring.some((event) => event.flat > 0)).toBe(true);
   });
 
-  it('retains the defined 300/100/50/miss spinner thresholds', () => {
+  it('uses stable 300/100/50/miss spinner thresholds', () => {
     const result = (rps: number) => judge(spinnerMap(), spinFrames((s) => s * rps)).objects[0].result;
+    // Required = 10 half-spins; 300 needs >10, 100 needs >8, miss below 2.
     expect(result(5)).toBe(300);
-    expect(result(3.6)).toBe(100);
+    expect(result(2.4)).toBe(100); // 9.6 half-spins, floors to 9
     expect(result(1.5)).toBe(50);
+    expect(result(0.25)).toBe(0);
     expect(result(0)).toBe(0);
   });
 });

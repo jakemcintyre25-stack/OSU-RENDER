@@ -34,9 +34,12 @@ describe('ScoreV1 helpers', () => {
     expect(sliderPartPoints('head')).toBe(30);
   });
 
-  it('spinner: 100 per spin up to the requirement, 1100 per bonus spin', () => {
-    expect(spinnerSpinPoints(3.9, 5)).toBe(300);
-    expect(spinnerSpinPoints(7, 5)).toBe(5 * 100 + 2 * 1100);
+  it('spinner: stable half-spin ticks, 1.5-spin bonus gap and 1100 bonus ticks', () => {
+    // Half-spins: 100 only on even counts, 1100 only after required + 3.
+    expect(spinnerSpinPoints(1, 10)).toBe(0);
+    expect(spinnerSpinPoints(13, 10)).toBe(6 * 100);
+    expect(spinnerSpinPoints(15, 10)).toBe(7 * 100 + 1100);
+    expect(spinnerSpinPoints(18, 10)).toBe(9 * 100 + 2 * 1100);
   });
 
   it('clamps the stable ScoreV1 difficulty multiplier to 2..6', () => {

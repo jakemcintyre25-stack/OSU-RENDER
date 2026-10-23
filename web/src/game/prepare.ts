@@ -220,3 +220,14 @@ export function sliderBallAt(s: SliderObj, t: number): Vec {
 export function hitWindows(od: number) {
   return { w300: 80 - 6 * od, w100: 140 - 8 * od, w50: 200 - 10 * od };
 }
+
+/** osu!stable's spinner rotation requirement in HALF-spins.
+ *
+ * Stable uses `MapDifficultyRange(OD, 3, 5, 7.5)` half-spins per second and
+ * truncates `durationSeconds * ratio` to an integer. Lazer counts full spins
+ * and is therefore up to half a spin more lenient; this mirrors stable.
+ */
+export function spinnerHalfSpinsRequired(od: number, durationMs: number): number {
+  const halfSpinsPerSecond = od <= 5 ? 3 + 0.4 * od : 2.5 + 0.5 * od;
+  return Math.trunc((durationMs / 1000) * halfSpinsPerSecond);
+}

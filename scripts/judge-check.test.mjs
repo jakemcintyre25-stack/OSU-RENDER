@@ -49,13 +49,13 @@ describe('judge-check commands and comparison', () => {
       objects: [
         { result: 300, hitTime: 1072 },
         { result: 100, parts: [true, false] },
-        { result: 100, spins: 6.375 },
+        { result: 100, halfSpins: 12, halfSpinsRequired: 17 },
       ],
     });
     assert.equal(rows.length, 3);
     assert.match(rows[0], /0:01\.040.*circle.*300.*press=0:01\.072 delta=\+32ms/);
     assert.match(rows[1], /1:01\.040.*slider.*100.*✓×/);
-    assert.match(rows[2], /1:30\.000.*spinner.*100.*spins=6\.38\/8/);
+    assert.match(rows[2], /1:30\.000.*spinner.*100.*halfSpins=12\/17/);
   });
 });
 

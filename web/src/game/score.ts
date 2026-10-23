@@ -42,10 +42,24 @@ export function hitPoints(base: number, comboBefore: number, difficulty: number,
   return base + Math.floor((base * comboMultiplier * difficulty * mod) / 25);
 }
 
-/** Points for a spinner's spins: 100 per spin up to the requirement, 1100 per bonus spin. */
-export function spinnerSpinPoints(spins: number, required: number): number {
-  const n = Math.floor(spins);
-  return Math.min(n, required) * 100 + Math.max(0, n - required) * 1100;
+/**
+ * Points for a spinner's rotations, using osu!stable's HALF-spin accounting.
+ *
+ * Stable awards 100 on every even half-spin after the first one (i.e. per full
+ * spin), and 1100 instead once the count passes `required + 3` half-spins and
+ * matches its parity. This leaves a 1.5-spin gap after completion before the
+ * first 1000-point bonus, unlike the simpler "bonus immediately after
+ * completion" wording in the wiki.
+ */
+export function spinnerSpinPoints(halfSpins: number, requiredHalfSpins: number): number {
+  const n = Math.floor(halfSpins);
+  let points = 0;
+  for (let count = 2; count <= n; count++) {
+    const bonusThreshold = requiredHalfSpins + 3;
+    if (count > bonusThreshold && (count - bonusThreshold) % 2 === 0) points += 1100;
+    else if (count > 1 && count % 2 === 0) points += 100;
+  }
+  return points;
 }
 
 /** Flat stable slider-part points (not multiplied): 10 for a tick, 30 for head/repeat/tail. */

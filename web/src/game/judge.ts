@@ -7,7 +7,7 @@
 // Phase 6 replaces the ✗ items; header stats in the replay are the yardstick.
 
 import type { PreparedMap, SliderObj, SpinnerObj } from './prepare';
-import { hitWindows, sliderBallAt } from './prepare';
+import { hitWindows, sliderBallAt, spinnerHalfSpinsRequired } from './prepare';
 import { cursorAt, KEY, type ReplayFrame } from '../load/replay';
 import { hitPoints, modMultiplier, sliderPartPoints, spinnerSpinPoints } from './score';
 
@@ -26,8 +26,12 @@ export interface ObjectJudgement {
   parts?: boolean[];
   /** Slider only: time ranges when the follow circle was active. */
   tracking?: [number, number][];
-  /** Spinner only: completed rotations. */
+  /** Spinner only: completed full rotations (for display). */
   spins?: number;
+  /** Spinner only: completed HALF-spins, as osu!stable counts them. */
+  halfSpins?: number;
+  /** Spinner only: stable's truncated half-spin completion requirement. */
+  halfSpinsRequired?: number;
 }
 
 export interface ComboEvent {
@@ -162,7 +166,7 @@ export function judge(map: PreparedMap, frames: ReplayFrame[], options: JudgeOpt
     } else if (o.kind === 'slider') {
       judgeSlider(o, j, headHit[i] ?? 0, frames, r);
     } else {
-      judgeSpinner(o, j, frames);
+      judgeSpinner(o, j, frames, map.od);
     }
   });
 
@@ -238,21 +242,17 @@ function judgeSlider(s: SliderObj, j: ObjectJudgement, head: Hit, frames: Replay
 }
 
 /**
- * Integrate held cursor movement into spinner revolutions.
+ * osu!stable spinner rotation accumulation, in HALF-spins.
  *
- * Stable supports spinning in either direction and caps speed at 477 RPM.
- * Integrating signed angles and taking abs at the end cancels legitimate spins
- * after a reversal; instead, count each direction's angular displacement.
- *
- * stable: this is a per-frame capped integration; the original client's
- * velocity smoothing and frame-rate-specific behaviour still require
- * reference-replay parity checks before M2 can be marked complete.
+ * Stable adds `min(1, |angleDelta| / π)` per held frame, then truncates the
+ * running total when it scores a half-spin. This is deliberately not the old
+ * per-millisecond 477 RPM clamp: stable counts half-spins and allows at most
+ * one half-spin per frame. The original client's acceleration smoothing is a
+ * separate open parity item, not something this function claims to emulate.
  */
-export function spinnerRotations(frames: ReplayFrame[], start: number, end: number): number {
-  const maxRadiansPerMs = (2 * Math.PI * (477 / 60)) / 1000;
+export function spinnerHalfSpins(frames: ReplayFrame[], start: number, end: number): number {
   const pressMask = KEY.M1 | KEY.M2;
   let previousAngle: number | null = null;
-  let previousTime: number | null = null;
   let accumulated = 0;
 
   for (const frame of frames) {
@@ -261,30 +261,34 @@ export function spinnerRotations(frames: ReplayFrame[], start: number, end: numb
     if (!(frame.keys & pressMask) ||
         !Number.isFinite(frame.x) || !Number.isFinite(frame.y)) {
       previousAngle = null;
-      previousTime = null;
       continue;
     }
     const angle = Math.atan2(frame.y - 192, frame.x - 256);
-    if (previousAngle !== null && previousTime !== null) {
-      const elapsed = frame.t - previousTime;
-      if (elapsed > 0) {
-        let difference = angle - previousAngle;
-        if (difference > Math.PI) difference -= 2 * Math.PI;
-        else if (difference < -Math.PI) difference += 2 * Math.PI;
-        accumulated += Math.min(Math.abs(difference), elapsed * maxRadiansPerMs);
-      }
+    if (previousAngle !== null) {
+      let difference = angle - previousAngle;
+      if (difference > Math.PI) difference -= 2 * Math.PI;
+      else if (difference < -Math.PI) difference += 2 * Math.PI;
+      accumulated += Math.min(1, Math.abs(difference) / Math.PI);
     }
     previousAngle = angle;
-    previousTime = frame.t;
   }
-  return accumulated / (2 * Math.PI);
+  return accumulated;
 }
 
-function judgeSpinner(s: SpinnerObj, j: ObjectJudgement, frames: ReplayFrame[]) {
-  const spins = spinnerRotations(frames, s.start, s.end);
-  j.spins = spins;
-  const need = s.spinsRequired;
-  j.result = spins >= need ? 300 : spins >= need - 1 ? 100 : spins >= need * 0.25 ? 50 : 0;
+function judgeSpinner(s: SpinnerObj, j: ObjectJudgement, frames: ReplayFrame[], od: number) {
+  const halfSpins = Math.floor(spinnerHalfSpins(frames, s.start, s.end));
+  const required = spinnerHalfSpinsRequired(od, s.end - s.start);
+  j.halfSpins = halfSpins;
+  j.halfSpinsRequired = required;
+  j.spins = halfSpins / 2;
+  // stable SpinnerOsu.Hit(): requirement 0 auto-clears; below 25% misses;
+  // > requirement is 300; > requirement - 2 is 100; otherwise 50.
+  const minimum = Math.trunc(required * 0.25);
+  if (required === 0) j.result = 300;
+  else if (halfSpins < minimum) j.result = 0;
+  else if (halfSpins > required) j.result = 300;
+  else if (halfSpins > required - 2) j.result = 100;
+  else j.result = 50;
   j.resultTime = s.end;
 }
 
@@ -318,7 +322,14 @@ function buildEvents(map: PreparedMap, objects: ObjectJudgement[], w50: number):
       });
       raw.push({ t: j.resultTime, kind: 'result', result: j.result, x: o.parts.at(-1)?.x ?? o.x, y: o.parts.at(-1)?.y ?? o.y, slider: true });
     } else if (o.kind === 'spinner') {
-      raw.push({ t: j.resultTime, kind: 'result', result: j.result, x: o.x, y: o.y, flat: spinnerSpinPoints(j.spins ?? 0, o.spinsRequired) });
+      raw.push({
+        t: j.resultTime,
+        kind: 'result',
+        result: j.result,
+        x: o.x,
+        y: o.y,
+        flat: spinnerSpinPoints(j.halfSpins ?? 0, j.halfSpinsRequired ?? 0),
+      });
     } else {
       raw.push({ t: j.result > 0 ? (j.hitTime ?? j.resultTime) : j.resultTime, kind: 'result', result: j.result, x: o.x, y: o.y });
     }
