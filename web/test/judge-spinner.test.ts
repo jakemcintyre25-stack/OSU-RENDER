@@ -102,4 +102,17 @@ describe('stable half-spin spinner accumulation and thresholds', () => {
     expect(result(0.25)).toBe(0);
     expect(result(0)).toBe(0);
   });
+
+  it('records the judged spin range and stable bonus tick timestamps', () => {
+    const judged = judge(spinnerMap(), spinFrames((s) => s * 5));
+    expect(judged.objects[0].halfSpins).toBeGreaterThan(10);
+    const range = judged.objects[0].spinnerSpinRange!;
+    expect(range[0]).toBeGreaterThanOrEqual(START);
+    expect(range[1]).toBeLessThanOrEqual(END);
+    expect(range[1]).toBeGreaterThan(range[0]);
+    const bonuses = judged.objects[0].spinnerBonusTicks!;
+    expect(bonuses.length).toBeGreaterThan(0);
+    expect(bonuses).toEqual([...bonuses].sort((a, b) => a - b));
+    expect(bonuses.every((t) => t >= START && t <= END)).toBe(true);
+  });
 });

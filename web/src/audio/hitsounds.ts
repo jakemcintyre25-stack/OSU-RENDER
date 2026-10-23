@@ -246,30 +246,25 @@ export function planHitsounds(
     }
     const bits = int(row[4]);
     if (kind === 'spinner') {
+      const settings = sampleSettings(row[6]);
+      const volume = settings.volume || activeSample(object.start).volume;
       // Spinning sound is a skin loop, independent of whether the spinner is
-      // eventually completed. Bonus clips follow stable's half-spin ticks.
-      const halfSpins = judged.halfSpins ?? 0;
-      if (halfSpins > 0) {
+      // eventually completed. Use the judge's real first/last half-spin
+      // timestamps instead of spreading ticks uniformly over the spinner.
+      if (judged.spinnerSpinRange) {
         // Missing optional spinner samples must not inflate the unavailable
         // count for every bonus tick; check once before scheduling.
         if (lookupSample('spinnerspin.wav', true)) {
-          scheduleLoop(object.start, object.end, 'spinnerspin.wav', 100);
+          scheduleLoop(judged.spinnerSpinRange[0], judged.spinnerSpinRange[1], 'spinnerspin.wav', volume);
         }
-        if (lookupSample('spinnerbonus.wav', true)) {
-          const required = judged.halfSpinsRequired ?? 0;
-          const bonusThreshold = required + 3;
-          const total = Math.max(1, halfSpins);
-          for (let count = 2; count <= halfSpins; count++) {
-            if (count > bonusThreshold && (count - bonusThreshold) % 2 === 0) {
-              const t = object.start + (object.end - object.start) * (count / total);
-              scheduleFile(t, 'spinnerbonus.wav', 100);
-            }
-          }
+        const bonuses = judged.spinnerBonusTicks ?? [];
+        if (bonuses.length && lookupSample('spinnerbonus.wav', true)) {
+          for (const t of bonuses) scheduleFile(t, 'spinnerbonus.wav', volume);
         }
       }
       // osu!stable allows a spinner to carry a normal + addition hitsound
       // at its end. Do not sound an unsuccessful spinner completion.
-      if (judged.result > 0) scheduleHit(object.end, bits, sampleSettings(row[6]));
+      if (judged.result > 0) scheduleHit(object.end, bits, settings);
       continue;
     }
     if (kind === 'circle') {

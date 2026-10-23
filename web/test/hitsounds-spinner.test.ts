@@ -58,7 +58,9 @@ describe('M5 beatmap-defined spinner completion hitsounds', () => {
     const map = prepareMap(chart);
     const judged = judge(map, []);
     expect(judged.objects[0].result).toBe(0);
-    expect(planHitsounds(chart, map, judged, createArchive(), 'spinner.osu').events).toEqual([]);
+    const planned = planHitsounds(chart, map, judged, createArchive(), 'spinner.osu');
+    expect(planned.events).toEqual([]);
+    expect(planned.loops).toEqual([]);
   });
 
   it('does not manufacture the missing clap layer when its file is absent', () => {
@@ -69,17 +71,20 @@ describe('M5 beatmap-defined spinner completion hitsounds', () => {
     expect(planned.unavailable).toBe(1);
   });
 
-  it('uses user-skin spinnerspin/bonus audio during a spun spinner', () => {
+  it('uses user-skin spinnerspin/bonus audio at the judged half-spin timestamps', () => {
     const map = prepareMap(chart);
     const judged = judge(map, generateAutoplay(map));
-    const spin = judged.objects[0].halfSpins ?? 0;
-    expect(spin).toBeGreaterThan((judged.objects[0].halfSpinsRequired ?? 0) + 3);
+    const spinner = judged.objects[0];
+    expect(spinner.halfSpins).toBeGreaterThan((spinner.halfSpinsRequired ?? 0) + 3);
     const skin = openOsz(zipSync({
       'spinnerspin.wav': new Uint8Array([7, 8]),
       'spinnerbonus.wav': new Uint8Array([9, 10]),
     }));
     const planned = planHitsounds(chart, map, judged, createArchive(), 'spinner.osu', skin);
-    expect(planned.loops?.some((loop) => loop.sample === 'skin:spinnerspin.wav' && loop.end > loop.start)).toBe(true);
-    expect(planned.events.some((event) => event.sample === 'skin:spinnerbonus.wav')).toBe(true);
+    const loop = planned.loops?.find((item) => item.sample === 'skin:spinnerspin.wav');
+    expect(loop?.start).toBe(spinner.spinnerSpinRange![0]);
+    expect(loop?.end).toBe(spinner.spinnerSpinRange![1]);
+    const bonuses = planned.events.filter((event) => event.sample === 'skin:spinnerbonus.wav');
+    expect(bonuses.map((event) => event.t)).toEqual(spinner.spinnerBonusTicks);
   });
 });
