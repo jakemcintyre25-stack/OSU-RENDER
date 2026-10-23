@@ -49,6 +49,25 @@ describe('M9 browser video capture', () => {
     expect(() => capture.start(canvas)).toThrow('encoder initialization failed');
   });
 
+  it('rejects and releases tracks when a browser encoder throws during stop', async () => {
+    const stopTrack = vi.fn();
+    const stream = { getTracks: () => [{ stop: stopTrack }] };
+    const canvas = { captureStream: () => stream } as unknown as HTMLCanvasElement;
+    class BrokenStopRecorder {
+      static isTypeSupported = () => true;
+      state = 'inactive';
+      stream = stream;
+      start() { this.state = 'recording'; }
+      stop() { throw new Error('encoder stop failed'); }
+    }
+    vi.stubGlobal('MediaRecorder', BrokenStopRecorder);
+    const capture = new ReplayVideoCapture();
+    capture.start(canvas);
+    await expect(capture.stop()).rejects.toThrow('encoder stop failed');
+    expect(stopTrack).toHaveBeenCalledOnce();
+    expect(capture.active).toBe(false);
+    await expect(capture.stop()).rejects.toThrow('No active capture');
+  });
   it('chooses an actually supported WebM encoder in preference order', () => {
     expect(chooseCaptureMime(x => x === 'video/webm;codecs=vp8')).toBe('video/webm;codecs=vp8');
     expect(chooseCaptureMime(() => false)).toBeNull();
