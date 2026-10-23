@@ -31,7 +31,7 @@ function shade(color: number, k: number): number {
 interface CircleParts {
   root: Container;
   body: Graphics;
-  light: Graphics;
+  light: Sprite;
   number: Text;
   numberContainer?: Container;
   skinBody?: Sprite;
@@ -86,6 +86,7 @@ export class PlayfieldRenderer {
   private judgementLayer = new Container();
   private cursorLayer = new Container();
   private cursorGfx = new Graphics();
+  private hitGlowTexture = Texture.EMPTY;
   private cursorMiddleSprite = new Sprite(Texture.EMPTY);
   private cursorSprite = new Sprite(Texture.EMPTY);
   private cursorTrailSprites: Sprite[] = [];
@@ -126,6 +127,18 @@ export class PlayfieldRenderer {
       autoStart: false,
     });
     host.appendChild(this.app.canvas);
+    const glowCanvas = document.createElement('canvas');
+    glowCanvas.width = glowCanvas.height = 128;
+    const glowContext = glowCanvas.getContext('2d');
+    if (glowContext) {
+      const gradient = glowContext.createRadialGradient(64, 64, 0, 64, 64, 64);
+      gradient.addColorStop(0, 'rgba(255,255,255,0.9)');
+      gradient.addColorStop(0.35, 'rgba(255,255,255,0.35)');
+      gradient.addColorStop(1, 'rgba(255,255,255,0)');
+      glowContext.fillStyle = gradient;
+      glowContext.fillRect(0, 0, 128, 128);
+      this.hitGlowTexture = Texture.from(glowCanvas);
+    }
     this.app.stage.addChild(this.bg, this.field, this.hud);
     this.followLayer.addChild(this.followGfx);
     this.field.addChild(this.followLayer, this.objectLayer, this.approachLayer, this.judgementLayer, this.flashGfx, this.cursorLayer);
@@ -355,8 +368,10 @@ export class PlayfieldRenderer {
     const r = this.map!.radius;
     const color = this.displayColor(o);
     const root = new Container();
-    const light = new Graphics();
-    light.circle(0, 0, r * 1.8).fill({ color: 0xffffff, alpha: 0.18 });
+    const light = new Sprite(this.hitGlowTexture);
+    light.anchor.set(0.5);
+    light.width = light.height = r * 4.6;
+    light.blendMode = 'add';
     light.visible = false;
     const body = new Graphics();
     body.circle(0, 0, r * 0.93).fill({ color: shade(color, 0.55) });
