@@ -29,6 +29,27 @@ async function cached(req: Request, ctx: ExecutionContext, ttlSeconds: number, b
   return res;
 }
 
+/** Baseline response hardening applied to API and static-asset responses.
+ * CSP is intentionally absent until the player/export paths have been verified
+ * against a real policy; these headers do not change response bodies.
+ */
+export const SECURITY_HEADERS: ReadonlyArray<readonly [string, string]> = [
+  ['X-Content-Type-Options', 'nosniff'],
+  ['Referrer-Policy', 'strict-origin-when-cross-origin'],
+  ['Permissions-Policy', 'camera=(), microphone=(), geolocation=()'],
+  ['Strict-Transport-Security', 'max-age=31536000; includeSubDomains'],
+];
+
+export function applySecurityHeaders(response: Response): Response {
+  const headers = new Headers(response.headers);
+  for (const [name, value] of SECURITY_HEADERS) headers.set(name, value);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 const ID = /^\d{1,12}$/;
 
 export async function handleApi(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -92,13 +113,13 @@ export default {
     const url = new URL(req.url);
     if (url.pathname.startsWith('/api/')) {
       try {
-        return await handleApi(req, env, ctx);
+        return applySecurityHeaders(await handleApi(req, env, ctx));
       } catch (e) {
-        if (e instanceof HttpError) return json({ error: e.message }, e.status);
+        if (e instanceof HttpError) return applySecurityHeaders(json({ error: e.message }, e.status));
         console.error(e);
-        return json({ error: 'Something went wrong on the server' }, 500);
+        return applySecurityHeaders(json({ error: 'Something went wrong on the server' }, 500));
       }
     }
-    return env.ASSETS.fetch(req);
+    return applySecurityHeaders(await env.ASSETS.fetch(req));
   },
 } satisfies ExportedHandler<Env>;
