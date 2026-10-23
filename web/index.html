@@ -54,12 +54,17 @@
           <span>Drop a <b>.osk</b> skin archive or click to choose</span>
         </label>
         <p id="osk-status" class="muted small">Uses your own skin audio for sounds missing from the beatmap. Supported visual skin sprites also apply to the next replay you open.</p>
+        <button type="button" id="osk-clear" class="link-button" hidden>Forget saved skin</button>
       </section>
       <footer class="muted small">Not affiliated with ppy. Beatmaps are downloaded from community mirrors.</footer>
     </div>
 
     <div id="player" hidden>
       <div id="stage"></div>
+      <div id="hpbar" class="hpbar" hidden role="progressbar" aria-label="Health" aria-valuemin="0" aria-valuemax="200" aria-valuenow="200">
+        <div id="hpfill" class="hp-fill"></div>
+      </div>
+      <div id="fail" class="fail" hidden role="status">Failed</div>
       <div class="controls">
         <button id="back" title="Back (Esc)">←</button>
         <button id="playpause" title="Play / pause (Space)">▶</button>
@@ -88,12 +93,45 @@
         </label>
         <label class="ctl option-ctl" title="Show the recent cursor trail"><input type="checkbox" id="cursor-trail" checked />Trail</label>
         <label class="ctl option-ctl" title="Show keyboard and mouse input overlay"><input type="checkbox" id="key-overlay" checked />Keys</label>
-        <button id="capture-video" title="Record up to 60 seconds of video-only WebM from the current replay" disabled>Record WebM</button>
+        <button id="capture-video" title="Record up to 60 seconds of the current replay in real time" disabled>Record WebM</button>
+        <button id="export-video" title="Render the full replay to a deterministic video file" disabled>Export video</button>
         <button id="share-score" title="Copy a shareable link to this osu! score" disabled>Share replay</button>
         <button id="info-btn" title="Details">i</button>
       </div>
+      <div id="hit-error" class="hit-error" hidden title="Hit offsets from the last 40 successful hits">
+        <span class="hit-error-label">Hit error</span>
+        <div class="hit-error-track"><span class="hit-error-zero"></span><div id="hit-error-points"></div></div>
+        <span id="hit-error-text" class="hit-error-text">—</span>
+      </div>
       <div id="info" class="info" hidden></div>
     </div>
+
+    <dialog id="export-dialog" class="export-dialog" aria-labelledby="export-title">
+      <h2 id="export-title">Export video</h2>
+      <p id="export-capability" class="muted small">Checking encoder support…</p>
+      <div class="export-options">
+        <label>Resolution
+          <select id="export-resolution">
+            <option value="720p" selected>720p</option>
+            <option value="1080p">1080p</option>
+          </select>
+        </label>
+        <label>Frame rate
+          <select id="export-fps">
+            <option value="30" selected>30 fps</option>
+            <option value="60">60 fps</option>
+          </select>
+        </label>
+      </div>
+      <p id="export-estimate" class="muted small"></p>
+      <progress id="export-progress" max="1" value="0"></progress>
+      <p id="export-status" class="muted small" role="status" aria-live="polite"></p>
+      <div class="export-actions">
+        <button type="button" id="export-start">Export</button>
+        <button type="button" id="export-cancel" disabled>Cancel</button>
+        <button type="button" id="export-close">Close</button>
+      </div>
+    </dialog>
 
     <div id="loading" class="loading" hidden>
       <div class="loading-box">

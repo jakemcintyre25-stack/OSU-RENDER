@@ -3,9 +3,10 @@ import type { OszArchive } from '../load/osz';
 export const VISUAL_SKIN_KEYS = [
   'hitcircle', 'hitcircleoverlay', 'approachcircle', 'sliderb', 'sliderfollowcircle',
   'cursor', 'cursormiddle', 'cursortrail', 'reversearrow', 'sliderstartcircle',
-  'sliderendcircle', 'spinner-background', 'spinner-circle', 'spinner-approachcircle',
+  'sliderstartcircleoverlay', 'sliderendcircle', 'sliderendcircleoverlay',
+  'spinner-background', 'spinner-circle', 'spinner-approachcircle',
 ] as const;
-export type VisualSkinKey = typeof VISUAL_SKIN_KEYS[number];
+export type VisualSkinKey = typeof VISUAL_SKIN_KEYS[number] | `sliderb${number}` | `font${number}` | `combo${number}`;
 export type VisualSkinFiles = Partial<Record<VisualSkinKey, Uint8Array>>;
 
 export interface VisualSkinConfig {
@@ -14,49 +15,118 @@ export interface VisualSkinConfig {
   cursorCentre: boolean;
   sliderBallFlip: boolean;
   sliderBallFrames: number;
+  /** [General] AnimationFramerate; 60 when absent/invalid. */
+  animationFramerate: number;
+  /** 128 px skin cursor scaling; 1 is the osu! default. */
+  cursorScale: number;
+  /** [Colours] Combo1..Combo8 overrides, empty when the skin has none. */
+  comboColors: number[];
+  sliderBorder: number | null;
+  sliderTrackOverride: number | null;
+  spinnerBackground: number | null;
+  /** [Fonts] HitCirclePrefix, validated to a safe sprite stem. */
+  hitCirclePrefix: string;
+  /** [Fonts] HitCircleOverlap in skin pixels. */
+  hitCircleOverlap: number;
+  /** [Fonts] ComboPrefix for the HUD combo counter. */
+  comboPrefix: string;
+  /** [Fonts] ComboOverlap in skin pixels. */
+  comboOverlap: number;
 }
 
-const DEFAULT_CONFIG: VisualSkinConfig = {
+export const DEFAULT_VISUAL_SKIN_CONFIG: VisualSkinConfig = {
   cursorRotate: true, cursorExpand: true, cursorCentre: true,
-  sliderBallFlip: true, sliderBallFrames: 1,
+  sliderBallFlip: true, sliderBallFrames: 1, animationFramerate: 60, cursorScale: 1,
+  comboColors: [], sliderBorder: null, sliderTrackOverride: null, spinnerBackground: null,
+  hitCirclePrefix: 'default', hitCircleOverlap: 0,
+  comboPrefix: 'default', comboOverlap: 0,
 };
 
-/** Parse only known, bounded [General] skin.ini settings. */
+function rgb(value: string): number | null {
+  const parts = value.split(',').map((part) => Number(part.trim()));
+  if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return null;
+  return (parts[0] << 16) | (parts[1] << 8) | parts[2];
+}
+
+/** Parse only known, bounded [General] and [Colours] skin.ini settings. */
 export function visualSkinConfig(skin: OszArchive): VisualSkinConfig {
   const ini = skin.files.get('skin.ini');
-  if (!ini || ini.length > 256 * 1024) return { ...DEFAULT_CONFIG };
-  const config = { ...DEFAULT_CONFIG };
+  if (!ini || ini.length > 256 * 1024) return { ...DEFAULT_VISUAL_SKIN_CONFIG, comboColors: [] };
+  const config: VisualSkinConfig = { ...DEFAULT_VISUAL_SKIN_CONFIG, comboColors: [] };
   const lines = new TextDecoder('utf-8').decode(ini).replace(/^\uFEFF/, '').split(/\r?\n/);
-  let general = false;
+  let section = '';
+  const combos = new Map<number, number>();
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      general = trimmed.toLowerCase() === '[general]';
+      section = trimmed.slice(1, -1).trim().toLowerCase();
       continue;
     }
-    if (!general || !trimmed || trimmed.startsWith('//') || trimmed.startsWith(';')) continue;
+    if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith(';')) continue;
     const colon = trimmed.indexOf(':');
     if (colon < 0) continue;
     const key = trimmed.slice(0, colon).trim().toLowerCase();
     const value = trimmed.slice(colon + 1).split('//')[0].trim();
-    const boolean = /^(true|1)$/i.test(value) ? true : /^(false|0)$/i.test(value) ? false : null;
-    if (key === 'cursorrotate' && boolean !== null) config.cursorRotate = boolean;
-    if (key === 'cursorexpand' && boolean !== null) config.cursorExpand = boolean;
-    if (key === 'cursorcentre' && boolean !== null) config.cursorCentre = boolean;
-    if (key === 'sliderballflip' && boolean !== null) config.sliderBallFlip = boolean;
-    if (key === 'sliderballframes' && /^\d+$/.test(value)) {
-      const n = Number(value);
-      if (n >= 1 && n <= 128) config.sliderBallFrames = n;
+    if (section === 'general') {
+      const boolean = /^(true|1)$/i.test(value) ? true : /^(false|0)$/i.test(value) ? false : null;
+      if (key === 'cursorrotate' && boolean !== null) config.cursorRotate = boolean;
+      if (key === 'cursorexpand' && boolean !== null) config.cursorExpand = boolean;
+      if (key === 'cursorcentre' && boolean !== null) config.cursorCentre = boolean;
+      if (key === 'sliderballflip' && boolean !== null) config.sliderBallFlip = boolean;
+      if (key === 'sliderballframes' && /^\d+$/.test(value)) {
+        const n = Number(value);
+        if (n >= 1 && n <= 128) config.sliderBallFrames = n;
+      }
+      if (key === 'animationframerate' && /^\d+$/.test(value)) {
+        const n = Number(value);
+        if (n >= 1 && n <= 120) config.animationFramerate = n;
+      }
+      if (key === 'cursorscale' && /^\d+(?:\.\d+)?$/.test(value)) {
+        const n = Number(value);
+        if (n >= 0.1 && n <= 3) config.cursorScale = n;
+      }
+    } else if (section === 'colours') {
+      const combo = /^combo([1-8])$/.exec(key);
+      if (combo) {
+        const color = rgb(value);
+        if (color !== null) combos.set(Number(combo[1]), color);
+      } else if (key === 'sliderborder') {
+        config.sliderBorder = rgb(value);
+      } else if (key === 'slidertrackoverride') {
+        config.sliderTrackOverride = rgb(value);
+      } else if (key === 'spinnerbackground') {
+        config.spinnerBackground = rgb(value);
+      }
+    } else if (section === 'fonts') {
+      if (key === 'hitcircleprefix' && /^[a-z0-9_-]{1,32}$/i.test(value)) {
+        config.hitCirclePrefix = value.toLowerCase();
+      } else if (key === 'hitcircleoverlap' && /^-?\d+$/.test(value)) {
+        const n = Number(value);
+        if (n >= -128 && n <= 128) config.hitCircleOverlap = n;
+      } else if (key === 'comboprefix' && /^[a-z0-9_-]{1,32}$/i.test(value)) {
+        config.comboPrefix = value.toLowerCase();
+      } else if (key === 'combooverlap' && /^-?\d+$/.test(value)) {
+        const n = Number(value);
+        if (n >= -128 && n <= 128) config.comboOverlap = n;
+      }
     }
   }
+  config.comboColors = [...combos.entries()].sort((a, b) => a[0] - b[0]).map(([, color]) => color);
   return config;
+}
+
+/** Pick a [Colours] override for an object while preserving the map's combo cycle. */
+export function skinComboColor(mapColors: number[], mapColor: number, skinColors: number[]): number {
+  if (!skinColors.length) return mapColor;
+  const index = mapColors.indexOf(mapColor);
+  return skinColors[(index < 0 ? 0 : index) % skinColors.length];
 }
 
 
 /** Resolve supported .osk root sprites. @2x assets take priority over 1x.
  * No nested files, arbitrary paths, SVG, or untrusted skin.ini references.
  */
-export function visualSkinFiles(skin: OszArchive): VisualSkinFiles {
+export function visualSkinFiles(skin: OszArchive, sliderBallFrames = 0, fontPrefix = 'default', comboPrefix = 'default'): VisualSkinFiles {
   const found: VisualSkinFiles = {};
   for (const key of VISUAL_SKIN_KEYS) {
     const hi = skin.files.get(`${key}@2x.png`);
@@ -64,7 +134,54 @@ export function visualSkinFiles(skin: OszArchive): VisualSkinFiles {
     if (hi?.length) found[key] = hi;
     else if (lo?.length) found[key] = lo;
   }
+  const frameCount = Math.max(0, Math.min(128, Math.floor(sliderBallFrames)));
+  for (let i = 0; i < frameCount; i++) {
+    const hi = skin.files.get(`sliderb${i}@2x.png`);
+    const lo = skin.files.get(`sliderb${i}.png`);
+    if (hi?.length) found[`sliderb${i}`] = hi;
+    else if (lo?.length) found[`sliderb${i}`] = lo;
+  }
+  const prefix = /^[a-z0-9_-]{1,32}$/i.test(fontPrefix) ? fontPrefix.toLowerCase() : 'default';
+  for (let digit = 0; digit <= 9; digit++) {
+    const hi = skin.files.get(`${prefix}-${digit}@2x.png`);
+    const lo = skin.files.get(`${prefix}-${digit}.png`);
+    if (hi?.length) found[`font${digit}`] = hi;
+    else if (lo?.length) found[`font${digit}`] = lo;
+  }
+  const comboStem = /^[a-z0-9_-]{1,32}$/i.test(comboPrefix) ? comboPrefix.toLowerCase() : 'default';
+  for (let digit = 0; digit <= 9; digit++) {
+    const hi = skin.files.get(`${comboStem}-${digit}@2x.png`);
+    const lo = skin.files.get(`${comboStem}-${digit}.png`);
+    if (hi?.length) found[`combo${digit}`] = hi;
+    else if (lo?.length) found[`combo${digit}`] = lo;
+  }
   return found;
+}
+
+/** Deterministic slider-ball animation frame at map time t. */
+export function sliderBallFrame(t: number, frameCount: number, frameMs = 1000 / 60): number {
+  if (!Number.isFinite(t) || !Number.isInteger(frameCount) || frameCount < 1 || !(frameMs > 0)) return 0;
+  return ((Math.floor(t / frameMs) % frameCount) + frameCount) % frameCount;
+}
+
+export interface FontDigitLayout {
+  positions: number[];
+  width: number;
+}
+
+/** Centre digit sprites horizontally, honouring skin.ini HitCircleOverlap. */
+export function fontDigitLayout(widths: number[], overlap: number): FontDigitLayout {
+  const safe = widths.map((width) => Number.isFinite(width) && width > 0 ? width : 0);
+  if (!safe.length) return { positions: [], width: 0 };
+  const gap = Number.isFinite(overlap) ? Math.max(-128, Math.min(128, overlap)) : 0;
+  const width = safe.reduce((sum, item) => sum + item, 0) + gap * (safe.length - 1);
+  const positions: number[] = [];
+  let left = -width / 2;
+  for (const item of safe) {
+    positions.push(left + item / 2);
+    left += item + gap;
+  }
+  return { positions, width };
 }
 
 export async function decodeVisualSkin(
@@ -72,7 +189,9 @@ export async function decodeVisualSkin(
   decode: (bytes: Uint8Array) => Promise<ImageBitmap | HTMLImageElement>,
 ): Promise<Partial<Record<VisualSkinKey, ImageBitmap | HTMLImageElement>>> {
   const result: Partial<Record<VisualSkinKey, ImageBitmap | HTMLImageElement>> = {};
-  for (const [key, bytes] of Object.entries(visualSkinFiles(skin))) {
+  const config = visualSkinConfig(skin);
+  for (const [key, bytes] of Object.entries(visualSkinFiles(skin, config.sliderBallFrames, config.hitCirclePrefix, config.comboPrefix))) {
+    if (!bytes) continue;
     try {
       result[key as VisualSkinKey] = await decode(bytes);
     } catch {

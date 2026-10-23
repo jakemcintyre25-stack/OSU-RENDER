@@ -6,5 +6,5 @@ import type { OszArchive } from '../load/osz';
  */
 export function supportedSkinAudioFiles(skin: OszArchive): string[] {
   return [...skin.files.keys()].filter(name =>
-    /^(?:normal|soft|drum)-(?:hit(?:normal|whistle|finish|clap)|sliderslide|sliderwhistle)(?:[0-9]+)?\.(?:wav|mp3|ogg)$/i.test(name));
+    /^(?:(?:normal|soft|drum)-(?:hit(?:normal|whistle|finish|clap)|sliderslide|sliderwhistle)|spinnerspin|spinnerbonus)(?:[0-9]+)?\.(?:wav|mp3|ogg)$/i.test(name));
 }

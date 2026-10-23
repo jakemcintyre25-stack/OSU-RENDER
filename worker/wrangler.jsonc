@@ -17,6 +17,8 @@
     }
   ],
   "observability": { "enabled": true }
+  // Optional cross-isolate mirror reputation (KV is eventually consistent):
+  // "kv_namespaces": [{ "binding": "MIRROR_HEALTH", "id": "<namespace-id>" }]
   // Secrets (set with `npx wrangler secret put NAME`):
   //   OSU_CLIENT_ID, OSU_CLIENT_SECRET  — an osu! OAuth application (client credentials only, no callback needed)
 }

@@ -188,6 +188,7 @@ describe('replay files', () => {
     const buf = await new ScoreEncoder().encodeToBuffer(score);
     const r = await decodeReplay(new Uint8Array(buf));
     expect(r.player).toBe('Shaxi');
+    expect(r.isLazer).toBe(false);
     expect(r.beatmapMD5).toBe('abcdef0123456789abcdef0123456789');
     expect(r.mods).toEqual(['HD', 'HR', 'DT']);
     expect(r.stats?.count300).toBe(10);

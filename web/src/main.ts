@@ -2,10 +2,11 @@ import './style.css';
 import { getRecent, getReplayFile, getBeatmapset, getOsuFile, lookupBeatmap, type RecentPlay } from './api';
 import { openOsz, type OszArchive } from './load/osz';
 import { assertLocalUploadSize } from './load/upload-limits';
+import { createIndexedDbSkinStore } from './load/skin-store';
 import { decodeReplay } from './load/replay';
 import { sessionFromReplay, sessionFromAutoplay, type Session } from './session';
 import { PlayfieldRenderer } from './render/renderer';
-import { decodeVisualSkin, visualSkinFiles, visualSkinConfig } from './render/skin-visuals';
+import { decodeVisualSkin, visualSkinFiles, visualSkinConfig, type VisualSkinConfig, type VisualSkinKey } from './render/skin-visuals';
 import { Clock } from './audio/clock';
 import { supportedSkinAudioFiles } from './audio/skin-assets';
 import { parseLaunchTarget, scoreShareUrl, userShareUrl } from './launch';
@@ -14,8 +15,15 @@ import { initialPlaybackTime } from './audio/lead-in';
 import { PlaybackRequestGate, type PlaybackLease } from './playback-gate';
 import { checkedPlayerSpeed, effectivePlaybackRate } from './audio/speed';
 import { markerReviewTime } from './render/marker-review';
+import { hitErrorSamples, hitErrorSummary } from './render/hit-error';
+import { recentScorePlayability } from './playability';
 import { storedToggle } from './render/preferences';
 import { ReplayVideoCapture, safeCaptureFilename } from './render/video-capture';
+import { hpAt } from './game/hp-engine';
+import { healthBarPercent, hpHasFailed, isLowHealth } from './render/hp-bar';
+import { createExportTimeline, exportFilename, exportPreset, type ExportPreset } from './render/export/timeline';
+import { describeCodecChoice, type ExportCodecChoice } from './render/export/codecs';
+import { renderOfflineMix } from './audio/offline-mix';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -86,8 +94,9 @@ function playItem(p: RecentPlay): HTMLLIElement {
   if (!p.hasReplay) side.append(Object.assign(document.createElement('span'), { className: 'tag', textContent: 'no replay' }));
   else if (p.isLazer) side.append(Object.assign(document.createElement('span'), { className: 'tag warn', textContent: 'lazer' }));
   btn.append(img, mid, side);
-  btn.disabled = !p.hasReplay;
-  btn.title = p.hasReplay ? 'Watch this replay' : 'osu! did not keep a replay for this play';
+  const playability = recentScorePlayability(p);
+  btn.disabled = !playability.playable;
+  btn.title = playability.reason ?? 'Watch this replay';
   btn.addEventListener('click', () => void openPlay(p));
   li.append(btn);
   return li;
@@ -123,10 +132,18 @@ $('user-form').addEventListener('submit', (e) => {
 
 const videoCapture = new ReplayVideoCapture();
 let captureAutoStop: ReturnType<typeof setTimeout> | null = null;
+let currentSkinVisuals: Partial<Record<VisualSkinKey, ImageBitmap | HTMLImageElement>> = {};
+let currentSkinConfig: VisualSkinConfig | undefined;
+let exporting = false;
+let exportAbort: AbortController | null = null;
+let selectedCodecs: ExportCodecChoice | null = null;
+let exportModule: Promise<typeof import('./render/export/export-video')> | null = null;
 function captureButton() {
   const button = $('capture-video') as HTMLButtonElement;
-  button.disabled = !session || !renderer;
+  button.disabled = !session || !renderer || exporting;
   button.textContent = videoCapture.active ? 'Stop recording' : 'Record WebM';
+  const exportButton = $('export-video') as HTMLButtonElement;
+  exportButton.disabled = !session || !renderer || videoCapture.active || exporting;
 }
 
 async function toggleCapture() {
@@ -142,7 +159,7 @@ async function toggleCapture() {
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       toast(audio
-        ? 'WebM with synchronized audio saved (real-time capture; MP4 export is not implemented yet).'
+        ? 'Real-time WebM saved with synchronized audio. Use Export video for a deterministic MP4.'
         : 'Video-only WebM saved; this browser could not record audio.', true);
     } catch (error) {
       toast((error as Error).message);
@@ -173,9 +190,228 @@ async function toggleCapture() {
   }
 }
 
+// ------------------------------------------------------------------ deterministic export
+
+const exportDialog = $('export-dialog') as HTMLDialogElement;
+const exportResolution = $('export-resolution') as HTMLSelectElement;
+const exportFps = $('export-fps') as HTMLSelectElement;
+const exportProgress = $('export-progress') as HTMLProgressElement;
+const exportCapability = $('export-capability') as HTMLElement;
+const exportEstimate = $('export-estimate') as HTMLElement;
+const exportStatus = $('export-status') as HTMLElement;
+const exportStart = $('export-start') as HTMLButtonElement;
+const exportCancel = $('export-cancel') as HTMLButtonElement;
+const exportClose = $('export-close') as HTMLButtonElement;
+let capabilityRequest = 0;
+
+function chosenExportPreset(): ExportPreset {
+  const size = exportResolution.value === '1080p' ? '1080p' : '720p';
+  return exportPreset(`${size}${exportFps.value === '60' ? 60 : 30}`);
+}
+
+function loadExportModule() {
+  exportModule ??= import('./render/export/export-video');
+  return exportModule;
+}
+
+function exportTimelineFor(preset: ExportPreset) {
+  if (!session || !clock) throw new Error('Open a replay before exporting');
+  return createExportTimeline({
+    startMs: initialPlaybackTime(session.map.firstObjectTime, session.map.audioLeadIn),
+    endMs: playbackEndTime(session.map.lastObjectTime, clock.duration),
+    rate: session.map.rate,
+    fps: preset.fps,
+  });
+}
+
+function updateExportEstimate() {
+  const preset = chosenExportPreset();
+  try {
+    const timeline = exportTimelineFor(preset);
+    exportEstimate.textContent = `${preset.width}×${preset.height} · ${timeline.frameCount.toLocaleString()} frames · ${fmt(timeline.videoDurationSeconds * 1000)}`;
+  } catch {
+    exportEstimate.textContent = '';
+  }
+}
+
+async function refreshExportCapability() {
+  const request = ++capabilityRequest;
+  selectedCodecs = null;
+  exportStart.disabled = true;
+  exportCapability.textContent = 'Checking encoder support…';
+  updateExportEstimate();
+  const preset = chosenExportPreset();
+  try {
+    const module = await loadExportModule();
+    const codecs = await module.detectExportCodecs(preset.width, preset.height);
+    if (request !== capabilityRequest) return;
+    selectedCodecs = codecs;
+    if (!codecs) {
+      exportCapability.textContent = 'This browser cannot encode MP4 or WebM with WebCodecs. Use Record WebM for real-time capture instead.';
+      return;
+    }
+    exportCapability.textContent = `Will encode ${describeCodecChoice(codecs)}${codecs.audio ? '' : ' (no supported audio encoder; video only)'}.`;
+    exportStart.disabled = exporting;
+  } catch (error) {
+    if (request !== capabilityRequest) return;
+    exportCapability.textContent = `Encoder check failed: ${(error as Error).message}`;
+  }
+}
+
+function setExportBusy(busy: boolean) {
+  exporting = busy;
+  exportResolution.disabled = busy;
+  exportFps.disabled = busy;
+  exportStart.disabled = busy || !selectedCodecs;
+  exportCancel.disabled = !busy;
+  exportClose.disabled = busy;
+  ($('playpause') as HTMLButtonElement).disabled = busy;
+  ($('seek') as HTMLInputElement).disabled = busy;
+  captureButton();
+}
+
+function openExportDialog() {
+  if (!session || !renderer || exporting) return;
+  exportProgress.value = 0;
+  exportStatus.textContent = '';
+  if (!exportDialog.open) {
+    if (typeof exportDialog.showModal === 'function') exportDialog.showModal();
+    else exportDialog.setAttribute('open', '');
+  }
+  void refreshExportCapability();
+}
+
+function downloadExport(
+  buffer: ArrayBuffer, mime: string, extension: 'mp4' | 'webm',
+  preset: ExportPreset, player: string,
+): string {
+  const url = URL.createObjectURL(new Blob([buffer], { type: mime }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = exportFilename(player, preset, extension);
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return link.download;
+}
+
+async function startExport() {
+  if (exporting || !session || !clock || !renderer || !selectedCodecs) return;
+  const s = session;
+  const previewRenderer = renderer;
+  const preset = chosenExportPreset();
+  const codecs = selectedCodecs;
+  const controller = new AbortController();
+  exportAbort = controller;
+  const wasPlaying = clock.isPlaying;
+  if (wasPlaying) clock.pause();
+  setExportBusy(true);
+  exportProgress.value = 0;
+  exportStatus.textContent = 'Mixing music and hitsounds…';
+  let host: HTMLDivElement | null = null;
+  let exportRenderer: PlayfieldRenderer | null = null;
+  try {
+    const timeline = exportTimelineFor(preset);
+    let audio: AudioBuffer | null = null;
+    try {
+      audio = await renderOfflineMix({
+        audio: s.audio,
+        hitsounds: s.hitsounds,
+        startMs: timeline.startMs,
+        rate: timeline.rate,
+        durationSeconds: timeline.videoDurationSeconds,
+        musicVolume: Number(($('volume') as HTMLInputElement).value) / 100,
+        effectsVolume: Number(($('effects-volume') as HTMLInputElement).value) / 100,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') throw error;
+      // A corrupt soundtrack must not block a useful video export.
+      audio = null;
+    }
+    exportStatus.textContent = 'Preparing the export renderer…';
+    host = document.createElement('div');
+    host.className = 'export-stage';
+    host.style.width = `${preset.width}px`;
+    host.style.height = `${preset.height}px`;
+    document.body.append(host);
+    exportRenderer = new PlayfieldRenderer();
+    await exportRenderer.init(host, { resolution: 1 });
+    if (exportRenderer.app.canvas.width !== preset.width || exportRenderer.app.canvas.height !== preset.height) {
+      exportRenderer.resize(preset.width, preset.height);
+    }
+    exportRenderer.options = { ...previewRenderer.options };
+    exportRenderer.setSkinVisuals(currentSkinVisuals, currentSkinConfig);
+    exportRenderer.setBackground(s.background);
+    exportRenderer.load(s.map, s.frames, s.judgement, { player: s.player });
+    const module = await loadExportModule();
+    let lastUpdate = 0;
+    const result = await module.exportReplayVideo({
+      renderer: exportRenderer,
+      timeline,
+      preset,
+      codecs,
+      audio,
+      signal: controller.signal,
+      onProgress: (done, total) => {
+        const now = performance.now();
+        if (done !== total && now - lastUpdate < 100) return;
+        lastUpdate = now;
+        exportProgress.value = done / total;
+        exportStatus.textContent = `Encoding frame ${done.toLocaleString()} / ${total.toLocaleString()}…`;
+      },
+    });
+    const filename = downloadExport(result.buffer, result.mime, result.extension, preset, s.player);
+    exportStatus.textContent = `Saved ${filename} · ${(result.bytes / 1_000_000).toFixed(1)} MB · ${result.description}`;
+    toast(`Exported ${filename}.`, true);
+  } catch (error) {
+    const aborted = (error as Error).name === 'AbortError';
+    exportStatus.textContent = aborted ? 'Export cancelled.' : `Export failed: ${(error as Error).message}`;
+    if (!aborted) toast((error as Error).message);
+  } finally {
+    try {
+      exportRenderer?.destroy();
+    } catch {
+      /* renderer init may have failed before its stage existed */
+    }
+    host?.remove();
+    exportAbort = null;
+    setExportBusy(false);
+    // Pixi textures are cached by source image. If destroying the export app
+    // invalidated shared entries, rebuild the preview from the same session.
+    if (renderer === previewRenderer && session === s) {
+      previewRenderer.setSkinVisuals(currentSkinVisuals, currentSkinConfig);
+      previewRenderer.setBackground(s.background);
+      previewRenderer.load(s.map, s.frames, s.judgement, { player: s.player });
+    }
+    if (wasPlaying && clock) void clock.play();
+  }
+}
+
+$('export-video').addEventListener('click', openExportDialog);
+exportStart.addEventListener('click', () => void startExport());
+exportCancel.addEventListener('click', () => {
+  exportAbort?.abort();
+  exportStatus.textContent = 'Cancelling…';
+});
+exportClose.addEventListener('click', () => {
+  if (!exporting) exportDialog.close();
+});
+exportResolution.addEventListener('change', () => void refreshExportCapability());
+exportFps.addEventListener('change', () => void refreshExportCapability());
+exportDialog.addEventListener('cancel', (event) => {
+  if (!exporting) return;
+  event.preventDefault();
+  exportAbort?.abort();
+});
+
 const playbackGate = new PlaybackRequestGate();
 
 async function openPlay(p: RecentPlay) {
+  const playability = recentScorePlayability(p);
+  if (!playability.playable) {
+    toast(playability.reason ?? 'This replay cannot be played');
+    return;
+  }
   const lease = playbackGate.begin();
   try {
     loading('Downloading replay…');
@@ -184,6 +420,7 @@ async function openPlay(p: RecentPlay) {
     const { osz, osuFallback } = await downloadMap(p.beatmapsetId, p.beatmapId, lease);
     if (!lease.isCurrent()) return;
     loading('Preparing…');
+    await skinReady;
     const s = await sessionFromReplay(replayBytes, osz, osuFallback, p.beatmapId, localSkin);
     if (!lease.isCurrent()) return;
     await startPlayer(s, p.scoreId, lease);
@@ -248,6 +485,7 @@ wireDrop('osr-drop', 'osr-input', async (file) => {
     const local = localOsz?.difficulties.find((d) => d.md5.toLowerCase() === md5);
     if (localOsz && local) {
       loading('Preparing…');
+      await skinReady;
       const session = await sessionFromReplay(bytes, localOsz, null, local.beatmapId ?? 0, localSkin);
       if (lease.isCurrent()) await startPlayer(session, null, lease);
       return;
@@ -263,6 +501,7 @@ wireDrop('osr-drop', 'osr-input', async (file) => {
     const { osz, osuFallback } = await downloadMap(found.beatmapsetId, found.beatmapId, lease);
     if (!lease.isCurrent()) return;
     loading('Preparing…');
+    await skinReady;
     const session = await sessionFromReplay(bytes, osz, osuFallback, found.beatmapId, localSkin);
     if (lease.isCurrent()) await startPlayer(session, null, lease);
   } catch (err) {
@@ -275,27 +514,56 @@ wireDrop('osr-drop', 'osr-input', async (file) => {
 
 let localSkin: OszArchive | null = null;
 let localOsz: OszArchive | null = null;
-const MOD_CHOICES = ['EZ', 'HR', 'HD', 'DT', 'NC', 'HT'];
+const skinStore = createIndexedDbSkinStore();
+const MOD_CHOICES = ['EZ', 'HR', 'HD', 'DT', 'NC', 'HT', 'FL'];
+
+function showSkinStatus(name: string, archive: OszArchive, saved: boolean) {
+  const usable = supportedSkinAudioFiles(archive);
+  // Visual-only .osk archives are valid: their sprites are used by the renderer.
+  const visualCount = Object.keys(visualSkinFiles(archive)).length;
+  if (!usable.length && !visualCount) throw new Error('This skin contains no supported audio or visual files.');
+  $('osk-status').textContent = `${name}: ${usable.length} hitsound files and ${visualCount} visual sprites.${saved ? ' Saved for this browser.' : ' This session only.'}`;
+  $('osk-drop').querySelector('span')!.textContent = name;
+  ($('osk-clear') as HTMLButtonElement).hidden = false;
+}
 
 wireDrop('osk-drop', 'osk-input', async (file) => {
   try {
     loading('Checking skin archive…');
     assertLocalUploadSize('osk', file.size);
-    const archive = openOsz(new Uint8Array(await file.arrayBuffer()));
-    const usable = supportedSkinAudioFiles(archive);
-    // Visual-only .osk archives are valid: their sprites are used by the renderer.
-    const visualCount = Object.keys(visualSkinFiles(archive)).length;
-    if (!usable.length && !visualCount) throw new Error('This skin contains no supported audio or visual files.');
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const archive = openOsz(bytes);
+    showSkinStatus(file.name, archive, false);
     localSkin = archive;
-    $('osk-status').textContent = `${file.name}: ${usable.length} hitsound files and ${visualCount} visual sprites. The next replay will use supported assets.`;
-    $('osk-drop').querySelector('span')!.textContent = file.name;
+    const saved = await skinStore.save({ name: file.name, bytes: bytes.slice().buffer as ArrayBuffer, savedAt: Date.now() });
+    if (saved) showSkinStatus(file.name, archive, true);
     loading(null);
-    toast('Supported skin assets loaded for the next replay.', true);
+    toast(saved ? 'Skin loaded and saved for this browser.' : 'Skin loaded for this session only.', true);
   } catch (error) {
     loading(null);
     toast((error as Error).message);
   }
 });
+
+$('osk-clear').addEventListener('click', async () => {
+  localSkin = null;
+  await skinStore.clear();
+  $('osk-status').textContent = 'Uses your own skin audio for sounds missing from the beatmap. Supported visual skin sprites also apply to the next replay you open.';
+  $('osk-drop').querySelector('span')!.textContent = 'Drop a .osk skin archive or click to choose';
+  ($('osk-clear') as HTMLButtonElement).hidden = true;
+});
+
+async function restoreSavedSkin() {
+  try {
+    const stored = await skinStore.load();
+    if (!stored || localSkin) return;
+    const archive = openOsz(new Uint8Array(stored.bytes));
+    localSkin = archive;
+    showSkinStatus(stored.name, archive, true);
+  } catch {
+    await skinStore.clear();
+  }
+}
 
 wireDrop('osz-drop', 'osz-input', async (file) => {
   try {
@@ -348,6 +616,7 @@ let clock: Clock | null = null;
 let session: Session | null = null;
 let raf = 0;
 let seeking = false;
+let hpFailed = false;
 let activeScoreId: number | null = null;
 
 let rendererInit: Promise<void> | null = null;
@@ -358,6 +627,9 @@ async function startPlayer(s: Session, scoreId: number | null = null, lease = pl
   activeScoreId = scoreId;
   ($('share-score') as HTMLButtonElement).disabled = scoreId === null;
   session = s;
+  hpFailed = false;
+  $('hpbar').hidden = false;
+  $('fail').hidden = true;
   $('home').hidden = true;
   $('player').hidden = false;
   loading('Decoding audio…');
@@ -379,6 +651,12 @@ async function startPlayer(s: Session, scoreId: number | null = null, lease = pl
     if (samples.failed > 0) s.warnings.push(`${samples.failed} beatmap hitsound files could not be decoded by this browser.`);
     if (s.hitsounds.unavailable > 0) s.warnings.push('Some hitsounds are unavailable from this beatmap and your selected skin; bundled defaults are not included.');
     playerClock.rate = effectivePlaybackRate(s.map.rate, Number(($('playback-speed') as HTMLSelectElement).value));
+    loading('Preparing pitch-preserving audio…');
+    const stretched = await playerClock.prepareRate(playerClock.rate);
+    if (!active()) return;
+    if (!stretched && Math.abs(playerClock.rate - 1) > 1e-6) {
+      s.warnings.push('Pitch-preserving speed change is unavailable; audio pitch will follow playback speed.');
+    }
     playerClock.volume = Number(($('volume') as HTMLInputElement).value) / 100;
     playerClock.effectsVolume = Number(($('effects-volume') as HTMLInputElement).value) / 100;
     playerClock.offset = Number(($('sync-offset') as HTMLInputElement).value);
@@ -404,13 +682,18 @@ async function startPlayer(s: Session, scoreId: number | null = null, lease = pl
           createImageBitmap(new Blob([Uint8Array.from(bytes)], { type: 'image/png' })))
       : {};
     if (!active() || !renderer) return;
-    renderer.setSkinVisuals(visuals, localSkin ? visualSkinConfig(localSkin) : undefined);
+    const skinConfig = localSkin ? visualSkinConfig(localSkin) : undefined;
+    currentSkinVisuals = visuals;
+    currentSkinConfig = skinConfig;
+    renderer.setSkinVisuals(visuals, skinConfig);
     renderer.setBackground(s.background);
     renderer.load(s.map, s.frames, s.judgement, { player: s.player });
     captureButton();
     playerClock.seek(initialPlaybackTime(s.map.firstObjectTime, s.map.audioLeadIn));
+    updateHpBar(s, playerClock.now(), false);
     buildMarkers(s);
     fillInfo(s);
+    fillHitError(s);
     loading(null);
     if (s.warnings.length) toast(s.warnings.join(' '));
     await playerClock.play();
@@ -421,6 +704,7 @@ async function startPlayer(s: Session, scoreId: number | null = null, lease = pl
       raf = requestAnimationFrame(loop);
       const t = playerClock.now();
       playerClock.scheduleHitsounds();
+      updateHpBar(session, t, true);
       renderer.render(t);
       const end = endTime();
       if (!seeking) ($('seek') as HTMLInputElement).value = String(Math.round((clamp(t, 0, end) / end) * 1000));
@@ -444,10 +728,40 @@ async function startPlayer(s: Session, scoreId: number | null = null, lease = pl
 const clamp = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);
 const endTime = () => session ? playbackEndTime(session.map.lastObjectTime, clock?.duration ?? 0) : 1;
 
+function updateHpBar(s: Session, t: number, pauseOnFail: boolean) {
+  const maximum = s.hp.coefficients.maximum;
+  const hp = hpAt(s.hp.trace, t);
+  const fill = $('hpfill');
+  fill.style.width = `${healthBarPercent(hp, maximum)}%`;
+  fill.classList.toggle('low', isLowHealth(hp, maximum));
+  const bar = $('hpbar');
+  bar.setAttribute('aria-valuenow', String(Math.round(clamp(hp, 0, maximum))));
+  const failed = hpHasFailed(s.hp.failTime, t);
+  $('fail').hidden = !failed;
+  if (failed && !hpFailed) {
+    hpFailed = true;
+    if (pauseOnFail) {
+      clock?.pause();
+      updatePlayButton();
+    }
+  } else if (!failed) {
+    hpFailed = false;
+  }
+}
+
 function stopPlayer() {
   if (captureAutoStop) clearTimeout(captureAutoStop);
   captureAutoStop = null;
   videoCapture.cancel();
+  exportAbort?.abort();
+  if (exportDialog.open) exportDialog.close();
+  currentSkinVisuals = {};
+  currentSkinConfig = undefined;
+  hpFailed = false;
+  $('hpbar').hidden = true;
+  $('fail').hidden = true;
+  $('hit-error').hidden = true;
+  $('hit-error-points').replaceChildren();
   activeScoreId = null;
   ($('share-score') as HTMLButtonElement).disabled = true;
   cancelAnimationFrame(raf);
@@ -474,6 +788,10 @@ async function togglePlay() {
   if (!clock) return;
   if (clock.isPlaying) clock.pause();
   else {
+    if (session && hpHasFailed(session.hp.failTime, clock.now())) {
+      toast('This replay failed here. Seek earlier to continue.');
+      return;
+    }
     if (clock.now() > endTime()) clock.seek(initialPlaybackTime(session?.map.firstObjectTime ?? 0, session?.map.audioLeadIn));
     await clock.play();
   }
@@ -522,6 +840,30 @@ function fillInfo(s: Session) {
     ${h ? '<p>Highlighted values differ from the osu!stable replay header. Scores are reconstructed and not yet proven exact.</p>' : '<p>Calculated Score V1 is provisional until validated against real replay headers.</p>'}`;
 }
 
+function fillHitError(s: Session) {
+  const host = $('hit-error');
+  const points = $('hit-error-points');
+  const text = $('hit-error-text');
+  const samples = hitErrorSamples(s.map.objects, s.judgement.objects);
+  if (samples.length < 2) {
+    host.hidden = true;
+    points.replaceChildren();
+    return;
+  }
+  const summary = hitErrorSummary(samples);
+  points.replaceChildren(...samples.slice(-40).map((sample) => {
+    const point = document.createElement('span');
+    point.className = 'hit-error-point';
+    const offset = Math.max(-100, Math.min(100, sample.offset));
+    point.style.left = `${50 + offset / 2}%`;
+    point.style.background = sample.result === 300 ? '#6ee36e' : sample.result === 100 ? '#f5c542' : '#5fb4ff';
+    point.title = `${sample.offset >= 0 ? '+' : ''}${sample.offset.toFixed(0)} ms`;
+    return point;
+  }));
+  text.textContent = `avg ${summary.average >= 0 ? '+' : ''}${summary.average.toFixed(1)}ms · UR ${summary.unstableRate.toFixed(0)}`;
+  host.hidden = false;
+}
+
 $('playpause').addEventListener('click', () => void togglePlay());
 $('capture-video').addEventListener('click', () => void toggleCapture());
 $('back').addEventListener('click', closePlayer);
@@ -540,7 +882,10 @@ $('share-score').addEventListener('click', async () => {
 const seek = $('seek') as HTMLInputElement;
 seek.addEventListener('input', () => {
   seeking = true;
-  if (clock) clock.seek((Number(seek.value) / 1000) * endTime());
+  if (clock) {
+    clock.seek((Number(seek.value) / 1000) * endTime());
+    if (session) updateHpBar(session, clock.now(), false);
+  }
 });
 seek.addEventListener('change', () => (seeking = false));
 $('dim').addEventListener('input', (e) => {
@@ -568,7 +913,15 @@ for (const [control, option] of [
 }
 $('playback-speed').addEventListener('change', (e) => {
   const speed = checkedPlayerSpeed(Number((e.target as HTMLSelectElement).value));
-  if (clock && session) clock.setRate(effectivePlaybackRate(session.map.rate, speed));
+  if (clock && session) {
+    const rate = effectivePlaybackRate(session.map.rate, speed);
+    clock.setRate(rate);
+    void clock.prepareRate(rate).then((ok) => {
+      if (!ok && Math.abs(rate - 1) > 1e-6) {
+        toast('Pitch-preserving speed change is unavailable; audio pitch follows speed.');
+      }
+    });
+  }
   store.set('playback-speed', String(speed));
 });
 const syncOffset = $('sync-offset') as HTMLInputElement;
@@ -589,7 +942,10 @@ document.addEventListener('keydown', (e) => {
     void togglePlay();
   } else if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') {
     e.preventDefault();
-    if (clock) clock.seek(clock.now() + (e.code === 'ArrowRight' ? 5000 : -5000));
+    if (clock) {
+      clock.seek(clock.now() + (e.code === 'ArrowRight' ? 5000 : -5000));
+      if (session) updateHpBar(session, clock.now(), false);
+    }
   } else if (e.code === 'Escape') closePlayer();
 });
 
@@ -612,6 +968,7 @@ const speedChoice = checkedPlayerSpeed(Number(store.get('playback-speed') ?? 1))
 ($('playback-speed') as HTMLSelectElement).value = String(speedChoice);
 const savedUser = store.get('username');
 if (savedUser) ($('username') as HTMLInputElement).value = savedUser;
+const skinReady = restoreSavedSkin();
 
 const launch = parseLaunchTarget(location.search);
 if (launch.kind === 'user') {
@@ -630,6 +987,7 @@ if (launch.kind === 'user') {
       const { osz, osuFallback } = await downloadMap(beatmapsetId, beatmapId, lease);
       if (!lease.isCurrent()) return;
       loading('Preparing…');
+      await skinReady;
       const result = await sessionFromReplay(replayBytes, osz, osuFallback, beatmapId, localSkin);
       if (lease.isCurrent()) await startPlayer(result, launch.id, lease);
     } catch (err) {

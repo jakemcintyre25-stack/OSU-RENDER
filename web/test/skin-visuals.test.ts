@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { zipSync, strToU8 } from 'fflate';
 import { openOsz } from '../src/load/osz';
-import { visualSkinFiles, decodeVisualSkin, visualSkinConfig } from '../src/render/skin-visuals';
+import { visualSkinFiles, decodeVisualSkin, visualSkinConfig, skinComboColor, sliderBallFrame, fontDigitLayout } from '../src/render/skin-visuals';
 
 const png = (n: number) => new Uint8Array([137, 80, 78, 71, n]);
 const skin = (files: Record<string, Uint8Array>) => openOsz(zipSync(files));
@@ -21,6 +21,20 @@ describe('M7 .osk visual skin loading', () => {
     expect(files.sliderb).toBeUndefined();
     expect(Object.keys(files)).toHaveLength(3);
   });
+  it('resolves slider-specific start/end circles and overlays', () => {
+    const archive = skin({
+      'sliderstartcircle.png': png(1),
+      'sliderstartcircleoverlay@2x.png': png(2),
+      'sliderendcircle.png': png(3),
+      'sliderendcircleoverlay.png': png(4),
+    });
+    const files = visualSkinFiles(archive);
+    expect([...files.sliderstartcircle!]).toEqual([...png(1)]);
+    expect([...files.sliderstartcircleoverlay!]).toEqual([...png(2)]);
+    expect([...files.sliderendcircle!]).toEqual([...png(3)]);
+    expect([...files.sliderendcircleoverlay!]).toEqual([...png(4)]);
+  });
+
   it('isolates broken image decoding without losing valid assets', async () => {
     const archive = skin({ 'hitcircle.png': png(1), 'cursor.png': png(2) });
     const calls: number[] = [];
@@ -39,7 +53,10 @@ describe('M7 .osk visual skin loading', () => {
     ) });
     expect(visualSkinConfig(archive)).toEqual({
       cursorRotate: false, cursorExpand: false, cursorCentre: true,
-      sliderBallFlip: false, sliderBallFrames: 12,
+      sliderBallFlip: false, sliderBallFrames: 12, animationFramerate: 60, cursorScale: 1,
+      comboColors: [], sliderBorder: null, sliderTrackOverride: null, spinnerBackground: null,
+      hitCirclePrefix: 'default', hitCircleOverlap: 0,
+      comboPrefix: 'default', comboOverlap: 0,
     });
     const invalid = skin({ 'skin.ini': strToU8('[General]\nCursorRotate: banana\nSliderBallFrames: 99999') });
     expect(visualSkinConfig(invalid).cursorRotate).toBe(true);
@@ -61,5 +78,110 @@ describe('M7 .osk visual skin loading', () => {
     const archive = skin({ 'hitcircle.png': png(9) });
     expect(archive.difficulties).toHaveLength(0);
     expect(Object.keys(visualSkinFiles(archive))).toEqual(['hitcircle']);
+  });
+
+  it('parses skin.ini colours, cursor scale and slider overrides', () => {
+    const archive = skin({ 'skin.ini': strToU8(
+      '[General]\nCursorScale: 1.25\n[Colours]\n' +
+      'Combo1: 255, 0, 10\nCombo3: 0,128,255\nCombo9: 1,1,1\n' +
+      'SliderBorder: 1,2,3\nSliderTrackOverride: 4,5,6\nSpinnerBackground: 7,8,9'
+    ) });
+    expect(visualSkinConfig(archive)).toMatchObject({
+      cursorScale: 1.25,
+      comboColors: [0xff000a, 0x0080ff],
+      sliderBorder: 0x010203,
+      sliderTrackOverride: 0x040506,
+      spinnerBackground: 0x070809,
+    });
+    expect(visualSkinConfig(skin({ 'skin.ini': strToU8('[General]\nCursorScale: 99') })).cursorScale).toBe(1);
+    expect(visualSkinConfig(skin({ 'skin.ini': strToU8('[Colours]\nSliderBorder: 300,0,0') })).sliderBorder).toBeNull();
+  });
+
+  it('maps skin combo colours onto the map combo cycle', () => {
+    const map = [0x111111, 0x222222, 0x333333];
+    const skin = [0xff0000, 0x00ff00];
+    expect(skinComboColor(map, 0x222222, skin)).toBe(0x00ff00);
+    expect(skinComboColor(map, 0x999999, skin)).toBe(0xff0000);
+    expect(skinComboColor(map, 0x222222, [])).toBe(0x222222);
+  });
+
+  it('resolves slider start/end, spinner background and cursor middle sprites', () => {
+    const archive = skin({
+      'sliderstartcircle.png': png(1), 'sliderendcircle.png': png(2),
+      'spinner-background.png': png(3), 'cursormiddle.png': png(4),
+    });
+    expect(Object.keys(visualSkinFiles(archive)).sort()).toEqual([
+      'cursormiddle', 'sliderendcircle', 'sliderstartcircle', 'spinner-background',
+    ]);
+  });
+
+  it('loads indexed slider-ball animation frames and decodes them with the config', async () => {
+    const archive = skin({
+      'skin.ini': strToU8('[General]\nSliderBallFrames: 3'),
+      'sliderb.png': png(9),
+      'sliderb0.png': png(1), 'sliderb1.png': png(2), 'sliderb2@2x.png': png(3),
+    });
+    const files = visualSkinFiles(archive, 3);
+    expect([...files.sliderb0!]).toEqual([...png(1)]);
+    expect([...files.sliderb1!]).toEqual([...png(2)]);
+    expect([...files.sliderb2!]).toEqual([...png(3)]);
+    expect(Object.keys(files).sort()).toEqual(['sliderb', 'sliderb0', 'sliderb1', 'sliderb2']);
+    const decoded = await decodeVisualSkin(archive, async () => ({ width: 16, height: 16 }) as HTMLImageElement);
+    expect(decoded.sliderb0).toBeDefined();
+    expect(decoded.sliderb1).toBeDefined();
+    expect(decoded.sliderb2).toBeDefined();
+  });
+
+  it('cycles slider-ball animation frames deterministically', () => {
+    expect(sliderBallFrame(0, 3, 100)).toBe(0);
+    expect(sliderBallFrame(99, 3, 100)).toBe(0);
+    expect(sliderBallFrame(150, 3, 100)).toBe(1);
+    expect(sliderBallFrame(350, 3, 100)).toBe(0);
+    expect(sliderBallFrame(-1, 3, 100)).toBe(2);
+    expect(sliderBallFrame(100, 0)).toBe(0);
+    expect(sliderBallFrame(100, 3, 0)).toBe(0);
+    expect(sliderBallFrame(34, 2, 1000 / 30)).toBe(1);
+  });
+
+  it('parses a bounded AnimationFramerate', () => {
+    const archive = skin({ 'skin.ini': strToU8('[General]\nAnimationFramerate: 30') });
+    expect(visualSkinConfig(archive).animationFramerate).toBe(30);
+    const invalid = skin({ 'skin.ini': strToU8('[General]\nAnimationFramerate: 999') });
+    expect(visualSkinConfig(invalid).animationFramerate).toBe(60);
+  });
+
+  it('parses safe skin font prefixes and overlap values', () => {
+    const archive = skin({ 'skin.ini': strToU8('[Fonts]\nHitCirclePrefix: Custom\nHitCircleOverlap: -6') });
+    expect(visualSkinConfig(archive)).toMatchObject({ hitCirclePrefix: 'custom', hitCircleOverlap: -6 });
+    const invalid = skin({ 'skin.ini': strToU8('[Fonts]\nHitCirclePrefix: ../bad\nHitCircleOverlap: 999') });
+    expect(visualSkinConfig(invalid)).toMatchObject({ hitCirclePrefix: 'default', hitCircleOverlap: 0 });
+    const combo = skin({ 'skin.ini': strToU8('[Fonts]\nComboPrefix: Combo\nComboOverlap: -3') });
+    expect(visualSkinConfig(combo)).toMatchObject({ comboPrefix: 'combo', comboOverlap: -3 });
+  });
+
+  it('resolves font digit sprites for the configured prefix', () => {
+    const archive = skin({
+      'default-0.png': png(1), 'default-1@2x.png': png(2),
+      'custom-3.png': png(3), 'custom-9.png': png(4),
+    });
+    const defaults = visualSkinFiles(archive);
+    expect([...defaults.font0!]).toEqual([...png(1)]);
+    expect([...defaults.font1!]).toEqual([...png(2)]);
+    expect(defaults.font2).toBeUndefined();
+    const custom = visualSkinFiles(archive, 0, 'custom');
+    expect([...custom.font3!]).toEqual([...png(3)]);
+    expect([...custom.font9!]).toEqual([...png(4)]);
+    expect(custom.font0).toBeUndefined();
+    const combos = visualSkinFiles(archive, 0, 'default', 'custom');
+    expect([...combos.combo3!]).toEqual([...png(3)]);
+    expect([...combos.combo9!]).toEqual([...png(4)]);
+  });
+
+  it('lays out font digits centred with overlap', () => {
+    expect(fontDigitLayout([10, 10], -2)).toEqual({ width: 18, positions: [-4, 4] });
+    expect(fontDigitLayout([10, 10], 0)).toEqual({ width: 20, positions: [-5, 5] });
+    expect(fontDigitLayout([10], 0)).toEqual({ width: 10, positions: [0] });
+    expect(fontDigitLayout([], 0)).toEqual({ width: 0, positions: [] });
+    expect(fontDigitLayout([10, 10], 999).width).toBe(148);
   });
 });

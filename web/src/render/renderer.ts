@@ -1,3 +1,4 @@
+import 'pixi.js/unsafe-eval';
 import { Application, Container, Graphics, Text, Sprite, Texture, AlphaFilter } from 'pixi.js';
 import type { PreparedMap, HitObj, SliderObj, SpinnerObj, Vec } from '../game/prepare';
 import { sliderBallAt } from '../game/prepare';
@@ -6,8 +7,11 @@ import { eventAt } from '../game/judge';
 import { scoreHudLabel } from './hud-score';
 import { cursorAt, KEY, type ReplayFrame } from '../load/replay';
 import { playfieldLayout, type PlayfieldLayout } from './layout';
+import { hitLightAt } from './effects';
+import { firstFollowPointAtOrAfter, planFollowPoints, type FollowPoint } from './follow-points';
+import { flashlightRadius, flashlightTrackDim } from './flashlight';
 import { VisibleObjectIndex } from './visible-index';
-import type { VisualSkinKey, VisualSkinConfig } from './skin-visuals';
+import { DEFAULT_VISUAL_SKIN_CONFIG, fontDigitLayout, skinComboColor, sliderBallFrame, type VisualSkinKey, type VisualSkinConfig } from './skin-visuals';
 
 const HIT_FADE = 240; // ms for a hit circle to expand and fade after being hit
 const MISS_FADE = 120;
@@ -27,7 +31,9 @@ function shade(color: number, k: number): number {
 interface CircleParts {
   root: Container;
   body: Graphics;
+  light: Sprite;
   number: Text;
+  numberContainer?: Container;
   skinBody?: Sprite;
   skinOverlay?: Sprite;
 }
@@ -50,9 +56,12 @@ interface Display {
   skinFollow?: Sprite;
   reverseStart?: Sprite;
   reverseEnd?: Sprite;
+  skinStart?: Sprite;
+  skinEnd?: Sprite;
   // spinners
   spinnerDisc?: Graphics;
   spinnerRing?: Graphics;
+  skinSpinnerBackground?: Sprite;
   skinSpinnerDisc?: Sprite;
   skinSpinnerApproach?: Sprite;
 }
@@ -67,16 +76,26 @@ export class PlayfieldRenderer {
   readonly app = new Application();
   private bg = new Sprite(Texture.EMPTY);
   private field = new Container();
+  private followLayer = new Container();
+  private followGfx = new Graphics();
+  private flashGfx = new Graphics();
+  private followPoints: FollowPoint[] = [];
+  private trackingRanges: [number, number][] = [];
   private objectLayer = new Container({ sortableChildren: true });
   private approachLayer = new Container();
   private judgementLayer = new Container();
   private cursorLayer = new Container();
   private cursorGfx = new Graphics();
+  private hitGlowTexture = Texture.EMPTY;
+  private cursorMiddleSprite = new Sprite(Texture.EMPTY);
   private cursorSprite = new Sprite(Texture.EMPTY);
   private cursorTrailSprites: Sprite[] = [];
   private cursorBaseScale = { x: 1, y: 1 };
   private hud = new Container();
   private comboText!: Text;
+  private comboSkin = new Container();
+  private comboX!: Text;
+  private comboFontTextures: Array<Texture | null> = [];
   private accText!: Text;
   private scoreText!: Text;
   private infoText!: Text;
@@ -86,10 +105,9 @@ export class PlayfieldRenderer {
   private layout: PlayfieldLayout = { scale: 1, x: 0, y: 0 };
   private map: PreparedMap | null = null;
   private skinTextures: Partial<Record<VisualSkinKey, Texture>> = {};
-  private skinConfig: VisualSkinConfig = {
-    cursorRotate: true, cursorExpand: true, cursorCentre: true,
-    sliderBallFlip: true, sliderBallFrames: 1,
-  };
+  private sliderBallTextures: Texture[] = [];
+  private hitCircleFontTextures: Array<Texture | null> = [];
+  private skinConfig: VisualSkinConfig = { ...DEFAULT_VISUAL_SKIN_CONFIG };
   private visibility: VisibleObjectIndex | null = null;
   private judgement: Judgement | null = null;
   private frames: ReplayFrame[] = [];
@@ -97,22 +115,41 @@ export class PlayfieldRenderer {
   private resultEvents: { t: number; x: number; y: number; result: number }[] = [];
   options: RenderOptions = { backgroundDim: 0.8, showCursorTrail: true, showKeyOverlay: true };
 
-  async init(host: HTMLElement) {
+  async init(host: HTMLElement, options: { resolution?: number } = {}) {
+    const resolution = options.resolution ?? Math.min(window.devicePixelRatio || 1, 2);
+    if (!Number.isFinite(resolution) || resolution <= 0 || resolution > 4) {
+      throw new RangeError('Invalid renderer resolution');
+    }
     await this.app.init({
       resizeTo: host,
       background: '#000000',
       antialias: true,
       autoDensity: true,
-      resolution: Math.min(window.devicePixelRatio || 1, 2),
+      resolution,
       preference: 'webgl',
       autoStart: false,
     });
     host.appendChild(this.app.canvas);
+    const glowCanvas = document.createElement('canvas');
+    glowCanvas.width = glowCanvas.height = 128;
+    const glowContext = glowCanvas.getContext('2d');
+    if (glowContext) {
+      const gradient = glowContext.createRadialGradient(64, 64, 0, 64, 64, 64);
+      gradient.addColorStop(0, 'rgba(255,255,255,0.9)');
+      gradient.addColorStop(0.35, 'rgba(255,255,255,0.35)');
+      gradient.addColorStop(1, 'rgba(255,255,255,0)');
+      glowContext.fillStyle = gradient;
+      glowContext.fillRect(0, 0, 128, 128);
+      this.hitGlowTexture = Texture.from(glowCanvas);
+    }
     this.app.stage.addChild(this.bg, this.field, this.hud);
-    this.field.addChild(this.objectLayer, this.approachLayer, this.judgementLayer, this.cursorLayer);
-    this.cursorLayer.addChild(this.cursorGfx, this.cursorSprite);
+    this.followLayer.addChild(this.followGfx);
+    this.field.addChild(this.followLayer, this.objectLayer, this.approachLayer, this.judgementLayer, this.flashGfx, this.cursorLayer);
+    this.cursorLayer.addChild(this.cursorGfx, this.cursorMiddleSprite, this.cursorSprite);
     this.cursorSprite.anchor.set(0.5);
     this.cursorSprite.visible = false;
+    this.cursorMiddleSprite.anchor.set(0.5);
+    this.cursorMiddleSprite.visible = false;
     for (let i = 0; i < 12; i++) {
       const trail = new Sprite(Texture.EMPTY);
       trail.anchor.set(0.5);
@@ -125,13 +162,29 @@ export class PlayfieldRenderer {
     this.relayout();
   }
 
+  resize(width: number, height: number) {
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
+      throw new RangeError('Invalid renderer size');
+    }
+    this.app.renderer.resize(width, height);
+    this.relayout();
+  }
+
   setSkinVisuals(images: Partial<Record<VisualSkinKey, ImageBitmap | HTMLImageElement>>, config?: VisualSkinConfig) {
-    this.skinConfig = config ?? { cursorRotate: true, cursorExpand: true, cursorCentre: true, sliderBallFlip: true, sliderBallFrames: 1 };
+    this.skinConfig = { ...DEFAULT_VISUAL_SKIN_CONFIG, ...(config ?? {}), comboColors: config?.comboColors ?? [] };
     this.cursorSprite.anchor.set(this.skinConfig.cursorCentre ? 0.5 : 0);
     this.skinTextures = {};
     for (const [name, image] of Object.entries(images)) {
+      if (!image) continue;
       this.skinTextures[name as VisualSkinKey] = Texture.from(image);
     }
+    this.sliderBallTextures = [];
+    for (let i = 0; i < this.skinConfig.sliderBallFrames; i++) {
+      const texture = this.skinTextures[`sliderb${i}`];
+      if (texture) this.sliderBallTextures.push(texture);
+    }
+    this.hitCircleFontTextures = Array.from({ length: 10 }, (_, digit) => this.skinTextures[`font${digit}`] ?? null);
+    this.comboFontTextures = Array.from({ length: 10 }, (_, digit) => this.skinTextures[`combo${digit}`] ?? null);
     const trail = this.skinTextures.cursortrail;
     for (const sprite of this.cursorTrailSprites) {
       sprite.texture = trail ?? Texture.EMPTY;
@@ -142,14 +195,20 @@ export class PlayfieldRenderer {
       }
     }
     const cursor = this.skinTextures.cursor;
+    const cursorSize = 64 * this.skinConfig.cursorScale;
     this.cursorSprite.texture = cursor ?? Texture.EMPTY;
     this.cursorSprite.visible = Boolean(cursor);
     if (cursor) {
       // Playfield coordinates: osu!standard skin cursors use 128px at 1x.
-      this.cursorSprite.width = 64;
-      this.cursorSprite.height = 64;
+      this.cursorSprite.width = cursorSize;
+      this.cursorSprite.height = cursorSize;
       this.cursorBaseScale = { x: this.cursorSprite.scale.x, y: this.cursorSprite.scale.y };
     }
+    const middle = this.skinTextures.cursormiddle;
+    this.cursorMiddleSprite.texture = middle ?? Texture.EMPTY;
+    this.cursorMiddleSprite.visible = Boolean(middle);
+    this.cursorMiddleSprite.width = cursorSize;
+    this.cursorMiddleSprite.height = cursorSize;
   }
 
   setBackground(img: ImageBitmap | HTMLImageElement | null) {
@@ -161,9 +220,11 @@ export class PlayfieldRenderer {
     this.clearObjects();
     this.map = map;
     this.visibility = new VisibleObjectIndex(map.objects);
+    this.followPoints = planFollowPoints(map.objects, map.radius);
     this.frames = frames;
     this.judgement = judgement;
     this.frameHint = 0;
+    this.trackingRanges = judgement.objects.flatMap((o) => o.tracking ?? []);
     this.resultEvents = judgement.events
       .filter((e) => e.result !== undefined && e.result !== 300 && e.x !== undefined)
       .map((e) => ({ t: e.t, x: e.x!, y: e.y!, result: e.result! }));
@@ -187,6 +248,8 @@ export class PlayfieldRenderer {
     this.displays.clear();
     for (const t of this.judgementTexts.values()) t.destroy();
     this.judgementTexts.clear();
+    this.followPoints = [];
+    this.followGfx.clear();
   }
 
   // ---------------------------------------------------------------- layout & HUD
@@ -195,12 +258,16 @@ export class PlayfieldRenderer {
     const style = (size: number, weight: '400' | '700' = '700') => ({ fontFamily: FONT, fontSize: size, fill: 0xffffff, fontWeight: weight, dropShadow: { color: 0x000000, alpha: 0.6, blur: 3, distance: 1 } });
     this.comboText = new Text({ text: '', style: style(48) });
     this.comboText.anchor.set(0, 1);
+    this.comboX = new Text({ text: 'x', style: style(48) });
+    this.comboX.anchor.set(0, 1);
+    this.comboSkin.addChild(this.comboX);
+    this.comboSkin.visible = false;
     this.accText = new Text({ text: '', style: style(32) });
     this.accText.anchor.set(1, 0);
     this.scoreText = new Text({ text: '', style: style(18, '400') });
     this.scoreText.anchor.set(1, 0);
     this.infoText = new Text({ text: '', style: style(15, '400') });
-    this.hud.addChild(this.comboText, this.accText, this.scoreText, this.infoText);
+    this.hud.addChild(this.comboSkin, this.comboText, this.accText, this.scoreText, this.infoText);
     const keys: [string, number][] = [['K1', KEY.K1], ['K2', KEY.K2], ['M1', KEY.M1], ['M2', KEY.M2]];
     for (const [name, mask] of keys) {
       const g = new Graphics();
@@ -230,14 +297,19 @@ export class PlayfieldRenderer {
     const u = h / 768; // HUD scale relative to a 768px-tall screen, like stable
     this.comboText.scale.set(u);
     this.comboText.position.set(12 * u, h - 8 * u);
+    this.comboSkin.scale.set(u);
+    this.comboSkin.position.set(12 * u, h - 8 * u);
     this.accText.scale.set(u);
     this.accText.position.set(w - 14 * u, 10 * u);
     this.scoreText.scale.set(u);
     this.scoreText.position.set(w - 14 * u, 50 * u);
     this.infoText.scale.set(u);
     this.infoText.position.set(14 * u, 10 * u);
+    // On narrow screens the HP bar occupies the top-left; map/player text
+    // would overlap it, so keep the playfield clear.
+    this.infoText.visible = w >= 640;
     const res = this.app.renderer.resolution;
-    for (const t of [this.comboText, this.accText, this.scoreText, this.infoText]) t.resolution = res;
+    for (const t of [this.comboText, this.comboX, this.accText, this.scoreText, this.infoText]) t.resolution = res;
     this.keyBoxes.forEach((k, i) => {
       const size = 34 * u;
       const x = w - size - 8 * u;
@@ -289,24 +361,54 @@ export class PlayfieldRenderer {
         this.displays.delete(i);
       }
     }
+    this.updateFollowPoints(t);
+    this.updateFlashlight(t);
     this.updateJudgements(t);
     this.updateCursor(t);
     this.updateHud(t);
     this.app.render();
   }
 
+  private displayColor(o: HitObj): number {
+    const map = this.map;
+    return map ? skinComboColor(map.comboColors, o.comboColor, this.skinConfig.comboColors) : o.comboColor;
+  }
+
   private makeCircle(o: HitObj): CircleParts {
     const r = this.map!.radius;
+    const color = this.displayColor(o);
     const root = new Container();
+    const light = new Sprite(this.hitGlowTexture);
+    light.anchor.set(0.5);
+    light.width = light.height = r * 4.6;
+    light.blendMode = 'add';
+    light.visible = false;
     const body = new Graphics();
-    body.circle(0, 0, r * 0.93).fill({ color: shade(o.comboColor, 0.55) });
-    body.circle(0, 0, r * 0.8).fill({ color: o.comboColor });
+    body.circle(0, 0, r * 0.93).fill({ color: shade(color, 0.55) });
+    body.circle(0, 0, r * 0.8).fill({ color });
     body.circle(0, -r * 0.18, r * 0.5).fill({ color: 0xffffff, alpha: 0.12 });
     body.circle(0, 0, r * 0.93).stroke({ width: r * 0.12, color: 0xffffff });
     const number = new Text({ text: String(o.comboNumber), style: { fontFamily: FONT, fontSize: r * 0.75, fontWeight: '700', fill: 0xffffff, dropShadow: { color: 0x000000, alpha: 0.5, blur: 2, distance: 0 } } });
     number.anchor.set(0.5);
     number.resolution = this.textResolution();
-    root.addChild(body, number);
+    let numberContainer: Container | undefined;
+    const digitTextures = String(o.comboNumber).split('').map((digit) => this.hitCircleFontTextures[Number(digit)]);
+    if (digitTextures.length > 0 && digitTextures.every((texture): texture is Texture => Boolean(texture))) {
+      const height = r * 1.05;
+      const widths = digitTextures.map((texture) => (texture.width * height) / Math.max(1, texture.height));
+      const layout = fontDigitLayout(widths, this.skinConfig.hitCircleOverlap * (r / 64));
+      numberContainer = new Container();
+      digitTextures.forEach((texture, index) => {
+        const sprite = new Sprite(texture);
+        sprite.anchor.set(0.5);
+        sprite.width = widths[index];
+        sprite.height = height;
+        sprite.position.set(layout.positions[index], 0);
+        numberContainer!.addChild(sprite);
+      });
+      number.visible = false;
+    }
+    root.addChild(light, body, numberContainer ?? number);
     const bodyTexture = this.skinTextures.hitcircle;
     const overlayTexture = this.skinTextures.hitcircleoverlay;
     let skinBody: Sprite | undefined;
@@ -315,7 +417,7 @@ export class PlayfieldRenderer {
       skinBody = new Sprite(bodyTexture);
       skinBody.anchor.set(0.5);
       skinBody.width = skinBody.height = r * 2;
-      skinBody.tint = o.comboColor;
+      skinBody.tint = color;
       root.addChildAt(skinBody, 1);
       body.visible = false;
     }
@@ -326,7 +428,7 @@ export class PlayfieldRenderer {
       root.addChildAt(skinOverlay, root.children.length - 1);
     }
     root.position.set(o.x, o.y);
-    return { root, body, number, skinBody, skinOverlay };
+    return { root, body, light, number, numberContainer, skinBody, skinOverlay };
   }
 
   private createDisplay(o: HitObj): Display {
@@ -336,6 +438,14 @@ export class PlayfieldRenderer {
     const d: Display = { obj: o, root };
     const r = this.map!.radius;
     if (o.kind === 'spinner') {
+      if (this.skinTextures['spinner-background']) {
+        d.skinSpinnerBackground = new Sprite(this.skinTextures['spinner-background']);
+        d.skinSpinnerBackground.anchor.set(0.5);
+        d.skinSpinnerBackground.width = 512;
+        d.skinSpinnerBackground.height = 384;
+        if (this.skinConfig.spinnerBackground !== null) d.skinSpinnerBackground.tint = this.skinConfig.spinnerBackground;
+        root.addChild(d.skinSpinnerBackground);
+      }
       d.spinnerDisc = new Graphics();
       d.spinnerDisc.circle(0, 0, 180).fill({ color: 0x000000, alpha: 0.45 }).stroke({ width: 4, color: 0xffffff, alpha: 0.8 });
       d.spinnerDisc.circle(0, 0, 8).fill({ color: 0xffffff });
@@ -360,6 +470,7 @@ export class PlayfieldRenderer {
       return d;
     }
     if (o.kind === 'slider') {
+      const color = this.displayColor(o);
       d.body = new Graphics();
       d.bodyAlpha = new AlphaFilter({ alpha: 1 });
       d.body.filters = [d.bodyAlpha];
@@ -369,17 +480,33 @@ export class PlayfieldRenderer {
       d.cumLen = cum;
       d.decor = new Graphics();
       d.follow = new Graphics();
-      d.follow.circle(0, 0, r * 2.4).fill({ color: o.comboColor, alpha: 0.12 }).stroke({ width: 3, color: 0xffffff, alpha: 0.85 });
+      d.follow.circle(0, 0, r * 2.4).fill({ color, alpha: 0.12 }).stroke({ width: 3, color: 0xffffff, alpha: 0.85 });
       d.ball = new Graphics();
-      d.ball.circle(0, 0, r * 0.8).fill({ color: o.comboColor }).stroke({ width: r * 0.12, color: 0xffffff });
+      d.ball.circle(0, 0, r * 0.8).fill({ color }).stroke({ width: r * 0.12, color: 0xffffff });
       d.follow.visible = false;
       d.ball.visible = false;
-      if (this.skinTextures.sliderb) {
-        d.skinBall = new Sprite(this.skinTextures.sliderb);
+      const ballTexture = this.skinTextures.sliderb ?? this.sliderBallTextures[0];
+      if (ballTexture) {
+        d.skinBall = new Sprite(ballTexture);
         d.skinBall.anchor.set(0.5);
         d.skinBall.width = d.skinBall.height = r * 2;
-        d.skinBall.tint = o.comboColor;
+        d.skinBall.tint = color;
         d.skinBall.visible = false;
+      }
+      if (this.skinTextures.sliderstartcircle) {
+        d.skinStart = new Sprite(this.skinTextures.sliderstartcircle);
+        d.skinStart.anchor.set(0.5);
+        d.skinStart.width = d.skinStart.height = r * 2;
+        d.skinStart.tint = color;
+        d.skinStart.position.set(o.path[0].x, o.path[0].y);
+      }
+      if (this.skinTextures.sliderendcircle) {
+        d.skinEnd = new Sprite(this.skinTextures.sliderendcircle);
+        d.skinEnd.anchor.set(0.5);
+        d.skinEnd.width = d.skinEnd.height = r * 2;
+        d.skinEnd.tint = color;
+        const tail = o.path[o.path.length - 1];
+        d.skinEnd.position.set(tail.x, tail.y);
       }
       if (this.skinTextures.reversearrow) {
         d.reverseStart = new Sprite(this.skinTextures.reversearrow);
@@ -405,6 +532,7 @@ export class PlayfieldRenderer {
         d.skinFollow.visible = false;
       }
       root.addChild(d.body, d.decor);
+      if (d.skinStart) root.addChild(d.skinStart);
     }
     d.head = this.makeCircle(o);
     root.addChild(d.head.root);
@@ -414,16 +542,17 @@ export class PlayfieldRenderer {
       if (d.skinBall) root.addChild(d.skinBall);
       if (d.reverseStart) root.addChild(d.reverseStart);
       if (d.reverseEnd) root.addChild(d.reverseEnd);
+      if (d.skinEnd) root.addChild(d.skinEnd);
     }
     d.approach = new Graphics();
-    d.approach.circle(0, 0, r).stroke({ width: r * 0.08, color: o.comboColor });
+    d.approach.circle(0, 0, r).stroke({ width: r * 0.08, color: this.displayColor(o) });
     d.approach.position.set(o.x, o.y);
     this.approachLayer.addChild(d.approach);
     if (this.skinTextures.approachcircle) {
       d.skinApproach = new Sprite(this.skinTextures.approachcircle);
       d.skinApproach.anchor.set(0.5);
       d.skinApproach.width = d.skinApproach.height = r * 2;
-      d.skinApproach.tint = o.comboColor;
+      d.skinApproach.tint = this.displayColor(o);
       d.skinApproach.position.set(o.x, o.y);
       d.approach.visible = false;
       this.approachLayer.addChild(d.skinApproach);
@@ -464,6 +593,17 @@ export class PlayfieldRenderer {
     if (d.head) {
       d.head.root.alpha = headAlpha;
       d.head.root.scale.set(headScale);
+      const light = hitLightAt(t, j.hitTime);
+      d.head.light.visible = light.visible;
+      if (light.visible) {
+        d.head.light.alpha = light.alpha;
+        d.head.light.scale.set(light.scale);
+      }
+    }
+    if (d.skinStart) {
+      d.skinStart.alpha = headAlpha;
+      d.skinStart.scale.set(headScale);
+      d.skinStart.visible = headAlpha > 0.01;
     }
 
     // Approach circle: shrinks from 4× to 1× over the preempt time. Hidden removes all but the first.
@@ -500,6 +640,10 @@ export class PlayfieldRenderer {
     if (t > s.end) bodyAlpha *= 1 - clamp01((t - s.end) / SLIDER_FADE);
     d.bodyAlpha!.alpha = bodyAlpha;
     d.decor!.alpha = bodyAlpha;
+    if (d.skinEnd) {
+      d.skinEnd.alpha = bodyAlpha;
+      d.skinEnd.visible = bodyAlpha > 0.01;
+    }
 
     // Snaking: the body grows along its path over the first third of the approach.
     const snake = clamp01((t - appear) / (map.preempt / 3));
@@ -545,6 +689,9 @@ export class PlayfieldRenderer {
       d.follow!.position.set(b.x, b.y);
       if (d.skinBall) {
         d.skinBall.position.set(b.x, b.y);
+        if (this.sliderBallTextures.length > 1) {
+          d.skinBall.texture = this.sliderBallTextures[sliderBallFrame(t, this.sliderBallTextures.length, 1000 / Math.max(1, this.skinConfig.animationFramerate))];
+        }
         const span = Math.max(0, Math.min(s.spans - 1, Math.floor((t - s.start) / Math.max(1, s.spanDuration))));
         const reverse = this.skinConfig.sliderBallFlip && span % 2 === 1;
         d.skinBall.scale.x = Math.abs(d.skinBall.scale.x) * (reverse ? -1 : 1);
@@ -561,6 +708,8 @@ export class PlayfieldRenderer {
 
   private drawSliderBody(d: Display, s: SliderObj, progress: number) {
     const r = this.map!.radius;
+    const color = skinComboColor(this.map!.comboColors, s.comboColor, this.skinConfig.comboColors);
+    const track = this.skinConfig.sliderTrackOverride ?? color;
     const pts = partialPath(s.path, d.cumLen!, progress);
     const g = d.body!;
     g.clear();
@@ -573,9 +722,9 @@ export class PlayfieldRenderer {
       for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
       g.stroke({ width, color, join: 'round', cap: 'round' });
     };
-    stroke(r * 2 * 0.98, 0xffffff); // border
-    stroke(r * 2 * 0.84, shade(s.comboColor, 0.28)); // track edge
-    stroke(r * 2 * 0.6, shade(s.comboColor, 0.42)); // track middle (lighter, like stable's gradient)
+    stroke(r * 2 * 0.98, this.skinConfig.sliderBorder ?? 0xffffff); // border
+    stroke(r * 2 * 0.84, shade(track, 0.28)); // track edge
+    stroke(r * 2 * 0.6, shade(track, 0.42)); // track middle (lighter, like stable's gradient)
   }
 
   private drawArrow(g: Graphics, s: SliderObj, atEnd: boolean, r: number) {
@@ -614,6 +763,39 @@ export class PlayfieldRenderer {
     void map;
   }
 
+  private updateFlashlight(t: number) {
+    const g = this.flashGfx;
+    g.clear();
+    const map = this.map;
+    if (!map?.mods.includes('FL') || !this.frames.length) return;
+    const combo = this.judgement ? eventAt(this.judgement, t)?.combo ?? 0 : 0;
+    const inBreak = map.breaks.some((b) => t >= b.start && t <= b.end);
+    const radius = flashlightRadius(combo, inBreak);
+    const cursor = cursorAt(this.frames, t, this.frameHint);
+    g.rect(0, 0, 512, 384).fill({ color: 0x000000, alpha: 0.9 });
+    g.circle(cursor.x, cursor.y, radius).cut();
+    const tracking = this.trackingRanges.some(([start, end]) => t >= start && t <= end);
+    const dim = flashlightTrackDim(tracking);
+    if (dim > 0) g.circle(cursor.x, cursor.y, radius).fill({ color: 0x000000, alpha: dim });
+  }
+
+  private updateFollowPoints(t: number) {
+    const g = this.followGfx;
+    g.clear();
+    const map = this.map;
+    if (!map || !this.followPoints.length) return;
+    const window = 300;
+    let i = firstFollowPointAtOrAfter(this.followPoints, t - window);
+    for (; i < this.followPoints.length; i++) {
+      const point = this.followPoints[i];
+      if (point.t > t + window) break;
+      const dt = point.t - t;
+      const alpha = dt >= 0 ? 1 - dt / window : 1 + dt / window;
+      if (alpha <= 0) continue;
+      g.circle(point.x, point.y, map.radius * 0.18).fill({ color: 0xffffff, alpha: alpha * 0.8 });
+    }
+  }
+
   private updateJudgements(t: number) {
     const keep = new Set<number>();
     this.resultEvents.forEach((e, i) => {
@@ -648,6 +830,7 @@ export class PlayfieldRenderer {
     if (!this.frames.length) {
       for (const sprite of this.cursorTrailSprites) sprite.visible = false;
       this.cursorSprite.visible = false;
+      this.cursorMiddleSprite.visible = false;
       return;
     }
     const c = cursorAt(this.frames, t, this.frameHint);
@@ -668,19 +851,28 @@ export class PlayfieldRenderer {
       }
     }
     const pressed = (c.keys & (KEY.M1 | KEY.M2)) !== 0;
+    const factor = pressed && this.skinConfig.cursorExpand ? 1.12 : 1;
     if (this.cursorSprite.visible) {
       this.cursorSprite.position.set(c.x, c.y);
       this.cursorSprite.rotation = this.skinConfig.cursorRotate ? Math.atan2(c.y - 192, c.x - 256) : 0;
-      const factor = pressed && this.skinConfig.cursorExpand ? 1.12 : 1;
       this.cursorSprite.scale.set(this.cursorBaseScale.x * factor, this.cursorBaseScale.y * factor);
     } else {
       g.circle(c.x, c.y, pressed ? 11 : 9.5).fill({ color: 0xffe08a, alpha: 0.95 }).stroke({ width: 2, color: 0xffffff });
+    }
+    const middle = Boolean(this.skinTextures.cursormiddle);
+    this.cursorMiddleSprite.visible = middle;
+    if (middle) {
+      const size = 64 * this.skinConfig.cursorScale * factor;
+      this.cursorMiddleSprite.position.set(c.x, c.y);
+      this.cursorMiddleSprite.width = size;
+      this.cursorMiddleSprite.height = size;
     }
   }
 
   private updateHud(t: number) {
     const e = this.judgement ? eventAt(this.judgement, t) : null;
     this.comboText.text = `${e?.combo ?? 0}x`;
+    this.updateComboHud(e?.combo ?? 0);
     this.accText.text = `${((e?.accuracy ?? 1) * 100).toFixed(2)}%`;
     this.scoreText.text = scoreHudLabel(e?.score);
     const c = this.frames.length ? cursorAt(this.frames, t, this.frameHint) : null;
@@ -693,6 +885,30 @@ export class PlayfieldRenderer {
       k.label.style.fill = down ? 0x000000 : 0xffffff;
       k.count.text = String(countUpTo(k.presses, t));
     }
+  }
+
+  private updateComboHud(combo: number) {
+    const digits = String(combo).split('');
+    const textures = digits.map((digit) => this.comboFontTextures[Number(digit)]);
+    const hasFont = textures.length > 0 && textures.every((texture): texture is Texture => Boolean(texture));
+    this.comboText.visible = !hasFont;
+    this.comboSkin.visible = hasFont;
+    if (!hasFont) return;
+    this.comboSkin.removeChildren();
+    const height = 48;
+    const overlap = this.skinConfig.comboOverlap * (height / 128);
+    let x = 0;
+    textures.forEach((texture) => {
+      const sprite = new Sprite(texture);
+      sprite.anchor.set(0, 1);
+      sprite.height = height;
+      sprite.width = (texture.width * height) / Math.max(1, texture.height);
+      sprite.x = x;
+      this.comboSkin.addChild(sprite);
+      x += sprite.width + overlap;
+    });
+    this.comboX.x = x;
+    this.comboSkin.addChild(this.comboX);
   }
 
   destroy() {

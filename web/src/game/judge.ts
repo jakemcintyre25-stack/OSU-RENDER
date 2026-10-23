@@ -32,6 +32,10 @@ export interface ObjectJudgement {
   halfSpins?: number;
   /** Spinner only: stable's truncated half-spin completion requirement. */
   halfSpinsRequired?: number;
+  /** Spinner only: judged window between the first and last half-spin. */
+  spinnerSpinRange?: [number, number];
+  /** Spinner only: timestamps of half-spins that award a stable 1100-point bonus. */
+  spinnerBonusTicks?: number[];
 }
 
 export interface ComboEvent {
@@ -262,10 +266,16 @@ function judgeSlider(s: SliderObj, j: ObjectJudgement, head: Hit, frames: Replay
  * one half-spin per frame. The original client's acceleration smoothing is a
  * separate open parity item, not something this function claims to emulate.
  */
-export function spinnerHalfSpins(frames: ReplayFrame[], start: number, end: number): number {
+export function spinnerHalfSpinProgress(
+  frames: ReplayFrame[],
+  start: number,
+  end: number,
+): { halfSpins: number; tickTimes: number[] } {
   const pressMask = KEY.M1 | KEY.M2;
   let previousAngle: number | null = null;
   let accumulated = 0;
+  let counted = 0;
+  const tickTimes: number[] = [];
 
   for (const frame of frames) {
     if (frame.t < start) continue;
@@ -281,18 +291,41 @@ export function spinnerHalfSpins(frames: ReplayFrame[], start: number, end: numb
       if (difference > Math.PI) difference -= 2 * Math.PI;
       else if (difference < -Math.PI) difference += 2 * Math.PI;
       accumulated += Math.min(1, Math.abs(difference) / Math.PI);
+      // Stable increments scoringRotationCount when the truncated half-spin
+      // count rises. The epsilon keeps an exact ±180° frame from being lost
+      // to floating-point representation.
+      const next = Math.floor(accumulated + 1e-9);
+      while (counted < next) {
+        tickTimes.push(frame.t);
+        counted++;
+      }
     }
     previousAngle = angle;
   }
-  return accumulated;
+  return { halfSpins: counted, tickTimes };
+}
+
+export function spinnerHalfSpins(frames: ReplayFrame[], start: number, end: number): number {
+  return spinnerHalfSpinProgress(frames, start, end).halfSpins;
 }
 
 function judgeSpinner(s: SpinnerObj, j: ObjectJudgement, frames: ReplayFrame[], od: number) {
-  const halfSpins = Math.floor(spinnerHalfSpins(frames, s.start, s.end));
+  const progress = spinnerHalfSpinProgress(frames, s.start, s.end);
+  const halfSpins = progress.halfSpins;
   const required = spinnerHalfSpinsRequired(od, s.end - s.start);
   j.halfSpins = halfSpins;
   j.halfSpinsRequired = required;
   j.spins = halfSpins / 2;
+  if (progress.tickTimes.length) {
+    j.spinnerSpinRange = [progress.tickTimes[0], progress.tickTimes[progress.tickTimes.length - 1]];
+    const bonusThreshold = required + 3;
+    j.spinnerBonusTicks = [];
+    for (let count = 1; count <= halfSpins; count++) {
+      if (count > bonusThreshold && (count - bonusThreshold) % 2 === 0) {
+        j.spinnerBonusTicks.push(progress.tickTimes[count - 1]);
+      }
+    }
+  }
   // stable SpinnerOsu.Hit(): requirement 0 auto-clears; below 25% misses;
   // > requirement is 300; > requirement - 2 is 100; otherwise 50.
   const minimum = Math.trunc(required * 0.25);

@@ -1,0 +1,25 @@
+﻿{
+    "file":  "export-long.mp4",
+    "bytes":  138933591,
+    "video":  {
+                  "packets":  10800,
+                  "width":  1920,
+                  "codec":  "avc",
+                  "endTimestamp":  180,
+                  "lastTimestamp":  179.98333333333332,
+                  "firstTimestamp":  0,
+                  "height":  1080
+              },
+    "audio":  {
+                  "packets":  8438,
+                  "channels":  2,
+                  "sampleRate":  48000,
+                  "codec":  "aac",
+                  "endTimestamp":  180.01066666666665,
+                  "lastTimestamp":  179.98933333333332,
+                  "firstTimestamp":  0
+              },
+    "endDeltaMs":  10.666666666666657,
+    "exportMs":  122867,
+    "source":  "synthetic 2D canvas + 180 s stereo tone"
+}

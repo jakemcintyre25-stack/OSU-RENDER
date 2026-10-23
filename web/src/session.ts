@@ -38,6 +38,11 @@ function toArrayBuffer(b: Uint8Array): ArrayBuffer {
 export async function sessionFromReplay(replayBytes: Uint8Array, osz: OszArchive | null, osuFallback: string | null, beatmapId?: number, skinArchive: OszArchive | null = null): Promise<Session> {
   const replay = await decodeReplay(replayBytes);
   const warnings: string[] = [];
+  // Lazer uses different hit windows, scoring and replay semantics. Refuse the
+  // import instead of displaying a stable-parity judgement that is not valid.
+  if (replay.isLazer) {
+    throw new Error('This is an osu!lazer replay. Lazer scoring is not supported yet — import the original osu!stable replay for this play.');
+  }
   if (replay.rulesetId !== 0) throw new Error('This replay is not osu!standard — only standard is supported for now');
   let diff: Difficulty | null = null;
   if (osz) {

@@ -1,9 +1,12 @@
 import { getRecentPlays, getReplay, lookupBeatmapByChecksum, HttpError, type OsuEnv } from './osu';
 import { fetchBeatmapset, fetchOsuFile } from './mirrors';
+import { KvMirrorHealth, mirrorHealth } from './mirror-health';
 
 export interface Env extends OsuEnv {
   ASSETS: Fetcher;
   LIMITER?: RateLimit;
+  /** Optional KV namespace for cross-isolate mirror reputation. */
+  MIRROR_HEALTH?: KVNamespace;
 }
 
 const json = (data: unknown, status = 200, extra: HeadersInit = {}) =>
@@ -27,6 +30,41 @@ async function cached(req: Request, ctx: ExecutionContext, ttlSeconds: number, b
     ctx.waitUntil(cache.put(key, copy));
   }
   return res;
+}
+
+/** Baseline response hardening applied to API and static-asset responses.
+ * CSP is intentionally absent until the player/export paths have been verified
+ * against a real policy; these headers do not change response bodies.
+ */
+export const SECURITY_HEADERS: ReadonlyArray<readonly [string, string]> = [
+  ['X-Content-Type-Options', 'nosniff'],
+  ['Referrer-Policy', 'strict-origin-when-cross-origin'],
+  ['Permissions-Policy', 'camera=(), microphone=(), geolocation=()'],
+  ['Strict-Transport-Security', 'max-age=31536000; includeSubDomains'],
+  ['Content-Security-Policy', [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https://assets.ppy.sh",
+    "media-src 'self' blob:",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+  ].join('; ')],
+];
+
+export function applySecurityHeaders(response: Response): Response {
+  const headers = new Headers(response.headers);
+  for (const [name, value] of SECURITY_HEADERS) headers.set(name, value);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 const ID = /^\d{1,12}$/;
@@ -67,7 +105,8 @@ export async function handleApi(req: Request, env: Env, ctx: ExecutionContext): 
     if (!ID.test(m[1])) return json({ error: 'Bad beatmapset ID' }, 400);
     const id = m[1];
     return cached(req, ctx, 60 * 60 * 24 * 7, async () => {
-      const { body, mirror } = await fetchBeatmapset(id);
+      const health = env.MIRROR_HEALTH ? new KvMirrorHealth(env.MIRROR_HEALTH) : mirrorHealth;
+      const { body, mirror } = await fetchBeatmapset(id, fetch, health);
       return new Response(body, { headers: { 'Content-Type': 'application/zip', 'X-Mirror': mirror } });
     });
   }
@@ -92,13 +131,13 @@ export default {
     const url = new URL(req.url);
     if (url.pathname.startsWith('/api/')) {
       try {
-        return await handleApi(req, env, ctx);
+        return applySecurityHeaders(await handleApi(req, env, ctx));
       } catch (e) {
-        if (e instanceof HttpError) return json({ error: e.message }, e.status);
+        if (e instanceof HttpError) return applySecurityHeaders(json({ error: e.message }, e.status));
         console.error(e);
-        return json({ error: 'Something went wrong on the server' }, 500);
+        return applySecurityHeaders(json({ error: 'Something went wrong on the server' }, 500));
       }
     }
-    return env.ASSETS.fetch(req);
+    return applySecurityHeaders(await env.ASSETS.fetch(req));
   },
 } satisfies ExportedHandler<Env>;

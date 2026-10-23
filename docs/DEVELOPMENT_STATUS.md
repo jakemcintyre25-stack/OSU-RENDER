@@ -10,15 +10,16 @@ Updated: 23 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 |---|---|---|
 | M1 Judgement harness | **PASS** | `npm run judge-check`, verbose diagnostics and CI implemented. Empty optional fixtures exit zero. Real replay fixtures stay local. |
 | M2 Stable judgement parity | **IN PROGRESS** | Strict checksum matching rejects updated beatmaps with unchanged IDs; `.osu`-only fallback labels uncertainty. Strict parity mode fails when no stable replay is checked. Slider timing, combo breaks, hit-window edges and 2B autoplay have synthetic tests. Spinner judgement now uses stable's half-spin requirement, one-half-spin-per-frame accumulation and 300/100/50/miss thresholds. Note-lock now ignores input on later overlapping objects while the earliest head is unjudged, with stable's 3 ms simultaneous-object tolerance. Stable's spinner acceleration smoothing and exact real-replay parity remain unverified. |
-| M3 HP and fail | **IN PROGRESS** | Verified SD/PF failure timestamps from circle grades and slider-head/tick/repeat combo breaks, with NF precedence. `hp-stable.ts` now ports stable's drain search, normal/combo-end health gains, slider/spinner nested health, break pauses and negative-judgement HP-zero failure; `Session.hp` carries the computed trace. A visible HP bar/player fail overlay is not wired yet because `main.ts`/`style.css` are owned by the concurrent M9 export work; real-replay HP parity remains unverified. |
+| M3 HP and fail | **IN PROGRESS** | Verified SD/PF failure timestamps from circle grades and slider-head/tick/repeat combo breaks, with NF precedence. `hp-stable.ts` now ports stable's drain search, normal/combo-end health gains, slider/spinner nested health, break pauses and negative-judgement HP-zero failure; `Session.hp` carries the computed trace. The player now renders a 200-unit HP bar and pauses at the calibrated negative-judgement failure with a fail overlay; seeking before the failure clears it. Real-replay HP parity remains unverified. |
 | M4 Score V1 | **IN PROGRESS** | Running ScoreV1, mod multipliers and slider/spinner part scoring exist; HUD now displays calculated score and details panel compares against the replay header. Spinner points now follow stable's half-spin ticks and 1.5-spin bonus gap. The difficulty multiplier now uses stable's summed-break drain length, banker's rounding and no 2–6 clamp. Per-object combo bonuses now truncate combo × difficulty × mod before applying the hit value, matching stable's integer cast. ScoreV2 replays are detected from mod bit 29 and skipped by `judge-check` rather than compared as ScoreV1. It is labelled provisional; real header parity remains unverified. |
-| M5 Audio timing and hitsounds | **IN PROGRESS** | Chart/user .osk hitsounds, successful spinner completion and judged tracked slider loops are scheduled on shared Web Audio time; independent music/FX gains, AudioLeadIn and map-before-skin WAV/MP3/OGG precedence are tested. Browser acoustic parity, spin/bonus sounds, licensed defaults and pitch-preserving DT/HT remain. See docs/M5-FINDINGS.md. |
-| M6 Default skin and visual parity | **OPEN** | Basic Pixi renderer exists; sprite parity, shader, HUD, FL and effects remain. |
-| M7 Custom skins | **IN PROGRESS** | Optional .osk WAV/MP3/OGG hitsounds and slider loops are recognized in root-level archive entries; LayeredHitSounds honored. Visual skin.ini layout, sprites, persistence and default licensed sound set remain OPEN. |
-| M8 Player page | **IN PROGRESS** | Calculated ScoreV1 HUD, Sync and persisted 0.25×–2× speed, separate music/FX levels, persisted cursor-trail/key-overlay toggles, audio-outro seek range, clickable accessible miss/100 review markers, share-link action and latest-request-wins cancellation. Unit, abort and build checks pass; actual browser/mobile acceptance remains. |
-| M9 MP4 export | **IN PROGRESS** | Real-time WebM MediaRecorder capture records the live canvas plus a synchronized music/hit-effect audio tap, with Opus codec negotiation, video-only fallback, bounded size/time, cancellation, track cleanup and safe download. Not MP4 and not deterministic: offline fixed-FPS rendering, full-length export beyond 60 seconds, browser-device acoustic acceptance and native MP4 remain OPEN. |
-| M10 Lazer | **OPEN** | Legacy/stable only; lazer detection and rule set remain. |
-| M11 Hardening | **IN PROGRESS** | ZIP/CRC32 limits, bounded replay frames, browser and Worker streamed `.osr` / `.osz` / `.osu` downloads, plus local-upload pre-read caps. The Worker replay upstream now uses a 64 MiB streaming ceiling rather than unrestricted allocation. Tested per-isolate mirror breaker: 3 failures → 10-minute cooldown; 404 not counted. R2/global breaker, security audit, decompression testing and production loads remain. |
+| M5 Audio timing and hitsounds | **IN PROGRESS** | Chart/user .osk hitsounds, successful spinner completion, user-skin spinner loops/bonus clips and judged tracked slider loops are scheduled on shared Web Audio time; independent music/FX gains, AudioLeadIn and map-before-skin WAV/MP3/OGG precedence are tested. Preview DT/HT now uses a WSOLA pitch-preserving stretch. See docs/M5-FINDINGS.md. |
+| M6 Default skin and visual parity | **IN PROGRESS** | Procedural Pixi rendering covers circles, sliders, spinners, cursor/key HUD, default hit lighting, follow points and a Flashlight overlay with stable combo thresholds (100x/200x, break expansion and slider-tracking dim). Real headless-Chrome screenshots verify the HP bar, follow points, FL hole and 390×844 control wrapping. Full sprite parity, shaders, default skin assets and physical-mobile screenshots remain OPEN. |
+| M7 Custom skins | **IN PROGRESS** | Optional .osk hitsounds/slider loops and visual sprites are loaded from root-level archive entries; LayeredHitSounds honored. The renderer uses hitcircle/overlay, approach, slider ball/follow (including indexed animation), reverse arrows, slider start/end circles and overlays, spinner background/circle/approach, cursor/trail/middle, combo-colour overrides, CursorScale and SliderBorder/SliderTrackOverride; the selected skin is persisted in IndexedDB. Skin-font digit sprites with `HitCircleOverlap`, HUD `ComboPrefix`/`ComboOverlap` and `[General] AnimationFramerate` now render; default licensed sounds and real-browser visual comparison remain OPEN. |
+| M8 Player page | **IN PROGRESS** | Calculated ScoreV1 HUD, Sync and persisted 0.25×–2× speed, separate music/FX levels, persisted cursor-trail/key-overlay toggles, audio-outro seek range, clickable accessible miss/100 review markers, share-link action and latest-request-wins cancellation and a hit-error/UR summary bar. Controls wrap without clipping at both narrow and full-width layouts, the HP bar no longer overlaps map text, and toast feedback sits above the controls. Real headless-Chrome screenshots at 1280×720 and 390×844 verify the player; physical mobile/coarse-pointer acceptance remains. |
+| M9 MP4 export | **IN PROGRESS** | Two paths exist: bounded real-time WebM capture with synchronized audio, and a deterministic full-length exporter that steps fixed-FPS map time, mixes music/hitsounds in an OfflineAudioContext, and muxes MP4 (H.264/AAC) or WebM (VP9/VP8 + Opus) through Mediabunny. Export dialog, progress, cancel, codec probing and video-only fallback are implemented with 33 automated export tests. A real headless-Chrome run produced and re-parsed a 1280×720/30 fps MP4: 60 H.264 frames (2.000 s) plus 48 kHz stereo AAC (2.005 s), both starting at 0. DT/HT export music is pitch-stretched with WSOLA. A second run through the export dialog under the enforced CSP produced a 10-second 1280×720/30 fps H.264/AAC MP4 (1,112,419 bytes) with zero CSP violations. Long-duration 1080p60, real-replay content, memory profiling and physical mobile acceptance remain OPEN. |
+| M10 Lazer | **IN PROGRESS** | Lazer-origin replays are now detected from their `30000000+` game-version field and rejected with an explicit unsupported message; `judge-check` uses the same real detection. The recent-play list now disables lazer entries with an explanation before any download starts, and the open-play path re-checks the same guard. Lazer hit windows, scoring (including judgment and mod settings), replay semantics, skin parity and real lazer fixtures remain OPEN. |
+| M11 Hardening | **IN PROGRESS** | ZIP/CRC32 limits, bounded replay frames, browser and Worker streamed `.osr` / `.osz` / `.osu` downloads, plus local-upload pre-read caps. The Worker replay upstream now uses a 64 MiB streaming ceiling rather than unrestricted allocation. Tested per-isolate mirror breaker: 3 failures → 10-minute cooldown; 404 not counted. Every API and asset response carries baseline security headers plus an enforced CSP; Pixi uses its eval-free polyfill module so `script-src 'self'` works. An optional KV-backed global mirror-health implementation is available through the `MIRROR_HEALTH` binding, with the per-isolate breaker as the default fallback. Durable atomic coordination, decompression testing and production loads remain. |
+
 | M12 One Miss Merchants links | **IN PROGRESS** | Validated `?user=<osu ID>` auto-list and `?score=<score ID>` playback, canonical copy-link action, documented OMM read-only external-link contract in docs/INTEGRATION.md. OMM-side profile/match links, actual hostname, API/live-browser acceptance and rollback work remain OPEN. |
 
 ## Verified recent commits
@@ -166,7 +167,7 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - Prior `2edf4fcf` checkpoint passed both CI workflows.
 - `b2bdff72`: render .osk reverse-arrow sprites at active slider repeat endpoints, rotated to point into the return path; retain vector arrow fallback.
 - `c27b269a`: align custom reverse-arrow alpha with Hidden and slider fades.
-- **Verification:** CI pending on these new changes; no real-browser visual comparison. M7 remains IN PROGRESS. Next: fix any CI failures, add real renderer regression coverage and verify skin.ini and sprite geometry.
+- **Verification:** these commits are included in the current green RC; real-browser sprite geometry/visual comparison remains open. M7 remains IN PROGRESS.
 
 ### M7 skin.ini configuration integration (23 October 2026)
 
@@ -265,14 +266,124 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - Tests in `judge-matching.test.ts` and `judge-head.test.ts` now cover the lock, the release after judging, the 3 ms simultaneous-object tolerance and the unchanged first-hit behaviour.
 - Automated evidence: **211 web tests passed, 12 skipped**, web typecheck passed, production build passed.
 - **M2 remains IN PROGRESS:** stable's spinner acceleration smoothing is not specialised, and no real-replay rerun was possible.
+### M10 lazer replay detection and gating (23 October 2026)
+
+- Source: osu!lazer's `LegacyScoreEncoder` writes its database version (`30000000+`) into the legacy header's game-version field; stable writes a `YYYYMMDD` build date. `FIRST_LAZER_GAME_VERSION = 30_000_000` is therefore a reliable origin boundary, unlike filename heuristics or the ScoreV2 mod bit.
+- `LoadedReplay` now exposes `gameVersion` and `isLazer`; `sessionFromReplay` rejects lazer replays with a specific message instead of presenting a stable-parity judgement that does not apply.
+- `judge-check` already skipped `replay.isLazer`; that path now works from decoded header data rather than only from filenames.
+- The recent-play list disables lazer entries with an explanatory title before any download, and `openPlay` re-checks the same guard for deep links and stale clicks.
+- Synthetic coverage: stable and lazer encoded `.osr` headers, the version boundary, session rejection, and all four recent-score playability combinations.
+- Automated evidence: **290 web tests passed, 12 skipped**, web typecheck passed, production build passed. CI remains authoritative.
+- **M10 remains IN PROGRESS:** lazer hit windows, judgements, score model, mod settings, replay semantics, skin parity and real lazer fixtures are still required. Detection is not lazer support.
+
+### M9 deterministic full-length export (23 October 2026)
+
+- This branch adds the implemented pipeline. New pure layers: `render/export/timeline.ts` (fixed frame count and exact map/output timestamps), `render/export/frames.ts` (ordered render/add loop with abort and progress) and `render/export/codecs.ts` (MP4-first codec policy).
+- `audio/offline-mix.ts` plans and renders music plus hitsound events/loops on an `OfflineAudioContext`. Negative AudioLeadIn becomes a delayed music start; a positive export start becomes a seek offset; loop phase is preserved when the export begins inside a tracked slider.
+- `render/export/export-video.ts` probes real encoders with Mediabunny (`canEncodeVideo`/`canEncodeAudio`), adds a fixed-rate `CanvasSource`, optionally an AAC/Opus `AudioBufferSource`, and finalises MP4/H.264 or WebM/VP9/VP8. It is lazy-loaded as a separate ~255 KB chunk.
+- The player now has an **Export video** dialog with 720p/1080p, 30/60 fps, codec capability text, an estimated frame count, progress, cancel and a local download. Export uses a hidden 1280×720/1920×1080 renderer at resolution 1 and pauses preview playback; the preview is rebuilt after the export renderer is destroyed.
+- Design and acceptance detail: `docs/M9-EXPORT.md`. Dependency note: Mediabunny is MPL-2.0 and is bundled locally, not hotlinked.
+- Automated evidence: **33 export-focused tests** across timeline, frame loop, codec policy, offline mix and mux orchestration. On the merged tree the full web suite passed **290 tests (12 skipped)**, worker tests passed **50**, web typecheck passed and the production build passed.
+- Real-browser check: headless Chrome 155 (Windows) produced a **1280×720/30 fps MP4** from a synthetic canvas and tone in 426 ms (444,500 bytes). It re-opened in `HTMLVideoElement` and was parsed with Mediabunny: **60 H.264 packets, 2.000 s; 94 AAC stereo 48 kHz packets, 2.005 s; both first timestamps 0; end delta 5.33 ms** (AAC padding). This run found and fixed a real deadlock: `Output.getMimeType()` was awaited before the first frame, so no codec metadata could ever arrive (the codec-metadata ordering fix in this branch). This branch also makes `@types/node` explicit so clean-install CI typechecks.
+- **Long 1080p60 pipeline check (24 October):** a standalone harness using production export modules completed a **3-minute 1920×1080/60 synthetic 2D-canvas** export: **10,800 frames, 138,933,591 bytes, 122.9 s, H.264/AAC**, re-opened at **180.0107 s / 1920×1080**, JS heap **138 MB**. A downloaded-file Mediabunny parse found **10,800 H.264 packets** (first 0, last 179.983333 s) and **8,438 AAC 48 kHz stereo packets** (first 0, last 179.989333 s), an A/V start delta of **0 ms** and **10.67 ms** end padding ([screenshot](./evidence/export-long-1080p60.png), [JSON](./evidence/export-long-1080p60-streams.json)). This measures the encoder/timeline/offline-audio path, **not Pixi render cost**; a separate software-WebGL 10 s 1080p60 attempt timed out at 120 s.
+- **Still OPEN:** real-renderer/GPU 1080p60, real replay/audio content, total-process peak memory, mobile browsers and DT/HT acoustic acceptance. M9 is not PASS; no deployment.
+
+### M6 default hit lighting, follow points and flashlight (24 October 2026)
+
+- `render/hit-light.ts` adds a bounded 160 ms white bloom with expansion and fade, used by the Pixi renderer behind hit circles and slider heads.
+- `render/follow-points.ts` places procedural default-skin follow dots between consecutive objects, with cross-combo and spinner gaps.
+- The renderer fades follow points in after the previous object ends and out at the next object's start; the layer sits below hit objects.
+- `render/flashlight.ts` and a dedicated overlay layer render FL with stable combo scales (1.0/0.8125/0.625 at 0/100/200x), 2.5× break expansion, a cursor-centered hole and slider-tracking dim.
+- Tests cover hit-light timing, follow-point spacing/bounds and flashlight geometry; full suite and build pass.
+- **Real-browser:** headless Chrome rendered the synthetic autoplay with FL enabled; the HP bar, follow points and FL visibility hole are visible in [browser-flashlight.png](./evidence/browser-flashlight.png). The FL UI toggle is now exposed alongside the other mods.
+- **M6 remains IN PROGRESS:** full default-skin sprite parity, shaders and mobile/varied-resolution screenshots remain OPEN.
+
+### M7 slider start/end circle sprites (24 October 2026)
+
+- Added `sliderstartcircleoverlay` and `sliderendcircleoverlay` to the bounded root-level visual skin key list.
+- Slider heads prefer `sliderstartcircle`/`sliderstartcircleoverlay`; the tail circle uses `sliderendcircle`/`sliderendcircleoverlay`, both falling back to `hitcircle`/`hitcircleoverlay`.
+- The tail circle appears near the slider end and reacts to the judged tail (hit expansion/fade or miss fade).
+- Tests cover @2x resolution and all four slider-specific circle sprites.
+- **M7 remains IN PROGRESS:** full skin.ini layout parity, default licensed sounds and real-browser screenshot comparison remain OPEN; animation, fonts and persistence are implemented.
+
+### M7 visual skin rendering (24 October 2026)
+
+- `f2831c2` starts using previously parsed-but-unused root-level sprites: `sliderstartcircle`, `sliderendcircle`, `spinner-background` and `cursormiddle`, alongside the existing hitcircle/overlay, approach, slider ball/follow, reverse-arrow, spinner and cursor assets.
+- Skin `[Colours]` are parsed with strict `R,G,B` validation: `Combo1..Combo8` override the map's combo cycle (preserving its index), `SliderBorder` and `SliderTrackOverride` drive slider body colours, and `SpinnerBackground` tints the spinner background sprite. `[General] CursorScale` is honoured within 0.1–3.
+- The cursor middle overlays the cursor with press expansion; slider start/end sprites follow head fade and body fade; the spinner background sits behind the disc.
+- Indexed slider-ball frames (`sliderb0..sliderbN`, `@2x` aware) are loaded through `SliderBallFrames` and cycled using `[General] AnimationFramerate` (60 fps default, bounded 1–120); plain `sliderb` remains the fallback.
+- `[Fonts] HitCirclePrefix` and `HitCircleOverlap` now drive real digit sprites (`<prefix>-0..9`, `@2x` aware) with centred overlap layout; a missing digit falls back to the text renderer. Prefixes are validated against a safe sprite stem.
+- `[Fonts] ComboPrefix`/`ComboOverlap` drive the HUD combo-counter digits; the `x` suffix remains text, and a missing digit falls back to the combined text counter.
+- The selected `.osk` is stored in IndexedDB (128 MiB validation cap), restored before a replay/session opens, and can be removed with **Forget saved skin**. Storage/quota failures keep the skin session-only; corrupt stored data is cleared.
+- Automated evidence: `skin-visuals.test.ts` now covers all new sprite keys, combo colour mapping, cursor scale, slider colours, skin fonts, animation frames and malformed values. Full suite: **290 passed, 12 skipped**; typecheck and production build pass.
+- **Still OPEN:** default licensed sounds and real-browser screenshot comparison. No visual parity claim is made.
+
+### M6 default visual effects (24 October 2026)
+
+- **Hit lighting:** each circle/slider head gets an independent glow that starts on the judged hit and decays over 260 ms (`render/effects.ts`); misses never light.
+- **Follow points:** default-skin dots are planned between consecutive objects, skipping spinners/short gaps, capped at 12 per gap and 4,000 total, and drawn through a binary-search time window so long maps do not scan every point each frame (`render/follow-points.ts`).
+- **Flashlight:** FL maps draw a playfield dimming layer with a cursor-following circular cut-out; the cursor layer stays above it so the pointer remains visible. This is a playfield-scoped approximation, not stable's exact FL radius/behaviour.
+- These are vector effects with no bundled copyrighted skin assets. The follow-point path is a straight-gap approximation, not stable's exact slider-path placement.
+- Automated evidence: 7 new pure tests for light decay and follow-point planning; full suite **290 passed, 12 skipped**; typecheck/build pass.
+- **M6 remains IN PROGRESS:** full default sprite parity, shaders and HUD effects. Desktop and 390×844 browser screenshots are now captured; skin font digits and soft hit glow are implemented.
+
+### M11 baseline security response headers (24 October 2026)
+
+- Worker `fetch` now applies one hardened header set to API successes, API errors/404s and static assets: `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, a camera/microphone/geolocation-denying `Permissions-Policy`, and HSTS.
+- Headers are replaced, not appended, so a weaker upstream/asset value cannot win. Response bodies, statuses and existing content types are preserved.
+- Tests cover health, method/not-found errors, static assets and duplicate-header replacement.
+- Automated evidence: **50 worker tests passed**, worker typecheck passed. Web tests are unaffected.
+- **M11 remains IN PROGRESS:** decompression testing, security audit and production load remain OPEN.
+
+### M11 optional KV-backed mirror health (24 October 2026)
+
+- Refactored the failure/cooldown decision into one pure `nextMirrorStatus()` transition shared by the in-memory and KV implementations.
+- Added `KvMirrorHealth` using an optional `MIRROR_HEALTH` KV binding. It preserves the 3-failure threshold, 10-minute cooldown, 24-hour Retry-After cap, 404 exemption and never-shorten rule.
+- `fetchBeatmapset` now awaits a sync/async `MirrorHealthLike`, so the per-isolate `mirrorHealth` remains the default when no KV binding is configured.
+- No binding is added to `wrangler.jsonc` by default; operators can opt in with the documented comment.
+- Tests cover KV round-trips, cross-instance cooldown sharing, Retry-After, corrupt entries and the fetch fallback.
+- Automated evidence: **53 worker tests passed**, worker typecheck passed.
+- **Still OPEN:** KV is eventually consistent, not atomic; real Cloudflare load/consistency testing and a durable breaker remain. This does not claim production M11 completion.
+
+### M11 enforced Content-Security-Policy (24 October 2026)
+
+- Added an enforced CSP to every Worker response: self-only scripts/workers, self+blob media, self+data+blob images plus `https://assets.ppy.sh`, self fonts, self connect, inline styles, `object-src 'none'`, `base-uri 'none'`, `frame-ancestors 'none'` and `form-action 'self'`.
+- Imported Pixi's eval-free `pixi.js/unsafe-eval` polyfill so the renderer works under `script-src 'self'` without weakening the policy with `'unsafe-eval'`.
+- Headless Chrome loaded the built app under the real CSP header, imported a synthetic `.osz`, enabled FL, played the map and reported **zero CSP violations**; screenshot in [browser-csp.png](./evidence/browser-csp.png).
+- The same CSP-enforced run opened the export dialog and completed a deterministic **1280×720/30 fps H.264/AAC MP4** (1,112,419 bytes; 300 frames / 10 s), still with zero CSP violations. Screenshot: [browser-export-csp.png](./evidence/browser-export-csp.png).
+- Also fixed desktop control wrapping so the extra export/share buttons no longer clip at 1280×720.
+- Automated evidence: **54 worker tests passed**, **281 web tests passed, 12 skipped**, both typechecks and production build pass.
+- **Still OPEN:** third-party asset hosts beyond osu! covers, real-device/browser matrix, CSP report collection and the remaining M11 load/security audit.
+
+### M5 pitch-preserving DT/HT preview (24 October 2026)
+
+- New dependency-free WSOLA stretcher (udio/time-stretch.ts) preserves pitch while changing playback duration; Clock.prepareRate(rate) caches a stretched buffer per rate and startSource plays it at rate 1 with rate-divided offsets. Preparation failure falls back to pitch-changing playbackRate with an explicit warning.
+- Automated evidence: 440 Hz DT/HT pitch/duration tests and a Clock buffer/offset test pass. Full suite count is refreshed by the release-candidate verification run.
+- **Limits:** compact WSOLA, not mastering-grade; real-music artifacts are unmeasured. The M9 export mixer now uses the same stretcher for DT/HT music.
+
+
+### M8 real-browser player acceptance (24 October 2026)
+
+- Headless Chrome loaded the built app, imported a synthetic `.osz` through the real file input, enabled FL, and rendered the player at 1280×720 and 390×844.
+- Desktop: HP bar, combo/accuracy/score HUD, follow points, key overlay and FL hole are visible ([screenshot](./evidence/browser-flashlight.png)).
+- Mobile 390×844: HP bar no longer overlaps map text, Record/Export/Share controls wrap without clipping, and the toast sits above the controls ([screenshot](./evidence/browser-mobile.png)).
+- Fixes: hide the in-canvas map/player text below 640 CSS pixels; small-screen button sizing/wrapping; mobile toast offset; FL mod toggle exposed in the autoplay mod list.
+- **M8 remains IN PROGRESS:** a physical coarse-pointer/mobile device, touch interactions and iOS/Android browsers are still untested.
+
+### M8 hit-error and UR summary (24 October 2026)
+
+- New `render/hit-error.ts` derives successful-hit offsets from the prepared objects and judgement trace; misses/non-finite times are excluded.
+- The player shows a compact bar of the last 40 offsets (±100 ms, colour-coded 300/100/50) plus average offset and osu!-style UR (population standard deviation ×10). It hides for fewer than two successful hits and clears on player teardown.
+- Automated evidence: 4 pure tests for offset collection, UR maths and zero/non-finite handling. Full suite **290 passed, 12 skipped**; typecheck/build pass.
+- Real-browser screenshot of the new bar is still pending; the underlying values are already exercised by unit tests.
 
 ## Immediate next implementation work
 
-1. **Independent:** wire the stable HP trace into the player once `main.ts`/`style.css` ownership is free; add the visible HP bar and fail overlay with M8 accessibility checks. Maintain explicit stable parity uncertainty until real evidence exists.
-2. **Independent:** fill out M8 timeline marker interactions, additional tested controls, and M5/M7 sound/skin semantics without distributing copyrighted samples.
+1. **Independent:** run real-browser/mobile acceptance for the HP bar/fail overlay, hit lighting, follow points, Flashlight and saved-skin flow. Maintain explicit stable parity uncertainty until real evidence exists.
+2. **Independent:** fill out remaining M8 timeline/control polish and M5/M7 sound/skin semantics without distributing copyrighted samples.
 3. **Requires local rights-cleared fixtures:** run `npm run judge-check:strict` on exact-MD5-matched real osu!stable `.osr`/`.osz` pairs and the optional all-difficulties Renatus autoplay test. Resolve counts/combo/score parity before declaring M2/M4 PASS.
 4. **Requires integration environment:** run a real-browser/audio and Windows standalone EXE smoke test; establish the separate renderer hostname and OMM profile/match link contract. OMM-side deployment/merges remain unauthorized and are not prerequisites for independent work.
-5. Open beyond those: default/custom visual skin parity, DT/HT pitch-preserving stretch, deterministic full-length WebCodecs/MP4 export (real-time WebM with synchronized audio now exists), lazer rules and production hardening.
+5. Open beyond those: long-duration 1080p60/memory acceptance, lazer rules, shaders and remaining production hardening.
 
 ## GitHub recovery and safety
 
