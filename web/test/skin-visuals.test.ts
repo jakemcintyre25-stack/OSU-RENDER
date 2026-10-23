@@ -21,6 +21,20 @@ describe('M7 .osk visual skin loading', () => {
     expect(files.sliderb).toBeUndefined();
     expect(Object.keys(files)).toHaveLength(3);
   });
+  it('resolves slider-specific start/end circles and overlays', () => {
+    const archive = skin({
+      'sliderstartcircle.png': png(1),
+      'sliderstartcircleoverlay@2x.png': png(2),
+      'sliderendcircle.png': png(3),
+      'sliderendcircleoverlay.png': png(4),
+    });
+    const files = visualSkinFiles(archive);
+    expect([...files.sliderstartcircle!]).toEqual([...png(1)]);
+    expect([...files.sliderstartcircleoverlay!]).toEqual([...png(2)]);
+    expect([...files.sliderendcircle!]).toEqual([...png(3)]);
+    expect([...files.sliderendcircleoverlay!]).toEqual([...png(4)]);
+  });
+
   it('isolates broken image decoding without losing valid assets', async () => {
     const archive = skin({ 'hitcircle.png': png(1), 'cursor.png': png(2) });
     const calls: number[] = [];

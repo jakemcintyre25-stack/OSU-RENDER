@@ -310,7 +310,7 @@ export class PlayfieldRenderer {
     this.app.render();
   }
 
-  private makeCircle(o: HitObj): CircleParts {
+  private makeCircle(o: HitObj, kind: 'hit' | 'slider-start' = 'hit'): CircleParts {
     const r = this.map!.radius;
     const root = new Container();
     const body = new Graphics();
@@ -322,8 +322,12 @@ export class PlayfieldRenderer {
     number.anchor.set(0.5);
     number.resolution = this.textResolution();
     root.addChild(body, number);
-    const bodyTexture = this.skinTextures.hitcircle;
-    const overlayTexture = this.skinTextures.hitcircleoverlay;
+    const bodyTexture = kind === 'slider-start'
+      ? (this.skinTextures.sliderstartcircle ?? this.skinTextures.hitcircle)
+      : this.skinTextures.hitcircle;
+    const overlayTexture = kind === 'slider-start'
+      ? (this.skinTextures.sliderstartcircleoverlay ?? this.skinTextures.hitcircleoverlay)
+      : this.skinTextures.hitcircleoverlay;
     let skinBody: Sprite | undefined;
     let skinOverlay: Sprite | undefined;
     if (bodyTexture) {
@@ -425,7 +429,7 @@ export class PlayfieldRenderer {
     d.light.circle(0, 0, r * 1.1).fill({ color: 0xffffff, alpha: 0.55 });
     d.light.visible = false;
     root.addChild(d.light);
-    d.head = this.makeCircle(o);
+    d.head = this.makeCircle(o, o.kind === 'slider' ? 'slider-start' : 'hit');
     root.addChild(d.head.root);
     if (d.ball && d.follow) {
       root.addChild(d.follow, d.ball);

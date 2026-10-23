@@ -3,7 +3,8 @@ import type { OszArchive } from '../load/osz';
 export const VISUAL_SKIN_KEYS = [
   'hitcircle', 'hitcircleoverlay', 'approachcircle', 'sliderb', 'sliderfollowcircle',
   'cursor', 'cursormiddle', 'cursortrail', 'reversearrow', 'sliderstartcircle',
-  'sliderendcircle', 'spinner-background', 'spinner-circle', 'spinner-approachcircle',
+  'sliderstartcircleoverlay', 'sliderendcircle', 'sliderendcircleoverlay',
+  'spinner-background', 'spinner-circle', 'spinner-approachcircle',
 ] as const;
 export type VisualSkinKey = typeof VISUAL_SKIN_KEYS[number];
 export type VisualSkinFiles = Partial<Record<VisualSkinKey, Uint8Array>>;
