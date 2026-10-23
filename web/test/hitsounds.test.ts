@@ -62,6 +62,10 @@ describe('M5 beatmap-sourced hitsounds', () => {
       .toEqual(['folder/soft-hitnormal2.wav', 'folder/soft-hitwhistle2.wav']);
     expect(planned.events.filter((x) => x.t === 1000).map((x) => x.gain))
       .toEqual([0.6, 0.6]);
+    // Circle x=100 → stable pan (100/512 − 0.5) × 0.8.
+    for (const event of planned.events.filter((x) => x.t === 1000)) {
+      expect(event.pan).toBeCloseTo(-0.24375, 6);
+    }
     expect(planned.events.filter((x) => x.t === 2000).map((x) => x.sample))
       .toEqual(['folder/drum-hitnormal3.wav']);
     expect(planned.events.filter((x) => x.t === 2500).map((x) => x.sample))
