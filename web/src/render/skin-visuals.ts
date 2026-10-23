@@ -6,7 +6,7 @@ export const VISUAL_SKIN_KEYS = [
   'sliderstartcircleoverlay', 'sliderendcircle', 'sliderendcircleoverlay',
   'spinner-background', 'spinner-circle', 'spinner-approachcircle',
 ] as const;
-export type VisualSkinKey = typeof VISUAL_SKIN_KEYS[number] | `sliderb${number}` | `font${number}`;
+export type VisualSkinKey = typeof VISUAL_SKIN_KEYS[number] | `sliderb${number}` | `font${number}` | `combo${number}`;
 export type VisualSkinFiles = Partial<Record<VisualSkinKey, Uint8Array>>;
 
 export interface VisualSkinConfig {
@@ -28,6 +28,10 @@ export interface VisualSkinConfig {
   hitCirclePrefix: string;
   /** [Fonts] HitCircleOverlap in skin pixels. */
   hitCircleOverlap: number;
+  /** [Fonts] ComboPrefix for the HUD combo counter. */
+  comboPrefix: string;
+  /** [Fonts] ComboOverlap in skin pixels. */
+  comboOverlap: number;
 }
 
 export const DEFAULT_VISUAL_SKIN_CONFIG: VisualSkinConfig = {
@@ -35,6 +39,7 @@ export const DEFAULT_VISUAL_SKIN_CONFIG: VisualSkinConfig = {
   sliderBallFlip: true, sliderBallFrames: 1, animationFramerate: 60, cursorScale: 1,
   comboColors: [], sliderBorder: null, sliderTrackOverride: null, spinnerBackground: null,
   hitCirclePrefix: 'default', hitCircleOverlap: 0,
+  comboPrefix: 'default', comboOverlap: 0,
 };
 
 function rgb(value: string): number | null {
@@ -98,6 +103,11 @@ export function visualSkinConfig(skin: OszArchive): VisualSkinConfig {
       } else if (key === 'hitcircleoverlap' && /^-?\d+$/.test(value)) {
         const n = Number(value);
         if (n >= -128 && n <= 128) config.hitCircleOverlap = n;
+      } else if (key === 'comboprefix' && /^[a-z0-9_-]{1,32}$/i.test(value)) {
+        config.comboPrefix = value.toLowerCase();
+      } else if (key === 'combooverlap' && /^-?\d+$/.test(value)) {
+        const n = Number(value);
+        if (n >= -128 && n <= 128) config.comboOverlap = n;
       }
     }
   }
@@ -116,7 +126,7 @@ export function skinComboColor(mapColors: number[], mapColor: number, skinColors
 /** Resolve supported .osk root sprites. @2x assets take priority over 1x.
  * No nested files, arbitrary paths, SVG, or untrusted skin.ini references.
  */
-export function visualSkinFiles(skin: OszArchive, sliderBallFrames = 0, fontPrefix = 'default'): VisualSkinFiles {
+export function visualSkinFiles(skin: OszArchive, sliderBallFrames = 0, fontPrefix = 'default', comboPrefix = 'default'): VisualSkinFiles {
   const found: VisualSkinFiles = {};
   for (const key of VISUAL_SKIN_KEYS) {
     const hi = skin.files.get(`${key}@2x.png`);
@@ -137,6 +147,13 @@ export function visualSkinFiles(skin: OszArchive, sliderBallFrames = 0, fontPref
     const lo = skin.files.get(`${prefix}-${digit}.png`);
     if (hi?.length) found[`font${digit}`] = hi;
     else if (lo?.length) found[`font${digit}`] = lo;
+  }
+  const comboStem = /^[a-z0-9_-]{1,32}$/i.test(comboPrefix) ? comboPrefix.toLowerCase() : 'default';
+  for (let digit = 0; digit <= 9; digit++) {
+    const hi = skin.files.get(`${comboStem}-${digit}@2x.png`);
+    const lo = skin.files.get(`${comboStem}-${digit}.png`);
+    if (hi?.length) found[`combo${digit}`] = hi;
+    else if (lo?.length) found[`combo${digit}`] = lo;
   }
   return found;
 }
@@ -173,7 +190,7 @@ export async function decodeVisualSkin(
 ): Promise<Partial<Record<VisualSkinKey, ImageBitmap | HTMLImageElement>>> {
   const result: Partial<Record<VisualSkinKey, ImageBitmap | HTMLImageElement>> = {};
   const config = visualSkinConfig(skin);
-  for (const [key, bytes] of Object.entries(visualSkinFiles(skin, config.sliderBallFrames, config.hitCirclePrefix))) {
+  for (const [key, bytes] of Object.entries(visualSkinFiles(skin, config.sliderBallFrames, config.hitCirclePrefix, config.comboPrefix))) {
     if (!bytes) continue;
     try {
       result[key as VisualSkinKey] = await decode(bytes);
