@@ -15,6 +15,7 @@ import { initialPlaybackTime } from './audio/lead-in';
 import { PlaybackRequestGate, type PlaybackLease } from './playback-gate';
 import { checkedPlayerSpeed, effectivePlaybackRate } from './audio/speed';
 import { markerReviewTime } from './render/marker-review';
+import { hitErrorSamples, hitErrorSummary } from './render/hit-error';
 import { storedToggle } from './render/preferences';
 import { ReplayVideoCapture, safeCaptureFilename } from './render/video-capture';
 import { hpAt } from './game/hp-engine';
@@ -685,6 +686,7 @@ async function startPlayer(s: Session, scoreId: number | null = null, lease = pl
     updateHpBar(s, playerClock.now(), false);
     buildMarkers(s);
     fillInfo(s);
+    fillHitError(s);
     loading(null);
     if (s.warnings.length) toast(s.warnings.join(' '));
     await playerClock.play();
@@ -751,6 +753,8 @@ function stopPlayer() {
   hpFailed = false;
   $('hpbar').hidden = true;
   $('fail').hidden = true;
+  $('hit-error').hidden = true;
+  $('hit-error-points').replaceChildren();
   activeScoreId = null;
   ($('share-score') as HTMLButtonElement).disabled = true;
   cancelAnimationFrame(raf);
@@ -827,6 +831,30 @@ function fillInfo(s: Session) {
       ${row('Score V1 (calculated)', s.judgement.totalScore, h?.totalScore)}
     </table>
     ${h ? '<p>Highlighted values differ from the osu!stable replay header. Scores are reconstructed and not yet proven exact.</p>' : '<p>Calculated Score V1 is provisional until validated against real replay headers.</p>'}`;
+}
+
+function fillHitError(s: Session) {
+  const host = $('hit-error');
+  const points = $('hit-error-points');
+  const text = $('hit-error-text');
+  const samples = hitErrorSamples(s.map.objects, s.judgement.objects);
+  if (samples.length < 2) {
+    host.hidden = true;
+    points.replaceChildren();
+    return;
+  }
+  const summary = hitErrorSummary(samples);
+  points.replaceChildren(...samples.slice(-40).map((sample) => {
+    const point = document.createElement('span');
+    point.className = 'hit-error-point';
+    const offset = Math.max(-100, Math.min(100, sample.offset));
+    point.style.left = `${50 + offset / 2}%`;
+    point.style.background = sample.result === 300 ? '#6ee36e' : sample.result === 100 ? '#f5c542' : '#5fb4ff';
+    point.title = `${sample.offset >= 0 ? '+' : ''}${sample.offset.toFixed(0)} ms`;
+    return point;
+  }));
+  text.textContent = `avg ${summary.average >= 0 ? '+' : ''}${summary.average.toFixed(1)}ms · UR ${summary.unstableRate.toFixed(0)}`;
+  host.hidden = false;
 }
 
 $('playpause').addEventListener('click', () => void togglePlay());
