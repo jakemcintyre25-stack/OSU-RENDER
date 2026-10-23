@@ -4,13 +4,12 @@ import { sliderBallAt } from '../game/prepare';
 import type { Judgement } from '../game/judge';
 import { eventAt } from '../game/judge';
 import { scoreHudLabel } from './hud-score';
-import { hitLightState } from './hit-light';
-import { followPointPositions } from './follow-points';
 import { cursorAt, KEY, type ReplayFrame } from '../load/replay';
 import { playfieldLayout, type PlayfieldLayout } from './layout';
+import { hitLightAt } from './effects';
+import { firstFollowPointAtOrAfter, planFollowPoints, type FollowPoint } from './follow-points';
 import { VisibleObjectIndex } from './visible-index';
-import type { VisualSkinKey, VisualSkinConfig } from './skin-visuals';
-import { flashlightRadius, flashlightTrackDim } from './flashlight';
+import { DEFAULT_VISUAL_SKIN_CONFIG, skinComboColor, type VisualSkinKey, type VisualSkinConfig } from './skin-visuals';
 
 const HIT_FADE = 240; // ms for a hit circle to expand and fade after being hit
 const MISS_FADE = 120;
@@ -30,6 +29,7 @@ function shade(color: number, k: number): number {
 interface CircleParts {
   root: Container;
   body: Graphics;
+  light: Graphics;
   number: Text;
   skinBody?: Sprite;
   skinOverlay?: Sprite;
@@ -39,8 +39,6 @@ interface Display {
   obj: HitObj;
   root: Container;
   head?: CircleParts;
-  tail?: CircleParts;
-  light?: Graphics;
   approach?: Graphics;
   skinApproach?: Sprite;
   // sliders
@@ -55,9 +53,12 @@ interface Display {
   skinFollow?: Sprite;
   reverseStart?: Sprite;
   reverseEnd?: Sprite;
+  skinStart?: Sprite;
+  skinEnd?: Sprite;
   // spinners
   spinnerDisc?: Graphics;
   spinnerRing?: Graphics;
+  skinSpinnerBackground?: Sprite;
   skinSpinnerDisc?: Sprite;
   skinSpinnerApproach?: Sprite;
 }
@@ -73,20 +74,18 @@ export class PlayfieldRenderer {
   private bg = new Sprite(Texture.EMPTY);
   private field = new Container();
   private followLayer = new Container();
-  private followPairs: { next: number; g: Graphics }[] = [];
+  private followGfx = new Graphics();
+  private flashGfx = new Graphics();
+  private followPoints: FollowPoint[] = [];
   private objectLayer = new Container({ sortableChildren: true });
   private approachLayer = new Container();
   private judgementLayer = new Container();
   private cursorLayer = new Container();
   private cursorGfx = new Graphics();
+  private cursorMiddleSprite = new Sprite(Texture.EMPTY);
   private cursorSprite = new Sprite(Texture.EMPTY);
   private cursorTrailSprites: Sprite[] = [];
   private cursorBaseScale = { x: 1, y: 1 };
-  private flashlightLayer = new Container();
-  private flashlightGfx = new Graphics();
-  private flashlightDimGfx = new Graphics();
-  private flashlightActive = false;
-  private trackingRanges: [number, number][] = [];
   private hud = new Container();
   private comboText!: Text;
   private accText!: Text;
@@ -98,10 +97,7 @@ export class PlayfieldRenderer {
   private layout: PlayfieldLayout = { scale: 1, x: 0, y: 0 };
   private map: PreparedMap | null = null;
   private skinTextures: Partial<Record<VisualSkinKey, Texture>> = {};
-  private skinConfig: VisualSkinConfig = {
-    cursorRotate: true, cursorExpand: true, cursorCentre: true,
-    sliderBallFlip: true, sliderBallFrames: 1,
-  };
+  private skinConfig: VisualSkinConfig = { ...DEFAULT_VISUAL_SKIN_CONFIG };
   private visibility: VisibleObjectIndex | null = null;
   private judgement: Judgement | null = null;
   private frames: ReplayFrame[] = [];
@@ -125,12 +121,13 @@ export class PlayfieldRenderer {
     });
     host.appendChild(this.app.canvas);
     this.app.stage.addChild(this.bg, this.field, this.hud);
-    this.field.addChild(this.followLayer, this.objectLayer, this.approachLayer, this.judgementLayer, this.cursorLayer, this.flashlightLayer);
-    this.flashlightLayer.addChild(this.flashlightGfx, this.flashlightDimGfx);
-    this.flashlightLayer.visible = false;
-    this.cursorLayer.addChild(this.cursorGfx, this.cursorSprite);
+    this.followLayer.addChild(this.followGfx);
+    this.field.addChild(this.followLayer, this.objectLayer, this.approachLayer, this.judgementLayer, this.flashGfx, this.cursorLayer);
+    this.cursorLayer.addChild(this.cursorGfx, this.cursorMiddleSprite, this.cursorSprite);
     this.cursorSprite.anchor.set(0.5);
     this.cursorSprite.visible = false;
+    this.cursorMiddleSprite.anchor.set(0.5);
+    this.cursorMiddleSprite.visible = false;
     for (let i = 0; i < 12; i++) {
       const trail = new Sprite(Texture.EMPTY);
       trail.anchor.set(0.5);
@@ -143,8 +140,16 @@ export class PlayfieldRenderer {
     this.relayout();
   }
 
+  resize(width: number, height: number) {
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
+      throw new RangeError('Invalid renderer size');
+    }
+    this.app.renderer.resize(width, height);
+    this.relayout();
+  }
+
   setSkinVisuals(images: Partial<Record<VisualSkinKey, ImageBitmap | HTMLImageElement>>, config?: VisualSkinConfig) {
-    this.skinConfig = config ?? { cursorRotate: true, cursorExpand: true, cursorCentre: true, sliderBallFlip: true, sliderBallFrames: 1 };
+    this.skinConfig = { ...DEFAULT_VISUAL_SKIN_CONFIG, ...(config ?? {}), comboColors: config?.comboColors ?? [] };
     this.cursorSprite.anchor.set(this.skinConfig.cursorCentre ? 0.5 : 0);
     this.skinTextures = {};
     for (const [name, image] of Object.entries(images)) {
@@ -160,14 +165,20 @@ export class PlayfieldRenderer {
       }
     }
     const cursor = this.skinTextures.cursor;
+    const cursorSize = 64 * this.skinConfig.cursorScale;
     this.cursorSprite.texture = cursor ?? Texture.EMPTY;
     this.cursorSprite.visible = Boolean(cursor);
     if (cursor) {
       // Playfield coordinates: osu!standard skin cursors use 128px at 1x.
-      this.cursorSprite.width = 64;
-      this.cursorSprite.height = 64;
+      this.cursorSprite.width = cursorSize;
+      this.cursorSprite.height = cursorSize;
       this.cursorBaseScale = { x: this.cursorSprite.scale.x, y: this.cursorSprite.scale.y };
     }
+    const middle = this.skinTextures.cursormiddle;
+    this.cursorMiddleSprite.texture = middle ?? Texture.EMPTY;
+    this.cursorMiddleSprite.visible = Boolean(middle);
+    this.cursorMiddleSprite.width = cursorSize;
+    this.cursorMiddleSprite.height = cursorSize;
   }
 
   setBackground(img: ImageBitmap | HTMLImageElement | null) {
@@ -175,29 +186,18 @@ export class PlayfieldRenderer {
     this.relayout();
   }
 
-  /** Force an exact backing size, used by the deterministic export host. */
-  resize(width: number, height: number) {
-    if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
-      throw new RangeError('Invalid renderer size');
-    }
-    this.app.renderer.resize(width, height);
-    this.relayout();
-  }
-
   load(map: PreparedMap, frames: ReplayFrame[], judgement: Judgement, meta: { player: string }) {
     this.clearObjects();
     this.map = map;
     this.visibility = new VisibleObjectIndex(map.objects);
+    this.followPoints = planFollowPoints(map.objects, map.radius);
     this.frames = frames;
     this.judgement = judgement;
     this.frameHint = 0;
-    this.flashlightActive = map.mods.includes('FL');
-    this.trackingRanges = judgement.objects.flatMap((o) => o.tracking ?? []);
     this.resultEvents = judgement.events
       .filter((e) => e.result !== undefined && e.result !== 300 && e.x !== undefined)
       .map((e) => ({ t: e.t, x: e.x!, y: e.y!, result: e.result! }));
     this.infoText.text = `${meta.player}${map.mods.length ? '  +' + map.mods.join('') : ''}\n${map.artist} - ${map.title} [${map.version}]`;
-    this.buildFollowPoints(map);
     for (const k of this.keyBoxes) k.presses = [];
     let prev = 0;
     for (const f of frames) {
@@ -215,43 +215,10 @@ export class PlayfieldRenderer {
   private clearObjects() {
     for (const d of this.displays.values()) this.destroyDisplay(d);
     this.displays.clear();
-    for (const pair of this.followPairs) pair.g.destroy();
-    this.followPairs = [];
-    this.followLayer.removeChildren();
     for (const t of this.judgementTexts.values()) t.destroy();
     this.judgementTexts.clear();
-  }
-
-  private buildFollowPoints(map: PreparedMap) {
-    for (let i = 1; i < map.objects.length; i++) {
-      const prev = map.objects[i - 1];
-      const next = map.objects[i];
-      // Stable does not draw follow points into a spinner or across a new combo.
-      if (prev.kind === 'spinner' || next.kind === 'spinner' || next.newCombo) continue;
-      const from = prev.kind === 'slider' ? prev.pointAt(1) : { x: prev.x, y: prev.y };
-      const points = followPointPositions(from, { x: next.x, y: next.y });
-      if (!points.length) continue;
-      const g = new Graphics();
-      for (const p of points) g.circle(p.x, p.y, map.radius * 0.16).fill({ color: 0xffffff, alpha: 0.7 });
-      g.visible = false;
-      this.followLayer.addChild(g);
-      this.followPairs.push({ next: i, g });
-    }
-  }
-
-  private updateFollowPoints(t: number) {
-    const map = this.map!;
-    for (const pair of this.followPairs) {
-      const prev = map.objects[pair.next - 1];
-      const next = map.objects[pair.next];
-      const start = prev.end;
-      const end = next.start;
-      const fadeIn = clamp01((t - start) / 180);
-      const fadeOut = clamp01((end + 100 - t) / 100);
-      const alpha = Math.min(fadeIn, fadeOut);
-      pair.g.visible = alpha > 0.02;
-      pair.g.alpha = alpha;
-    }
+    this.followPoints = [];
+    this.followGfx.clear();
   }
 
   // ---------------------------------------------------------------- layout & HUD
@@ -355,48 +322,43 @@ export class PlayfieldRenderer {
       }
     }
     this.updateFollowPoints(t);
+    this.updateFlashlight(t);
     this.updateJudgements(t);
     this.updateCursor(t);
-    this.updateFlashlight(t);
     this.updateHud(t);
     this.app.render();
   }
 
-  private makeCircle(
-    o: HitObj,
-    kind: 'hit' | 'slider-start' | 'slider-end' = 'hit',
-    at?: Vec,
-    showNumber = true,
-  ): CircleParts {
+  private displayColor(o: HitObj): number {
+    const map = this.map;
+    return map ? skinComboColor(map.comboColors, o.comboColor, this.skinConfig.comboColors) : o.comboColor;
+  }
+
+  private makeCircle(o: HitObj): CircleParts {
     const r = this.map!.radius;
+    const color = this.displayColor(o);
     const root = new Container();
+    const light = new Graphics();
+    light.circle(0, 0, r * 1.8).fill({ color: 0xffffff, alpha: 0.18 });
+    light.visible = false;
     const body = new Graphics();
-    body.circle(0, 0, r * 0.93).fill({ color: shade(o.comboColor, 0.55) });
-    body.circle(0, 0, r * 0.8).fill({ color: o.comboColor });
+    body.circle(0, 0, r * 0.93).fill({ color: shade(color, 0.55) });
+    body.circle(0, 0, r * 0.8).fill({ color });
     body.circle(0, -r * 0.18, r * 0.5).fill({ color: 0xffffff, alpha: 0.12 });
     body.circle(0, 0, r * 0.93).stroke({ width: r * 0.12, color: 0xffffff });
     const number = new Text({ text: String(o.comboNumber), style: { fontFamily: FONT, fontSize: r * 0.75, fontWeight: '700', fill: 0xffffff, dropShadow: { color: 0x000000, alpha: 0.5, blur: 2, distance: 0 } } });
     number.anchor.set(0.5);
-    number.visible = showNumber;
     number.resolution = this.textResolution();
-    root.addChild(body, number);
-    const bodyTexture = kind === 'slider-start'
-      ? (this.skinTextures.sliderstartcircle ?? this.skinTextures.hitcircle)
-      : kind === 'slider-end'
-        ? (this.skinTextures.sliderendcircle ?? this.skinTextures.hitcircle)
-        : this.skinTextures.hitcircle;
-    const overlayTexture = kind === 'slider-start'
-      ? (this.skinTextures.sliderstartcircleoverlay ?? this.skinTextures.hitcircleoverlay)
-      : kind === 'slider-end'
-        ? (this.skinTextures.sliderendcircleoverlay ?? this.skinTextures.hitcircleoverlay)
-        : this.skinTextures.hitcircleoverlay;
+    root.addChild(light, body, number);
+    const bodyTexture = this.skinTextures.hitcircle;
+    const overlayTexture = this.skinTextures.hitcircleoverlay;
     let skinBody: Sprite | undefined;
     let skinOverlay: Sprite | undefined;
     if (bodyTexture) {
       skinBody = new Sprite(bodyTexture);
       skinBody.anchor.set(0.5);
       skinBody.width = skinBody.height = r * 2;
-      skinBody.tint = o.comboColor;
+      skinBody.tint = color;
       root.addChildAt(skinBody, 1);
       body.visible = false;
     }
@@ -406,8 +368,8 @@ export class PlayfieldRenderer {
       skinOverlay.width = skinOverlay.height = r * 2;
       root.addChildAt(skinOverlay, root.children.length - 1);
     }
-    root.position.set(at?.x ?? o.x, at?.y ?? o.y);
-    return { root, body, number, skinBody, skinOverlay };
+    root.position.set(o.x, o.y);
+    return { root, body, light, number, skinBody, skinOverlay };
   }
 
   private createDisplay(o: HitObj): Display {
@@ -417,6 +379,14 @@ export class PlayfieldRenderer {
     const d: Display = { obj: o, root };
     const r = this.map!.radius;
     if (o.kind === 'spinner') {
+      if (this.skinTextures['spinner-background']) {
+        d.skinSpinnerBackground = new Sprite(this.skinTextures['spinner-background']);
+        d.skinSpinnerBackground.anchor.set(0.5);
+        d.skinSpinnerBackground.width = 512;
+        d.skinSpinnerBackground.height = 384;
+        if (this.skinConfig.spinnerBackground !== null) d.skinSpinnerBackground.tint = this.skinConfig.spinnerBackground;
+        root.addChild(d.skinSpinnerBackground);
+      }
       d.spinnerDisc = new Graphics();
       d.spinnerDisc.circle(0, 0, 180).fill({ color: 0x000000, alpha: 0.45 }).stroke({ width: 4, color: 0xffffff, alpha: 0.8 });
       d.spinnerDisc.circle(0, 0, 8).fill({ color: 0xffffff });
@@ -441,6 +411,7 @@ export class PlayfieldRenderer {
       return d;
     }
     if (o.kind === 'slider') {
+      const color = this.displayColor(o);
       d.body = new Graphics();
       d.bodyAlpha = new AlphaFilter({ alpha: 1 });
       d.body.filters = [d.bodyAlpha];
@@ -450,17 +421,32 @@ export class PlayfieldRenderer {
       d.cumLen = cum;
       d.decor = new Graphics();
       d.follow = new Graphics();
-      d.follow.circle(0, 0, r * 2.4).fill({ color: o.comboColor, alpha: 0.12 }).stroke({ width: 3, color: 0xffffff, alpha: 0.85 });
+      d.follow.circle(0, 0, r * 2.4).fill({ color, alpha: 0.12 }).stroke({ width: 3, color: 0xffffff, alpha: 0.85 });
       d.ball = new Graphics();
-      d.ball.circle(0, 0, r * 0.8).fill({ color: o.comboColor }).stroke({ width: r * 0.12, color: 0xffffff });
+      d.ball.circle(0, 0, r * 0.8).fill({ color }).stroke({ width: r * 0.12, color: 0xffffff });
       d.follow.visible = false;
       d.ball.visible = false;
       if (this.skinTextures.sliderb) {
         d.skinBall = new Sprite(this.skinTextures.sliderb);
         d.skinBall.anchor.set(0.5);
         d.skinBall.width = d.skinBall.height = r * 2;
-        d.skinBall.tint = o.comboColor;
+        d.skinBall.tint = color;
         d.skinBall.visible = false;
+      }
+      if (this.skinTextures.sliderstartcircle) {
+        d.skinStart = new Sprite(this.skinTextures.sliderstartcircle);
+        d.skinStart.anchor.set(0.5);
+        d.skinStart.width = d.skinStart.height = r * 2;
+        d.skinStart.tint = color;
+        d.skinStart.position.set(o.path[0].x, o.path[0].y);
+      }
+      if (this.skinTextures.sliderendcircle) {
+        d.skinEnd = new Sprite(this.skinTextures.sliderendcircle);
+        d.skinEnd.anchor.set(0.5);
+        d.skinEnd.width = d.skinEnd.height = r * 2;
+        d.skinEnd.tint = color;
+        const tail = o.path[o.path.length - 1];
+        d.skinEnd.position.set(tail.x, tail.y);
       }
       if (this.skinTextures.reversearrow) {
         d.reverseStart = new Sprite(this.skinTextures.reversearrow);
@@ -486,33 +472,27 @@ export class PlayfieldRenderer {
         d.skinFollow.visible = false;
       }
       root.addChild(d.body, d.decor);
+      if (d.skinStart) root.addChild(d.skinStart);
     }
-    d.light = new Graphics();
-    d.light.circle(0, 0, r * 1.1).fill({ color: 0xffffff, alpha: 0.55 });
-    d.light.visible = false;
-    root.addChild(d.light);
-    d.head = this.makeCircle(o, o.kind === 'slider' ? 'slider-start' : 'hit');
+    d.head = this.makeCircle(o);
     root.addChild(d.head.root);
-    if (o.kind === 'slider') {
-      d.tail = this.makeCircle(o, 'slider-end', o.pointAt(1), false);
-      root.addChild(d.tail.root);
-    }
     if (d.ball && d.follow) {
       root.addChild(d.follow, d.ball);
       if (d.skinFollow) root.addChild(d.skinFollow);
       if (d.skinBall) root.addChild(d.skinBall);
       if (d.reverseStart) root.addChild(d.reverseStart);
       if (d.reverseEnd) root.addChild(d.reverseEnd);
+      if (d.skinEnd) root.addChild(d.skinEnd);
     }
     d.approach = new Graphics();
-    d.approach.circle(0, 0, r).stroke({ width: r * 0.08, color: o.comboColor });
+    d.approach.circle(0, 0, r).stroke({ width: r * 0.08, color: this.displayColor(o) });
     d.approach.position.set(o.x, o.y);
     this.approachLayer.addChild(d.approach);
     if (this.skinTextures.approachcircle) {
       d.skinApproach = new Sprite(this.skinTextures.approachcircle);
       d.skinApproach.anchor.set(0.5);
       d.skinApproach.width = d.skinApproach.height = r * 2;
-      d.skinApproach.tint = o.comboColor;
+      d.skinApproach.tint = this.displayColor(o);
       d.skinApproach.position.set(o.x, o.y);
       d.approach.visible = false;
       this.approachLayer.addChild(d.skinApproach);
@@ -553,12 +533,17 @@ export class PlayfieldRenderer {
     if (d.head) {
       d.head.root.alpha = headAlpha;
       d.head.root.scale.set(headScale);
+      const light = hitLightAt(t, j.hitTime);
+      d.head.light.visible = light.visible;
+      if (light.visible) {
+        d.head.light.alpha = light.alpha;
+        d.head.light.scale.set(light.scale);
+      }
     }
-    if (d.light) {
-      const light = hitLightState(t, j.hitTime);
-      d.light.visible = light.visible;
-      d.light.alpha = light.alpha;
-      d.light.scale.set(light.scale);
+    if (d.skinStart) {
+      d.skinStart.alpha = headAlpha;
+      d.skinStart.scale.set(headScale);
+      d.skinStart.visible = headAlpha > 0.01;
     }
 
     // Approach circle: shrinks from 4× to 1× over the preempt time. Hidden removes all but the first.
@@ -595,6 +580,10 @@ export class PlayfieldRenderer {
     if (t > s.end) bodyAlpha *= 1 - clamp01((t - s.end) / SLIDER_FADE);
     d.bodyAlpha!.alpha = bodyAlpha;
     d.decor!.alpha = bodyAlpha;
+    if (d.skinEnd) {
+      d.skinEnd.alpha = bodyAlpha;
+      d.skinEnd.visible = bodyAlpha > 0.01;
+    }
 
     // Snaking: the body grows along its path over the first third of the approach.
     const snake = clamp01((t - appear) / (map.preempt / 3));
@@ -630,26 +619,6 @@ export class PlayfieldRenderer {
       d.reverseEnd.alpha = bodyAlpha;
     }
 
-    // Slider tail circle appears near the end and reacts to the tail judgement.
-    if (d.tail) {
-      const tailHit = j.parts?.at(-1) === true;
-      const tailAppear = s.end - Math.min(400, map.preempt);
-      let alpha = clamp01((t - tailAppear) / Math.min(map.fadeIn, 300)) * bodyAlpha;
-      let scale = 1;
-      if (t >= s.end) {
-        if (tailHit) {
-          const k = clamp01((t - s.end) / HIT_FADE);
-          scale = 1 + 0.4 * k;
-          alpha *= 1 - k;
-        } else {
-          alpha *= 1 - clamp01((t - s.end) / MISS_FADE);
-        }
-      }
-      d.tail.root.visible = alpha > 0.01;
-      d.tail.root.alpha = alpha;
-      d.tail.root.scale.set(scale);
-    }
-
     // Ball and follow circle while the slider is running.
     const running = t >= s.start && t <= s.end;
     d.ball!.visible = running && !d.skinBall;
@@ -676,6 +645,8 @@ export class PlayfieldRenderer {
 
   private drawSliderBody(d: Display, s: SliderObj, progress: number) {
     const r = this.map!.radius;
+    const color = skinComboColor(this.map!.comboColors, s.comboColor, this.skinConfig.comboColors);
+    const track = this.skinConfig.sliderTrackOverride ?? color;
     const pts = partialPath(s.path, d.cumLen!, progress);
     const g = d.body!;
     g.clear();
@@ -688,9 +659,9 @@ export class PlayfieldRenderer {
       for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
       g.stroke({ width, color, join: 'round', cap: 'round' });
     };
-    stroke(r * 2 * 0.98, 0xffffff); // border
-    stroke(r * 2 * 0.84, shade(s.comboColor, 0.28)); // track edge
-    stroke(r * 2 * 0.6, shade(s.comboColor, 0.42)); // track middle (lighter, like stable's gradient)
+    stroke(r * 2 * 0.98, this.skinConfig.sliderBorder ?? 0xffffff); // border
+    stroke(r * 2 * 0.84, shade(track, 0.28)); // track edge
+    stroke(r * 2 * 0.6, shade(track, 0.42)); // track middle (lighter, like stable's gradient)
   }
 
   private drawArrow(g: Graphics, s: SliderObj, atEnd: boolean, r: number) {
@@ -729,6 +700,33 @@ export class PlayfieldRenderer {
     void map;
   }
 
+  private updateFlashlight(t: number) {
+    const g = this.flashGfx;
+    g.clear();
+    const map = this.map;
+    if (!map?.mods.includes('FL') || !this.frames.length) return;
+    const cursor = cursorAt(this.frames, t, this.frameHint);
+    g.rect(0, 0, 512, 384).fill({ color: 0x000000, alpha: 0.86 });
+    g.circle(cursor.x, cursor.y, Math.max(110, map.radius * 6.5)).cut();
+  }
+
+  private updateFollowPoints(t: number) {
+    const g = this.followGfx;
+    g.clear();
+    const map = this.map;
+    if (!map || !this.followPoints.length) return;
+    const window = 300;
+    let i = firstFollowPointAtOrAfter(this.followPoints, t - window);
+    for (; i < this.followPoints.length; i++) {
+      const point = this.followPoints[i];
+      if (point.t > t + window) break;
+      const dt = point.t - t;
+      const alpha = dt >= 0 ? 1 - dt / window : 1 + dt / window;
+      if (alpha <= 0) continue;
+      g.circle(point.x, point.y, map.radius * 0.18).fill({ color: 0xffffff, alpha: alpha * 0.8 });
+    }
+  }
+
   private updateJudgements(t: number) {
     const keep = new Set<number>();
     this.resultEvents.forEach((e, i) => {
@@ -763,6 +761,7 @@ export class PlayfieldRenderer {
     if (!this.frames.length) {
       for (const sprite of this.cursorTrailSprites) sprite.visible = false;
       this.cursorSprite.visible = false;
+      this.cursorMiddleSprite.visible = false;
       return;
     }
     const c = cursorAt(this.frames, t, this.frameHint);
@@ -783,38 +782,21 @@ export class PlayfieldRenderer {
       }
     }
     const pressed = (c.keys & (KEY.M1 | KEY.M2)) !== 0;
+    const factor = pressed && this.skinConfig.cursorExpand ? 1.12 : 1;
     if (this.cursorSprite.visible) {
       this.cursorSprite.position.set(c.x, c.y);
       this.cursorSprite.rotation = this.skinConfig.cursorRotate ? Math.atan2(c.y - 192, c.x - 256) : 0;
-      const factor = pressed && this.skinConfig.cursorExpand ? 1.12 : 1;
       this.cursorSprite.scale.set(this.cursorBaseScale.x * factor, this.cursorBaseScale.y * factor);
     } else {
       g.circle(c.x, c.y, pressed ? 11 : 9.5).fill({ color: 0xffe08a, alpha: 0.95 }).stroke({ width: 2, color: 0xffffff });
     }
-  }
-
-  /** Stable Flashlight: a black playfield overlay with a cursor-centered hole.
-   * Combo/break radius and slider-tracking dim come from the documented stable
-   * scales; the original size easing is not reproduced frame-for-frame.
-   */
-  private updateFlashlight(t: number) {
-    const map = this.map;
-    const judgement = this.judgement;
-    const visible = Boolean(map && judgement && this.flashlightActive);
-    this.flashlightLayer.visible = visible;
-    if (!visible || !map || !judgement) return;
-    const combo = eventAt(judgement, t)?.combo ?? 0;
-    const inBreak = map.breaks.some((b) => t >= b.start && t <= b.end);
-    const radius = flashlightRadius(combo, inBreak);
-    const cursor = this.frames.length ? cursorAt(this.frames, t, this.frameHint) : { x: 256, y: 192 };
-    this.flashlightGfx.clear();
-    this.flashlightGfx.rect(0, 0, 512, 384).fill({ color: 0x000000, alpha: 0.9 });
-    this.flashlightGfx.circle(cursor.x, cursor.y, radius).cut();
-    const tracking = this.trackingRanges.some(([start, end]) => t >= start && t <= end);
-    const dim = flashlightTrackDim(tracking);
-    this.flashlightDimGfx.clear();
-    if (dim > 0) {
-      this.flashlightDimGfx.circle(cursor.x, cursor.y, radius).fill({ color: 0x000000, alpha: dim });
+    const middle = Boolean(this.skinTextures.cursormiddle);
+    this.cursorMiddleSprite.visible = middle;
+    if (middle) {
+      const size = 64 * this.skinConfig.cursorScale * factor;
+      this.cursorMiddleSprite.position.set(c.x, c.y);
+      this.cursorMiddleSprite.width = size;
+      this.cursorMiddleSprite.height = size;
     }
   }
 

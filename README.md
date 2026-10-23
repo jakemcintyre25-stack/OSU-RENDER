@@ -61,7 +61,8 @@ Done:
 - Worker: recent plays, replay download, beatmap mirrors with fallback, checksum lookup, edge caching, rate limit
 - Map prep: mods (EZ/HR/HD/DT/NC/HT), stacking, slider paths, ticks/repeats, combo colours
 - Playback: music-synced clock, song-outro-aware seek, AudioLeadIn, independent music/FX volumes, persisted sync offset and 0.25×–2× viewer speed; beatmap and user-.osk circle/slider/spinner sounds, judged slider loops and spinner loop/bonus clips use Web Audio
-- Drawing: hit circles, approach circles, snaking slider bodies, reverse arrows, ticks, slider ball + follow circle, spinners, hit lighting, follow points, Flashlight overlay, HD fades, cursor + trail, key overlay, combo/accuracy, 100/50/miss popups, miss markers on the timeline
+- Drawing: hit circles, approach circles, snaking slider bodies, reverse arrows, ticks, slider ball + follow circle, spinners, hit lighting, follow points, Flashlight, HD fades, cursor + trail, key overlay, combo/accuracy, 100/50/miss popups, miss markers on the timeline
+- Custom skins: user `.osk` hit circles/overlays, approach circles, slider ball/follow, reverse arrows, slider start/end circles, spinner background/circle/approach, cursor/trail/middle, combo-colour overrides, CursorScale and slider border/track overrides
 - Judgement v0: hit windows, note-lock, slider tracking, spinners, combo. Compared against the replay's own counts in the ⓘ panel
 - HP engine: stable's simulated drain search, hit/combo-end gains, nested slider/spinner health, break pauses and negative-judgement HP-zero failure, with a visible player HP bar and fail overlay
 - Autoplay generator (used for map preview and tests — judges 100% on the test map)
@@ -72,7 +73,7 @@ Next (see the build plan):
 
 - Judgement to exact stable parity (slider leniency, 2B, spinner rpm, score V1, HP)
 - Finish default/user skin graphics, spinner rotation/bonus sounds, and pitch-preserving DT/HT time stretch. Slider loops already exist for recorded tracking sections but still require real-browser acoustic acceptance
-- Default skin sprites + custom `.osk` skins, follow points, hit lighting
+- Remaining visual work: shaders, animated slider-ball frames, skin fonts/HitCircleOverlap, selected-skin persistence, default licensed sounds and real-browser visual comparison
 - Long-duration 1080p60, real-replay and peak-memory acceptance for deterministic export (720p30 MP4 and A/V timestamps are verified)
 - Lazer score rules (lazer-origin replays are detected and rejected with a clear message; native lazer judgement, scoring and mod settings remain open)
 - Complete One Miss Merchants profile/match links (the renderer-side `?user=<osu ID>` and `?score=<score ID>` routes and Share replay button are implemented; see `docs/INTEGRATION.md`)

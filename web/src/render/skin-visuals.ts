@@ -15,42 +15,83 @@ export interface VisualSkinConfig {
   cursorCentre: boolean;
   sliderBallFlip: boolean;
   sliderBallFrames: number;
+  /** 128 px skin cursor scaling; 1 is the osu! default. */
+  cursorScale: number;
+  /** [Colours] Combo1..Combo8 overrides, empty when the skin has none. */
+  comboColors: number[];
+  sliderBorder: number | null;
+  sliderTrackOverride: number | null;
+  spinnerBackground: number | null;
 }
 
-const DEFAULT_CONFIG: VisualSkinConfig = {
+export const DEFAULT_VISUAL_SKIN_CONFIG: VisualSkinConfig = {
   cursorRotate: true, cursorExpand: true, cursorCentre: true,
-  sliderBallFlip: true, sliderBallFrames: 1,
+  sliderBallFlip: true, sliderBallFrames: 1, cursorScale: 1,
+  comboColors: [], sliderBorder: null, sliderTrackOverride: null, spinnerBackground: null,
 };
 
-/** Parse only known, bounded [General] skin.ini settings. */
+function rgb(value: string): number | null {
+  const parts = value.split(',').map((part) => Number(part.trim()));
+  if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return null;
+  return (parts[0] << 16) | (parts[1] << 8) | parts[2];
+}
+
+/** Parse only known, bounded [General] and [Colours] skin.ini settings. */
 export function visualSkinConfig(skin: OszArchive): VisualSkinConfig {
   const ini = skin.files.get('skin.ini');
-  if (!ini || ini.length > 256 * 1024) return { ...DEFAULT_CONFIG };
-  const config = { ...DEFAULT_CONFIG };
+  if (!ini || ini.length > 256 * 1024) return { ...DEFAULT_VISUAL_SKIN_CONFIG, comboColors: [] };
+  const config: VisualSkinConfig = { ...DEFAULT_VISUAL_SKIN_CONFIG, comboColors: [] };
   const lines = new TextDecoder('utf-8').decode(ini).replace(/^\uFEFF/, '').split(/\r?\n/);
-  let general = false;
+  let section = '';
+  const combos = new Map<number, number>();
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      general = trimmed.toLowerCase() === '[general]';
+      section = trimmed.slice(1, -1).trim().toLowerCase();
       continue;
     }
-    if (!general || !trimmed || trimmed.startsWith('//') || trimmed.startsWith(';')) continue;
+    if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith(';')) continue;
     const colon = trimmed.indexOf(':');
     if (colon < 0) continue;
     const key = trimmed.slice(0, colon).trim().toLowerCase();
     const value = trimmed.slice(colon + 1).split('//')[0].trim();
-    const boolean = /^(true|1)$/i.test(value) ? true : /^(false|0)$/i.test(value) ? false : null;
-    if (key === 'cursorrotate' && boolean !== null) config.cursorRotate = boolean;
-    if (key === 'cursorexpand' && boolean !== null) config.cursorExpand = boolean;
-    if (key === 'cursorcentre' && boolean !== null) config.cursorCentre = boolean;
-    if (key === 'sliderballflip' && boolean !== null) config.sliderBallFlip = boolean;
-    if (key === 'sliderballframes' && /^\d+$/.test(value)) {
-      const n = Number(value);
-      if (n >= 1 && n <= 128) config.sliderBallFrames = n;
+    if (section === 'general') {
+      const boolean = /^(true|1)$/i.test(value) ? true : /^(false|0)$/i.test(value) ? false : null;
+      if (key === 'cursorrotate' && boolean !== null) config.cursorRotate = boolean;
+      if (key === 'cursorexpand' && boolean !== null) config.cursorExpand = boolean;
+      if (key === 'cursorcentre' && boolean !== null) config.cursorCentre = boolean;
+      if (key === 'sliderballflip' && boolean !== null) config.sliderBallFlip = boolean;
+      if (key === 'sliderballframes' && /^\d+$/.test(value)) {
+        const n = Number(value);
+        if (n >= 1 && n <= 128) config.sliderBallFrames = n;
+      }
+      if (key === 'cursorscale' && /^\d+(?:\.\d+)?$/.test(value)) {
+        const n = Number(value);
+        if (n >= 0.1 && n <= 3) config.cursorScale = n;
+      }
+    } else if (section === 'colours') {
+      const combo = /^combo([1-8])$/.exec(key);
+      if (combo) {
+        const color = rgb(value);
+        if (color !== null) combos.set(Number(combo[1]), color);
+      } else if (key === 'sliderborder') {
+        config.sliderBorder = rgb(value);
+      } else if (key === 'slidertrackoverride') {
+        config.sliderTrackOverride = rgb(value);
+      } else if (key === 'spinnerbackground') {
+        config.spinnerBackground = rgb(value);
+      }
     }
   }
+  config.comboColors = [...combos.entries()].sort((a, b) => a[0] - b[0]).map(([, color]) => color);
   return config;
+}
+
+/** Pick a [Colours] override for an object while preserving the map's combo cycle. */
+export function skinComboColor(mapColors: number[], mapColor: number, skinColors: number[]): number {
+  if (!skinColors.length) return mapColor;
+  const index = mapColors.indexOf(mapColor);
+  return skinColors[(index < 0 ? 0 : index) % skinColors.length];
 }
 
 

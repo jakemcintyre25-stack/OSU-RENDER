@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { zipSync, strToU8 } from 'fflate';
 import { openOsz } from '../src/load/osz';
-import { visualSkinFiles, decodeVisualSkin, visualSkinConfig } from '../src/render/skin-visuals';
+import { visualSkinFiles, decodeVisualSkin, visualSkinConfig, skinComboColor } from '../src/render/skin-visuals';
 
 const png = (n: number) => new Uint8Array([137, 80, 78, 71, n]);
 const skin = (files: Record<string, Uint8Array>) => openOsz(zipSync(files));
@@ -53,7 +53,8 @@ describe('M7 .osk visual skin loading', () => {
     ) });
     expect(visualSkinConfig(archive)).toEqual({
       cursorRotate: false, cursorExpand: false, cursorCentre: true,
-      sliderBallFlip: false, sliderBallFrames: 12,
+      sliderBallFlip: false, sliderBallFrames: 12, cursorScale: 1,
+      comboColors: [], sliderBorder: null, sliderTrackOverride: null, spinnerBackground: null,
     });
     const invalid = skin({ 'skin.ini': strToU8('[General]\nCursorRotate: banana\nSliderBallFrames: 99999') });
     expect(visualSkinConfig(invalid).cursorRotate).toBe(true);
@@ -75,5 +76,40 @@ describe('M7 .osk visual skin loading', () => {
     const archive = skin({ 'hitcircle.png': png(9) });
     expect(archive.difficulties).toHaveLength(0);
     expect(Object.keys(visualSkinFiles(archive))).toEqual(['hitcircle']);
+  });
+
+  it('parses skin.ini colours, cursor scale and slider overrides', () => {
+    const archive = skin({ 'skin.ini': strToU8(
+      '[General]\nCursorScale: 1.25\n[Colours]\n' +
+      'Combo1: 255, 0, 10\nCombo3: 0,128,255\nCombo9: 1,1,1\n' +
+      'SliderBorder: 1,2,3\nSliderTrackOverride: 4,5,6\nSpinnerBackground: 7,8,9'
+    ) });
+    expect(visualSkinConfig(archive)).toMatchObject({
+      cursorScale: 1.25,
+      comboColors: [0xff000a, 0x0080ff],
+      sliderBorder: 0x010203,
+      sliderTrackOverride: 0x040506,
+      spinnerBackground: 0x070809,
+    });
+    expect(visualSkinConfig(skin({ 'skin.ini': strToU8('[General]\nCursorScale: 99') })).cursorScale).toBe(1);
+    expect(visualSkinConfig(skin({ 'skin.ini': strToU8('[Colours]\nSliderBorder: 300,0,0') })).sliderBorder).toBeNull();
+  });
+
+  it('maps skin combo colours onto the map combo cycle', () => {
+    const map = [0x111111, 0x222222, 0x333333];
+    const skin = [0xff0000, 0x00ff00];
+    expect(skinComboColor(map, 0x222222, skin)).toBe(0x00ff00);
+    expect(skinComboColor(map, 0x999999, skin)).toBe(0xff0000);
+    expect(skinComboColor(map, 0x222222, [])).toBe(0x222222);
+  });
+
+  it('resolves slider start/end, spinner background and cursor middle sprites', () => {
+    const archive = skin({
+      'sliderstartcircle.png': png(1), 'sliderendcircle.png': png(2),
+      'spinner-background.png': png(3), 'cursormiddle.png': png(4),
+    });
+    expect(Object.keys(visualSkinFiles(archive)).sort()).toEqual([
+      'cursormiddle', 'sliderendcircle', 'sliderstartcircle', 'spinner-background',
+    ]);
   });
 });
