@@ -10,6 +10,7 @@ import { cursorAt, KEY, type ReplayFrame } from '../load/replay';
 import { playfieldLayout, type PlayfieldLayout } from './layout';
 import { VisibleObjectIndex } from './visible-index';
 import type { VisualSkinKey, VisualSkinConfig } from './skin-visuals';
+import { flashlightRadius, flashlightTrackDim } from './flashlight';
 
 const HIT_FADE = 240; // ms for a hit circle to expand and fade after being hit
 const MISS_FADE = 120;
@@ -81,6 +82,11 @@ export class PlayfieldRenderer {
   private cursorSprite = new Sprite(Texture.EMPTY);
   private cursorTrailSprites: Sprite[] = [];
   private cursorBaseScale = { x: 1, y: 1 };
+  private flashlightLayer = new Container();
+  private flashlightGfx = new Graphics();
+  private flashlightDimGfx = new Graphics();
+  private flashlightActive = false;
+  private trackingRanges: [number, number][] = [];
   private hud = new Container();
   private comboText!: Text;
   private accText!: Text;
@@ -119,7 +125,9 @@ export class PlayfieldRenderer {
     });
     host.appendChild(this.app.canvas);
     this.app.stage.addChild(this.bg, this.field, this.hud);
-    this.field.addChild(this.followLayer, this.objectLayer, this.approachLayer, this.judgementLayer, this.cursorLayer);
+    this.field.addChild(this.followLayer, this.objectLayer, this.approachLayer, this.judgementLayer, this.cursorLayer, this.flashlightLayer);
+    this.flashlightLayer.addChild(this.flashlightGfx, this.flashlightDimGfx);
+    this.flashlightLayer.visible = false;
     this.cursorLayer.addChild(this.cursorGfx, this.cursorSprite);
     this.cursorSprite.anchor.set(0.5);
     this.cursorSprite.visible = false;
@@ -183,6 +191,8 @@ export class PlayfieldRenderer {
     this.frames = frames;
     this.judgement = judgement;
     this.frameHint = 0;
+    this.flashlightActive = map.mods.includes('FL');
+    this.trackingRanges = judgement.objects.flatMap((o) => o.tracking ?? []);
     this.resultEvents = judgement.events
       .filter((e) => e.result !== undefined && e.result !== 300 && e.x !== undefined)
       .map((e) => ({ t: e.t, x: e.x!, y: e.y!, result: e.result! }));
@@ -347,6 +357,7 @@ export class PlayfieldRenderer {
     this.updateFollowPoints(t);
     this.updateJudgements(t);
     this.updateCursor(t);
+    this.updateFlashlight(t);
     this.updateHud(t);
     this.app.render();
   }
@@ -779,6 +790,31 @@ export class PlayfieldRenderer {
       this.cursorSprite.scale.set(this.cursorBaseScale.x * factor, this.cursorBaseScale.y * factor);
     } else {
       g.circle(c.x, c.y, pressed ? 11 : 9.5).fill({ color: 0xffe08a, alpha: 0.95 }).stroke({ width: 2, color: 0xffffff });
+    }
+  }
+
+  /** Stable Flashlight: a black playfield overlay with a cursor-centered hole.
+   * Combo/break radius and slider-tracking dim come from the documented stable
+   * scales; the original size easing is not reproduced frame-for-frame.
+   */
+  private updateFlashlight(t: number) {
+    const map = this.map;
+    const judgement = this.judgement;
+    const visible = Boolean(map && judgement && this.flashlightActive);
+    this.flashlightLayer.visible = visible;
+    if (!visible || !map || !judgement) return;
+    const combo = eventAt(judgement, t)?.combo ?? 0;
+    const inBreak = map.breaks.some((b) => t >= b.start && t <= b.end);
+    const radius = flashlightRadius(combo, inBreak);
+    const cursor = this.frames.length ? cursorAt(this.frames, t, this.frameHint) : { x: 256, y: 192 };
+    this.flashlightGfx.clear();
+    this.flashlightGfx.rect(0, 0, 512, 384).fill({ color: 0x000000, alpha: 0.9 });
+    this.flashlightGfx.circle(cursor.x, cursor.y, radius).cut();
+    const tracking = this.trackingRanges.some(([start, end]) => t >= start && t <= end);
+    const dim = flashlightTrackDim(tracking);
+    this.flashlightDimGfx.clear();
+    if (dim > 0) {
+      this.flashlightDimGfx.circle(cursor.x, cursor.y, radius).fill({ color: 0x000000, alpha: dim });
     }
   }
 
