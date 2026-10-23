@@ -41,6 +41,12 @@ export class ReplayVideoCapture {
     const mime = chooseCaptureMime(type => MediaRecorder.isTypeSupported(type));
     if (!mime) throw new Error('This browser cannot encode WebM video');
     const stream = canvas.captureStream(fps);
+    // Some browsers return an empty stream while the canvas is not drawable.
+    // Reject before allocating a recorder or starting a silent, empty capture.
+    if (!stream.getVideoTracks().length) {
+      stream.getTracks().forEach(track => track.stop());
+      throw new Error('Canvas capture produced no video track');
+    }
     try {
       const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5_000_000 });
       this.recorder = recorder;
@@ -53,12 +59,12 @@ export class ReplayVideoCapture {
       });
       recorder.ondataavailable = (event: BlobEvent) => {
         if (!event.data.size) return;
-        this.bytes += event.data.size;
-        if (this.bytes > MAX_CAPTURE_BYTES) {
+        if (event.data.size > MAX_CAPTURE_BYTES - this.bytes) {
           this.failed = new Error('Capture exceeded the 256 MiB limit');
           void this.stop().catch(() => {});
           return;
         }
+        this.bytes += event.data.size;
         this.chunks.push(event.data);
       };
       recorder.onerror = () => {
