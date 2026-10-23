@@ -1,3 +1,4 @@
+import 'pixi.js/unsafe-eval';
 import { Application, Container, Graphics, Text, Sprite, Texture, AlphaFilter } from 'pixi.js';
 import type { PreparedMap, HitObj, SliderObj, SpinnerObj, Vec } from '../game/prepare';
 import { sliderBallAt } from '../game/prepare';

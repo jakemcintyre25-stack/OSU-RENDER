@@ -90,9 +90,11 @@ footer { margin-top: 24px; text-align: center; }
   pointer-events: none;
 }
 .controls {
-  display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: rgba(11, 13, 18, 0.95); border-top: 1px solid var(--line);
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px; row-gap: 6px; padding: 8px 12px;
+  background: rgba(11, 13, 18, 0.95); border-top: 1px solid var(--line);
 }
-.controls button { padding: 6px 12px; min-width: 40px; }
+.controls button { padding: 6px 12px; min-width: 0; }
+.controls .seek-wrap { flex-basis: 160px; }
 .time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; white-space: nowrap; }
 .seek-wrap { position: relative; flex: 1; display: flex; align-items: center; }
 .seek-wrap input { width: 100%; accent-color: var(--accent); position: relative; z-index: 1; }

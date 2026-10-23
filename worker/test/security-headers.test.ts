@@ -39,6 +39,18 @@ describe('M11 baseline security headers', () => {
     expectHardened(response);
   });
 
+  it('serves a restrictive CSP with only the required asset exceptions', async () => {
+    const response = await call(new Request('https://x.test/'));
+    const csp = response.headers.get('Content-Security-Policy') ?? '';
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).toContain("script-src 'self'");
+    expect(csp).toContain("object-src 'none'");
+    expect(csp).toContain("base-uri 'none'");
+    expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).toContain('https://assets.ppy.sh');
+    expect(csp).not.toContain("script-src 'self' 'unsafe-inline'");
+  });
+
   it('replaces a weaker upstream value instead of appending a duplicate', async () => {
     const env = envFor(async () => new Response('asset', {
       headers: { 'X-Content-Type-Options': 'sniff-me', 'Referrer-Policy': 'unsafe-url' },
