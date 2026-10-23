@@ -246,6 +246,27 @@ export function planHitsounds(
     }
     const bits = int(row[4]);
     if (kind === 'spinner') {
+      // Spinning sound is a skin loop, independent of whether the spinner is
+      // eventually completed. Bonus clips follow stable's half-spin ticks.
+      const halfSpins = judged.halfSpins ?? 0;
+      if (halfSpins > 0) {
+        // Missing optional spinner samples must not inflate the unavailable
+        // count for every bonus tick; check once before scheduling.
+        if (lookupSample('spinnerspin.wav', true)) {
+          scheduleLoop(object.start, object.end, 'spinnerspin.wav', 100);
+        }
+        if (lookupSample('spinnerbonus.wav', true)) {
+          const required = judged.halfSpinsRequired ?? 0;
+          const bonusThreshold = required + 3;
+          const total = Math.max(1, halfSpins);
+          for (let count = 2; count <= halfSpins; count++) {
+            if (count > bonusThreshold && (count - bonusThreshold) % 2 === 0) {
+              const t = object.start + (object.end - object.start) * (count / total);
+              scheduleFile(t, 'spinnerbonus.wav', 100);
+            }
+          }
+        }
+      }
       // osu!stable allows a spinner to carry a normal + addition hitsound
       // at its end. Do not sound an unsuccessful spinner completion.
       if (judged.result > 0) scheduleHit(object.end, bits, sampleSettings(row[6]));

@@ -51,6 +51,19 @@ describe('user .osk audio feature detection and actual slider-loop fallback', ()
     expect(plan.loops?.every(x => x.end > x.start)).toBe(true);
   });
 
+  it('accepts spinner loop and bonus samples at the skin root', () => {
+    const skin = makeSkin({
+      'spinnerspin.wav': wav,
+      'spinnerbonus.ogg': wav,
+      'spinnerspin2.wav': wav,
+    });
+    expect(supportedSkinAudioFiles(skin)).toEqual([
+      'spinnerspin.wav',
+      'spinnerbonus.ogg',
+      'spinnerspin2.wav',
+    ]);
+  });
+
   it('rejects sprite-only, nested, and similarly named non-samples', () => {
     const skin = makeSkin({
       'normal-sliderslide.png': wav,
