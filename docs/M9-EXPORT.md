@@ -99,7 +99,7 @@ WebM recorder.
   frame submission, finalisation and cancellation using mocked Mediabunny.
 
 Verification run: 33 export-focused tests pass; the full merged web suite passes
-(278 tests, 12 skipped); worker tests pass (50); web typecheck passes; the Vite
+(285 tests, 12 skipped); worker tests pass (50); web typecheck passes; the Vite
 production build passes with Mediabunny in a lazy-loaded 255 KB chunk.
 
 ### Real-browser MP4 check (23 October 2026)
@@ -118,6 +118,28 @@ with Mediabunny's `Input`/`EncodedPacketSink`:
 A/V start delta is **0 ms**; the **5.33 ms** end delta is AAC frame padding.
 This is a real file/stream check, not only a recorder mock, but it is not a real
 osu! replay, not 1080p60 and not a memory measurement.
+
+### 3-minute 1080p60 pipeline check (24 October 2026)
+
+The same production export modules were called from a standalone harness with a
+**synthetic 2D canvas** (`fillRect`/`fillText`, not the Pixi renderer) and a
+180-second generated stereo tone:
+
+| Measurement | Result |
+|---|---|
+| Export | 1920×1080 / 60 fps, 10,800 frames |
+| File | 138,933,591 bytes, MP4 / H.264 + AAC |
+| Export time | 114.5 s (~10.6 ms/frame) |
+| Playback | 180.0107 s, 1920×1080, readyState 4 |
+| JS heap at end | 138 MB |
+| Final-frame time | 179,983 ms |
+
+Evidence: [export-long-1080p60.png](./evidence/export-long-1080p60.png).
+This validates the fixed-frame timeline, 60 fps encoder pacing, 3-minute offline
+audio mix and in-memory output at 1080p60. It **does not** validate Pixi/WebGL
+render cost: another run using software WebGL did not finish a 10-second
+1080p60 export within 120 s. Real-GPU/real-renderer 1080p60, total-process peak
+memory and physical mobile remain open.
 
 ## Acceptance checklist before M9 PASS
 
