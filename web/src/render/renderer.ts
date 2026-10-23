@@ -8,6 +8,7 @@ import { cursorAt, KEY, type ReplayFrame } from '../load/replay';
 import { playfieldLayout, type PlayfieldLayout } from './layout';
 import { hitLightAt } from './effects';
 import { firstFollowPointAtOrAfter, planFollowPoints, type FollowPoint } from './follow-points';
+import { flashlightRadius, flashlightTrackDim } from './flashlight';
 import { VisibleObjectIndex } from './visible-index';
 import { DEFAULT_VISUAL_SKIN_CONFIG, skinComboColor, sliderBallFrame, type VisualSkinKey, type VisualSkinConfig } from './skin-visuals';
 
@@ -77,6 +78,7 @@ export class PlayfieldRenderer {
   private followGfx = new Graphics();
   private flashGfx = new Graphics();
   private followPoints: FollowPoint[] = [];
+  private trackingRanges: [number, number][] = [];
   private objectLayer = new Container({ sortableChildren: true });
   private approachLayer = new Container();
   private judgementLayer = new Container();
@@ -201,6 +203,7 @@ export class PlayfieldRenderer {
     this.frames = frames;
     this.judgement = judgement;
     this.frameHint = 0;
+    this.trackingRanges = judgement.objects.flatMap((o) => o.tracking ?? []);
     this.resultEvents = judgement.events
       .filter((e) => e.result !== undefined && e.result !== 300 && e.x !== undefined)
       .map((e) => ({ t: e.t, x: e.x!, y: e.y!, result: e.result! }));
@@ -716,9 +719,15 @@ export class PlayfieldRenderer {
     g.clear();
     const map = this.map;
     if (!map?.mods.includes('FL') || !this.frames.length) return;
+    const combo = this.judgement ? eventAt(this.judgement, t)?.combo ?? 0 : 0;
+    const inBreak = map.breaks.some((b) => t >= b.start && t <= b.end);
+    const radius = flashlightRadius(combo, inBreak);
     const cursor = cursorAt(this.frames, t, this.frameHint);
-    g.rect(0, 0, 512, 384).fill({ color: 0x000000, alpha: 0.86 });
-    g.circle(cursor.x, cursor.y, Math.max(110, map.radius * 6.5)).cut();
+    g.rect(0, 0, 512, 384).fill({ color: 0x000000, alpha: 0.9 });
+    g.circle(cursor.x, cursor.y, radius).cut();
+    const tracking = this.trackingRanges.some(([start, end]) => t >= start && t <= end);
+    const dim = flashlightTrackDim(tracking);
+    if (dim > 0) g.circle(cursor.x, cursor.y, radius).fill({ color: 0x000000, alpha: dim });
   }
 
   private updateFollowPoints(t: number) {
