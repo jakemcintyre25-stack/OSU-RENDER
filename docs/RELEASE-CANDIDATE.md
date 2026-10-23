@@ -21,7 +21,7 @@ This is the assembled candidate for the browser osu!standard replay renderer. It
 | M4 ScoreV1 | Slider/head/spinner scoring, stable half-spin bonus gap, stable difficulty multiplier/drain quirks, combo integer truncation, ScoreV2 skip |
 | M5 audio | Map and user-.osk hitsounds, slider loops, spinner loop/bonus clips, shared Web Audio clock |
 | M6 visuals | Procedural circles/sliders/spinners, hit lighting, follow points, Flashlight overlay, cursor/key HUD |
-| M7 skins | Root `.osk` sprites for hitcircle/overlay, slider start/end circles and overlays, approach, slider ball/follow, reverse arrow, spinner background/circle/approach, cursor/trail/middle, combo-colour overrides, cursor scale and slider border/track overrides |
+| M7 skins | Root `.osk` sprites for hitcircle/overlay, slider start/end circles and overlays, approach, slider ball/follow incl. indexed animation, reverse arrow, spinner background/circle/approach, cursor/trail/middle, combo-colour overrides, cursor scale, slider border/track overrides and IndexedDB saved-skin restore |
 | M8 player | Seek, speed, sync, volumes, timeline markers, HP/fail, responsive controls, reduced-motion HP |
 | M9 export | Real-time WebM with synchronized audio; deterministic fixed-FPS full-length MP4/WebM with offline audio mix, progress and cancel |
 | M10 lazer | Detection from game version and explicit unsupported rejection |
@@ -31,7 +31,7 @@ This is the assembled candidate for the browser osu!standard replay renderer. It
 ## Verification evidence
 
 - Integration-branch CI is green on the current head.
-- Web test suite: 265 passed, 12 skipped (last assembled full run).
+- Web test suite: 272 passed, 12 skipped (last assembled full run).
 - Worker test suite: 50 passed.
 - Web typecheck and Vite production build pass.
 - Real-browser export evidence from the M9 branch: headless Chrome produced a 1280×720/30 fps MP4 with H.264 60 packets / 2.000 s and AAC stereo 48 kHz 94 packets / 2.005 s, both first timestamps 0, end delta 5.33 ms.
