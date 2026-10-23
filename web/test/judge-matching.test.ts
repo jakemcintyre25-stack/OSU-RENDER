@@ -31,6 +31,9 @@ SliderTickRate:1
 300,300,1020,1,0,0:0:0:0:
 `;
 
+// Two circles 2 ms apart, inside stable's simultaneous-object tolerance.
+const simultaneous = osu.replace('300,300,1020', '300,300,1002');
+
 const frames = (presses: { t: number; x: number; y: number }[]): ReplayFrame[] => {
   const out: ReplayFrame[] = [{ t: 0, x: 0, y: 0, keys: 0 }];
   for (const p of presses) {
@@ -48,6 +51,13 @@ describe('click matching', () => {
     const j = judge(map, frames([{ t: 1025, x: 300, y: 300 }]));
     expect(j.objects[1].result).toBe(0);
     expect(j.objects[0].result).toBe(0);
+  });
+
+  it('allows a simultaneously stacked circle inside the 3 ms tolerance', () => {
+    const map = prepareMap(simultaneous, []);
+    const j = judge(map, frames([{ t: 1002, x: 300, y: 300 }]));
+    expect(j.objects[1].result).toBe(300);
+    expect(j.objects[0].result).toBe(0); // the first stacked circle remains open
   });
 
   it('allows the later circle once the earlier circle has been judged', () => {

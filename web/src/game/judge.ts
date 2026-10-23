@@ -137,20 +137,33 @@ export function judge(map: PreparedMap, frames: ReplayFrame[], options: JudgeOpt
     // input on any later overlapping object is ignored. A click that lands on
     // empty space or on a later object is wasted; it must not skip the lock.
     if (first >= map.objects.length) continue;
-    const o = map.objects[first];
+    const firstObject = map.objects[first];
     if (headDone[first]) continue;
-    if (o.start - MISS_WINDOW > p.t) continue; // too early to interact at all
-    const offset = p.t - o.start;
-    if (offset > w.w50) continue; // too late; the object will expire
-    const cands = options.pressPositionFrames ? [p, ...p.nearby] : [p];
-    if (!cands.some((c) => Math.hypot(c.x - o.x, c.y - o.y) <= r)) continue; // click missed this circle's area
-    const res = headResult(offset, w); // early clicks inside MISS_WINDOW count as a miss
-    headDone[first] = true;
-    headHit[first] = res;
-    if (res > 0) objects[first].hitTime = p.t;
-    else {
-      objects[first].resultTime = p.t;
-      if (o.kind === 'slider') objects[first].headMissTime = p.t;
+    if (firstObject.start - MISS_WINDOW > p.t) continue; // too early to interact at all
+    // Stable tolerates a narrow simultaneous-object window (3 ms) so two
+    // objects stacked/ended together are not artificially note-locked. It does
+    // not permit skipping an earlier object whose start is more than 3 ms away.
+    const simultaneousEnd = (() => {
+      let k = first + 1;
+      while (k < map.objects.length && map.objects[k].start <= firstObject.start + 3) k++;
+      return k;
+    })();
+    for (let k = first; k < simultaneousEnd; k++) {
+      if (headDone[k]) continue;
+      const o = map.objects[k];
+      const offset = p.t - o.start;
+      if (offset > w.w50) continue; // too late; the object will expire
+      const cands = options.pressPositionFrames ? [p, ...p.nearby] : [p];
+      if (!cands.some((c) => Math.hypot(c.x - o.x, c.y - o.y) <= r)) continue; // click missed this circle's area
+      const res = headResult(offset, w); // early clicks inside MISS_WINDOW count as a miss
+      headDone[k] = true;
+      headHit[k] = res;
+      if (res > 0) objects[k].hitTime = p.t;
+      else {
+        objects[k].resultTime = p.t;
+        if (o.kind === 'slider') objects[k].headMissTime = p.t;
+      }
+      break;
     }
   }
   map.objects.forEach((o, i) => {
