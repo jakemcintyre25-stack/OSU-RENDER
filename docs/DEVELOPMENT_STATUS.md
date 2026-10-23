@@ -167,7 +167,7 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - Prior `2edf4fcf` checkpoint passed both CI workflows.
 - `b2bdff72`: render .osk reverse-arrow sprites at active slider repeat endpoints, rotated to point into the return path; retain vector arrow fallback.
 - `c27b269a`: align custom reverse-arrow alpha with Hidden and slider fades.
-- **Verification:** CI pending on these new changes; no real-browser visual comparison. M7 remains IN PROGRESS. Next: fix any CI failures, add real renderer regression coverage and verify skin.ini and sprite geometry.
+- **Verification:** these commits are included in the current green RC; real-browser sprite geometry/visual comparison remains open. M7 remains IN PROGRESS.
 
 ### M7 skin.ini configuration integration (23 October 2026)
 
@@ -283,7 +283,7 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - `render/export/export-video.ts` probes real encoders with Mediabunny (`canEncodeVideo`/`canEncodeAudio`), adds a fixed-rate `CanvasSource`, optionally an AAC/Opus `AudioBufferSource`, and finalises MP4/H.264 or WebM/VP9/VP8. It is lazy-loaded as a separate ~255 KB chunk.
 - The player now has an **Export video** dialog with 720p/1080p, 30/60 fps, codec capability text, an estimated frame count, progress, cancel and a local download. Export uses a hidden 1280×720/1920×1080 renderer at resolution 1 and pauses preview playback; the preview is rebuilt after the export renderer is destroyed.
 - Design and acceptance detail: `docs/M9-EXPORT.md`. Dependency note: Mediabunny is MPL-2.0 and is bundled locally, not hotlinked.
-- Automated evidence: **33 export-focused tests** across timeline, frame loop, codec policy, offline mix and mux orchestration. On the merged tree the full web suite passed **285 tests (12 skipped)**, worker tests passed **50**, web typecheck passed and the production build passed.
+- Automated evidence: **33 export-focused tests** across timeline, frame loop, codec policy, offline mix and mux orchestration. On the merged tree the full web suite passed **289 tests (12 skipped)**, worker tests passed **50**, web typecheck passed and the production build passed.
 - Real-browser check: headless Chrome 155 (Windows) produced a **1280×720/30 fps MP4** from a synthetic canvas and tone in 426 ms (444,500 bytes). It re-opened in `HTMLVideoElement` and was parsed with Mediabunny: **60 H.264 packets, 2.000 s; 94 AAC stereo 48 kHz packets, 2.005 s; both first timestamps 0; end delta 5.33 ms** (AAC padding). This run found and fixed a real deadlock: `Output.getMimeType()` was awaited before the first frame, so no codec metadata could ever arrive (the codec-metadata ordering fix in this branch). This branch also makes `@types/node` explicit so clean-install CI typechecks.
 - **Long 1080p60 pipeline check (24 October):** a standalone harness using production export modules completed a **3-minute 1920×1080/60 synthetic 2D-canvas** export: **10,800 frames, 138,933,591 bytes, 114.5 s, H.264/AAC**, re-opened at **180.0107 s / 1920×1080**, JS heap **138 MB** ([screenshot](./evidence/export-long-1080p60.png)). This measures the encoder/timeline/offline-audio path, **not Pixi render cost**; a separate software-WebGL 10 s 1080p60 attempt timed out at 120 s.
 - **Still OPEN:** real-renderer/GPU 1080p60, real replay/audio content, total-process peak memory, mobile browsers and DT/HT acoustic acceptance. M9 is not PASS; no deployment.
@@ -304,7 +304,7 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - Slider heads prefer `sliderstartcircle`/`sliderstartcircleoverlay`; the tail circle uses `sliderendcircle`/`sliderendcircleoverlay`, both falling back to `hitcircle`/`hitcircleoverlay`.
 - The tail circle appears near the slider end and reacts to the judged tail (hit expansion/fade or miss fade).
 - Tests cover @2x resolution and all four slider-specific circle sprites.
-- **M7 remains IN PROGRESS:** full skin.ini layout/animation/persistence remain OPEN.
+- **M7 remains IN PROGRESS:** full skin.ini layout parity, default licensed sounds and real-browser screenshot comparison remain OPEN; animation, fonts and persistence are implemented.
 
 ### M7 visual skin rendering (24 October 2026)
 
@@ -314,7 +314,7 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - Indexed slider-ball frames (`sliderb0..sliderbN`, `@2x` aware) are loaded through `SliderBallFrames` and cycled at 60 fps while the slider runs; plain `sliderb` remains the fallback.
 - `[Fonts] HitCirclePrefix` and `HitCircleOverlap` now drive real digit sprites (`<prefix>-0..9`, `@2x` aware) with centred overlap layout; a missing digit falls back to the text renderer. Prefixes are validated against a safe sprite stem.
 - The selected `.osk` is stored in IndexedDB (128 MiB validation cap), restored before a replay/session opens, and can be removed with **Forget saved skin**. Storage/quota failures keep the skin session-only; corrupt stored data is cleared.
-- Automated evidence: `skin-visuals.test.ts` now covers all new sprite keys, combo colour mapping, cursor scale, slider colours, skin fonts, animation frames and malformed values. Full suite: **281 passed, 12 skipped**; typecheck and production build pass.
+- Automated evidence: `skin-visuals.test.ts` now covers all new sprite keys, combo colour mapping, cursor scale, slider colours, skin fonts, animation frames and malformed values. Full suite: **289 passed, 12 skipped**; typecheck and production build pass.
 - **Still OPEN:** default licensed sounds and real-browser screenshot comparison. No visual parity claim is made.
 
 ### M6 default visual effects (24 October 2026)
@@ -323,8 +323,8 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - **Follow points:** default-skin dots are planned between consecutive objects, skipping spinners/short gaps, capped at 12 per gap and 4,000 total, and drawn through a binary-search time window so long maps do not scan every point each frame (`render/follow-points.ts`).
 - **Flashlight:** FL maps draw a playfield dimming layer with a cursor-following circular cut-out; the cursor layer stays above it so the pointer remains visible. This is a playfield-scoped approximation, not stable's exact FL radius/behaviour.
 - These are vector effects with no bundled copyrighted skin assets. The follow-point path is a straight-gap approximation, not stable's exact slider-path placement.
-- Automated evidence: 7 new pure tests for light decay and follow-point planning; full suite **265 passed, 12 skipped**; typecheck/build pass.
-- **M6 remains IN PROGRESS:** full default sprite parity, shaders, hit-circle number fonts and HUD effects. Desktop and 390×844 browser screenshots are now captured.
+- Automated evidence: 7 new pure tests for light decay and follow-point planning; full suite **289 passed, 12 skipped**; typecheck/build pass.
+- **M6 remains IN PROGRESS:** full default sprite parity, shaders and HUD effects. Desktop and 390×844 browser screenshots are now captured; skin font digits and soft hit glow are implemented.
 
 ### M11 baseline security response headers (24 October 2026)
 
@@ -373,7 +373,7 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 
 - New `render/hit-error.ts` derives successful-hit offsets from the prepared objects and judgement trace; misses/non-finite times are excluded.
 - The player shows a compact bar of the last 40 offsets (±100 ms, colour-coded 300/100/50) plus average offset and osu!-style UR (population standard deviation ×10). It hides for fewer than two successful hits and clears on player teardown.
-- Automated evidence: 4 pure tests for offset collection, UR maths and zero/non-finite handling. Full suite **285 passed, 12 skipped**; typecheck/build pass.
+- Automated evidence: 4 pure tests for offset collection, UR maths and zero/non-finite handling. Full suite **289 passed, 12 skipped**; typecheck/build pass.
 - Real-browser screenshot of the new bar is still pending; the underlying values are already exercised by unit tests.
 
 ## Immediate next implementation work
