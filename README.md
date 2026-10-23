@@ -64,7 +64,7 @@ Done:
 - HP engine: stable's simulated drain search, hit/combo-end gains, nested slider/spinner health, break pauses and negative-judgement HP-zero failure (visible bar not wired yet)
 - Autoplay generator (used for map preview and tests — judges 100% on the test map)
 - Recording: real-time WebM capture of the live canvas with synchronized music and hit-effect audio, codec negotiation for Opus muxing, video-only fallback, and 60-second/256 MiB limits
-- Deterministic export: full-length fixed-FPS rendering plus an offline music/hitsound mix, muxed as MP4 (H.264/AAC) or WebM (VP9/VP8 + Opus), with progress, cancel and honest codec fallback. A real 1280×720/30 fps MP4 has been produced and its H.264/AAC streams timestamp-checked in Chrome; see `docs/M9-EXPORT.md`
+- Deterministic export: full-length fixed-FPS rendering plus a pitch-preserved offline music/hitsound mix, muxed as MP4 (H.264/AAC) or WebM (VP9/VP8 + Opus), with progress, cancel and honest codec fallback. A real 1280×720/30 fps MP4 has been produced and its H.264/AAC streams timestamp-checked in Chrome; see `docs/M9-EXPORT.md`
 
 Next (see the build plan):
 

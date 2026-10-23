@@ -78,8 +78,9 @@ WebM recorder.
   substantial RAM; streaming-to-disk and memory profiling are not implemented.
 - The browser's H.264/AAC encoders may not exist on every platform; WebM is the
   fallback. The UI reports which one was selected.
-- DT/HT audio uses `playbackRate`, so pitch changes exactly as in the current
-  preview. Pitch-preserving time-stretch remains an M5 item.
+- DT/HT export audio is stretched with the same dependency-free WSOLA path used
+  by the preview and played at rate 1, so export pitch is preserved. If
+  stretching fails, it falls back to pitch-changing `playbackRate`.
 - Audio decode failure falls back to video-only rather than failing the export.
 - Export does not include the live preview's viewer speed, sync offset, or
   audio-device latency compensation. It follows the map timeline.
@@ -97,7 +98,7 @@ WebM recorder.
 - `web/test/export-video.test.ts` — muxer orchestration, audio track addition,
   frame submission, finalisation and cancellation using mocked Mediabunny.
 
-Verification run: 28 export-focused tests pass; the full merged web suite passes
+Verification run: 33 export-focused tests pass; the full merged web suite passes
 (239 tests, 12 skipped); worker tests pass (42); web typecheck passes; the Vite
 production build passes with Mediabunny in a lazy-loaded 255 KB chunk.
 
