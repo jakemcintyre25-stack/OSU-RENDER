@@ -11,8 +11,7 @@ Updated 23 October 2026. **Status: IN PROGRESS, not full osu!stable audio parity
 - The selected map's `[General] AudioLeadIn` is parsed with an explicit operational input ceiling and honored at playback start. Existing synthetic PreparedMap fixtures can omit this optional field; actual prepared beatmaps set it.
 - An optional user-imported .osk supplies real root-level WAV/MP3/OGG hit sounds, slider loops and `spinnerspin`/`spinnerbonus` clips. The spinner loop covers the judged first-to-last half-spin interval, and bonus clips use the judge's actual stable half-spin bonus timestamps rather than evenly spaced estimates. Limited `skin.ini` `LayeredHitSounds` is applied. No default skin sounds, skins, replays or beatmaps are distributed in this repository.
 - Circle, slider head/tick/repeat/tail events carry stable's positional pan `(x / 512 − 0.5) × 0.8` and are routed through a `StereoPannerNode` when non-centred; centred events keep the cheaper un-panned graph. Slider loops and spinner clips remain centred because their position changes during playback.
-- The music Web Audio clock schedules voices using a 250ms lookahead, DT/HT rates and visual sync offsets; it cancels abandoned sounds after pause, seek, speed change and disposal. Independent music and effects gain buses provide separate volume controls. Pending asynchronous AudioContext resume is invalidated on seek, pause, speed change or dispose. Four concurrent decoders, 48 live voices, unique-sample and byte/event bounds limit resources.
-
+- The music Web Audio clock schedules voices using a 250ms lookahead, DT/HT rates and visual sync offsets; it cancels abandoned sounds after pause, seek, speed change and disposal. Independent music and effects gain buses provide separate volume controls. Pending asynchronous AudioContext resume is invalidated on seek, pause, speed change or dispose. Four concurrent decoders, 48 live voices, unique-sample and byte/event bounds limit resources.\n- DT/HT and viewer-speed changes precompute a WSOLA time-stretched music buffer so pitch is preserved; the stretched buffer is cached per rate and falls back to pitch-changing playbackRate if stretching fails.\n
 ## Verification passes
 
 **Functional:** `web/test/hitsounds.test.ts`, `hitsounds-spinner.test.ts`, `skin-hitsounds.test.ts` and `skin-assets.test.ts` cover decoded .osu metadata, physical ZIP archives, sample precedence, dropped objects, spinner completion, user skin inputs and session/judge coupling. `slider-loops.test.ts` covers judge tracking range planning and real looping source schedule/stop/seek phases.
@@ -24,9 +23,8 @@ Updated 23 October 2026. **Status: IN PROGRESS, not full osu!stable audio parity
 ## Still OPEN or unverified
 
 - A licence-approved set of distributable default skin samples; complete user skin.ini sound options, visual skin sprites and persistence.
-- Slider tracking exact audible parity on varied real osu!stable replays, volume weighting, fade behaviour and sample timestamp edge cases. Spinner loop/bonus clips and positional pan now exist but still need real-device listening checks.
-- Pitch-preserving DT/HT time stretching. The current `AudioBufferSourceNode.playbackRate` changes pitch along with playback speed; 0.25×–2× viewer speed has the same limitation.
-- Real browser/Windows audio latency, decode support, MP3 padding/acoustic sync, skin visual integration and offline MP4 audio mix.
+- Slider tracking exact audible parity on varied real osu!stable replays, volume weighting, fade behaviour and sample timestamp edge cases. Spinner loop/bonus clips, positional pan and WSOLA pitch preservation now exist but still need real-device listening checks.
+- WSOLA is a compact dependency-free stretcher, not mastering-grade: real-music artifacts are unmeasured, transient/phase behaviour is unverified, and large maps pay a one-off preprocessing cost.\n- Real browser/Windows audio latency, decode support, MP3 padding/acoustic sync, skin visual integration and offline MP4 audio mix.
 - Real osu! API replay access and real private fixture parity. The normal CI-friendly judgement check is not proof of real parity.
 
 ## Next independent tasks
