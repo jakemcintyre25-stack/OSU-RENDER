@@ -53,7 +53,7 @@ describe('M7 .osk visual skin loading', () => {
     ) });
     expect(visualSkinConfig(archive)).toEqual({
       cursorRotate: false, cursorExpand: false, cursorCentre: true,
-      sliderBallFlip: false, sliderBallFrames: 12, cursorScale: 1,
+      sliderBallFlip: false, sliderBallFrames: 12, animationFramerate: 60, cursorScale: 1,
       comboColors: [], sliderBorder: null, sliderTrackOverride: null, spinnerBackground: null,
       hitCirclePrefix: 'default', hitCircleOverlap: 0,
     });
@@ -139,6 +139,14 @@ describe('M7 .osk visual skin loading', () => {
     expect(sliderBallFrame(-1, 3, 100)).toBe(2);
     expect(sliderBallFrame(100, 0)).toBe(0);
     expect(sliderBallFrame(100, 3, 0)).toBe(0);
+    expect(sliderBallFrame(34, 2, 1000 / 30)).toBe(1);
+  });
+
+  it('parses a bounded AnimationFramerate', () => {
+    const archive = skin({ 'skin.ini': strToU8('[General]\nAnimationFramerate: 30') });
+    expect(visualSkinConfig(archive).animationFramerate).toBe(30);
+    const invalid = skin({ 'skin.ini': strToU8('[General]\nAnimationFramerate: 999') });
+    expect(visualSkinConfig(invalid).animationFramerate).toBe(60);
   });
 
   it('parses safe skin font prefixes and overlap values', () => {

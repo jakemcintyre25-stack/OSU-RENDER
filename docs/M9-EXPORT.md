@@ -99,7 +99,7 @@ WebM recorder.
   frame submission, finalisation and cancellation using mocked Mediabunny.
 
 Verification run: 33 export-focused tests pass; the full merged web suite passes
-(289 tests, 12 skipped); worker tests pass (50); web typecheck passes; the Vite
+(290 tests, 12 skipped); worker tests pass (50); web typecheck passes; the Vite
 production build passes with Mediabunny in a lazy-loaded 255 KB chunk.
 
 ### Real-browser MP4 check (23 October 2026)
