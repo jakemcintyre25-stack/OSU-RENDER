@@ -6,6 +6,8 @@ import { eventAt } from '../game/judge';
 import { scoreHudLabel } from './hud-score';
 import { cursorAt, KEY, type ReplayFrame } from '../load/replay';
 import { playfieldLayout, type PlayfieldLayout } from './layout';
+import { hitLightAt } from './effects';
+import { firstFollowPointAtOrAfter, planFollowPoints, type FollowPoint } from './follow-points';
 import { VisibleObjectIndex } from './visible-index';
 import { DEFAULT_VISUAL_SKIN_CONFIG, skinComboColor, type VisualSkinKey, type VisualSkinConfig } from './skin-visuals';
 
@@ -27,6 +29,7 @@ function shade(color: number, k: number): number {
 interface CircleParts {
   root: Container;
   body: Graphics;
+  light: Graphics;
   number: Text;
   skinBody?: Sprite;
   skinOverlay?: Sprite;
@@ -70,6 +73,9 @@ export class PlayfieldRenderer {
   readonly app = new Application();
   private bg = new Sprite(Texture.EMPTY);
   private field = new Container();
+  private followLayer = new Container();
+  private followGfx = new Graphics();
+  private followPoints: FollowPoint[] = [];
   private objectLayer = new Container({ sortableChildren: true });
   private approachLayer = new Container();
   private judgementLayer = new Container();
@@ -110,7 +116,8 @@ export class PlayfieldRenderer {
     });
     host.appendChild(this.app.canvas);
     this.app.stage.addChild(this.bg, this.field, this.hud);
-    this.field.addChild(this.objectLayer, this.approachLayer, this.judgementLayer, this.cursorLayer);
+    this.followLayer.addChild(this.followGfx);
+    this.field.addChild(this.followLayer, this.objectLayer, this.approachLayer, this.judgementLayer, this.cursorLayer);
     this.cursorLayer.addChild(this.cursorGfx, this.cursorMiddleSprite, this.cursorSprite);
     this.cursorSprite.anchor.set(0.5);
     this.cursorSprite.visible = false;
@@ -170,6 +177,7 @@ export class PlayfieldRenderer {
     this.clearObjects();
     this.map = map;
     this.visibility = new VisibleObjectIndex(map.objects);
+    this.followPoints = planFollowPoints(map.objects, map.radius);
     this.frames = frames;
     this.judgement = judgement;
     this.frameHint = 0;
@@ -196,6 +204,8 @@ export class PlayfieldRenderer {
     this.displays.clear();
     for (const t of this.judgementTexts.values()) t.destroy();
     this.judgementTexts.clear();
+    this.followPoints = [];
+    this.followGfx.clear();
   }
 
   // ---------------------------------------------------------------- layout & HUD
@@ -298,6 +308,7 @@ export class PlayfieldRenderer {
         this.displays.delete(i);
       }
     }
+    this.updateFollowPoints(t);
     this.updateJudgements(t);
     this.updateCursor(t);
     this.updateHud(t);
@@ -313,6 +324,9 @@ export class PlayfieldRenderer {
     const r = this.map!.radius;
     const color = this.displayColor(o);
     const root = new Container();
+    const light = new Graphics();
+    light.circle(0, 0, r * 1.8).fill({ color: 0xffffff, alpha: 0.18 });
+    light.visible = false;
     const body = new Graphics();
     body.circle(0, 0, r * 0.93).fill({ color: shade(color, 0.55) });
     body.circle(0, 0, r * 0.8).fill({ color });
@@ -321,7 +335,7 @@ export class PlayfieldRenderer {
     const number = new Text({ text: String(o.comboNumber), style: { fontFamily: FONT, fontSize: r * 0.75, fontWeight: '700', fill: 0xffffff, dropShadow: { color: 0x000000, alpha: 0.5, blur: 2, distance: 0 } } });
     number.anchor.set(0.5);
     number.resolution = this.textResolution();
-    root.addChild(body, number);
+    root.addChild(light, body, number);
     const bodyTexture = this.skinTextures.hitcircle;
     const overlayTexture = this.skinTextures.hitcircleoverlay;
     let skinBody: Sprite | undefined;
@@ -341,7 +355,7 @@ export class PlayfieldRenderer {
       root.addChildAt(skinOverlay, root.children.length - 1);
     }
     root.position.set(o.x, o.y);
-    return { root, body, number, skinBody, skinOverlay };
+    return { root, body, light, number, skinBody, skinOverlay };
   }
 
   private createDisplay(o: HitObj): Display {
@@ -505,6 +519,12 @@ export class PlayfieldRenderer {
     if (d.head) {
       d.head.root.alpha = headAlpha;
       d.head.root.scale.set(headScale);
+      const light = hitLightAt(t, j.hitTime);
+      d.head.light.visible = light.visible;
+      if (light.visible) {
+        d.head.light.alpha = light.alpha;
+        d.head.light.scale.set(light.scale);
+      }
     }
     if (d.skinStart) {
       d.skinStart.alpha = headAlpha;
@@ -664,6 +684,23 @@ export class PlayfieldRenderer {
       if (d.skinSpinnerDisc) d.skinSpinnerDisc.rotation = angle;
     }
     void map;
+  }
+
+  private updateFollowPoints(t: number) {
+    const g = this.followGfx;
+    g.clear();
+    const map = this.map;
+    if (!map || !this.followPoints.length) return;
+    const window = 300;
+    let i = firstFollowPointAtOrAfter(this.followPoints, t - window);
+    for (; i < this.followPoints.length; i++) {
+      const point = this.followPoints[i];
+      if (point.t > t + window) break;
+      const dt = point.t - t;
+      const alpha = dt >= 0 ? 1 - dt / window : 1 + dt / window;
+      if (alpha <= 0) continue;
+      g.circle(point.x, point.y, map.radius * 0.18).fill({ color: 0xffffff, alpha: alpha * 0.8 });
+    }
   }
 
   private updateJudgements(t: number) {
