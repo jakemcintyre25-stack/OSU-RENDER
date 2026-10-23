@@ -202,6 +202,13 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - `f35184e9`: integration-style fake browser recorder tests covering captured Blob data, stream-track release, stopped state and encoder startup errors.
 - **M9 IN PROGRESS:** CI for this hardening pending. Browser device/codec acceptance, capture playback, synchronized audio, deterministic fixed-frame-rate full replay and MP4 encoding are OPEN. WebM remains video-only.
 
+### M9 capture-stream robustness (23 October 2026)
+
+- Prior recorder lifecycle checkpoint `1f750e7b` passed both CI workflows.
+- `c1d473af`: reject canvas streams with no video track and stop their stray tracks; check incoming Blob size against remaining capture budget before retaining it.
+- `cf4cc5d9`: adapt browser recorder mocks and add empty-video-track regression.
+- **M9 IN PROGRESS:** New CI pending. Browser recording acceptance, synchronized audio, long-duration deterministic rendering and MP4 export remain OPEN. No user-provided fixture required for independent recorder hardening.
+
 ## Immediate next implementation work
 
 1. **Independent:** finish M3's calibrated HP drain/gain, no-drain-during-breaks and HP-zero failure checks. Maintain explicit stable parity uncertainty until real evidence exists.
