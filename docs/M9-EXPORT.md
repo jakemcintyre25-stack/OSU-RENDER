@@ -129,12 +129,22 @@ The same production export modules were called from a standalone harness with a
 |---|---|
 | Export | 1920×1080 / 60 fps, 10,800 frames |
 | File | 138,933,591 bytes, MP4 / H.264 + AAC |
-| Export time | 114.5 s (~10.6 ms/frame) |
+| Export time | 122.9 s (~11.4 ms/frame) |
 | Playback | 180.0107 s, 1920×1080, readyState 4 |
 | JS heap at end | 138 MB |
 | Final-frame time | 179,983 ms |
 
-Evidence: [export-long-1080p60.png](./evidence/export-long-1080p60.png).
+Independent Mediabunny `EncodedPacketSink` parse of the downloaded file:
+
+| Stream | Codec | Packets | First ts | Last ts | End |
+|---|---|---:|---:|---:|---:|
+| Video | H.264 | 10,800 | 0 | 179.983333 | 180.000000 |
+| Audio | AAC 48 kHz stereo | 8,438 | 0 | 179.989333 | 180.010667 |
+
+A/V start delta is **0 ms**; end delta is **10.67 ms** (AAC frame padding), with
+exactly 10,800 video packets. Evidence:
+[export-long-1080p60.png](./evidence/export-long-1080p60.png),
+[stream parse JSON](./evidence/export-long-1080p60-streams.json).
 This validates the fixed-frame timeline, 60 fps encoder pacing, 3-minute offline
 audio mix and in-memory output at 1080p60. It **does not** validate Pixi/WebGL
 render cost: another run using software WebGL did not finish a 10-second
@@ -145,8 +155,9 @@ memory and physical mobile remain open.
 
 - [ ] Export a real 3-minute map at 1080p60 in current Chrome/Edge; play the
       result in a normal player and confirm full duration and synchronized sound.
-- [ ] Inspect the actual MP4/WebM stream timestamps (not just playback) for
-      cumulative A/V drift and correct frame count.
+- [x] Inspect the actual MP4/WebM stream timestamps (not just playback) for
+      cumulative A/V drift and correct frame count — done for the synthetic
+      3-minute 1080p60 file (10,800 video packets, 10.67 ms AAC padding end delta).
 - [ ] Test NM, DT and HT exports; confirm the documented pitch behaviour.
 - [ ] Test no-audio map, corrupt audio and missing-audio cases.
 - [ ] Measure peak memory and export time on a representative desktop.
