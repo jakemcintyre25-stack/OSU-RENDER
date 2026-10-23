@@ -7,7 +7,7 @@ import { scoreHudLabel } from './hud-score';
 import { cursorAt, KEY, type ReplayFrame } from '../load/replay';
 import { playfieldLayout, type PlayfieldLayout } from './layout';
 import { VisibleObjectIndex } from './visible-index';
-import type { VisualSkinKey, VisualSkinConfig } from './skin-visuals';
+import { DEFAULT_VISUAL_SKIN_CONFIG, skinComboColor, type VisualSkinKey, type VisualSkinConfig } from './skin-visuals';
 
 const HIT_FADE = 240; // ms for a hit circle to expand and fade after being hit
 const MISS_FADE = 120;
@@ -50,9 +50,12 @@ interface Display {
   skinFollow?: Sprite;
   reverseStart?: Sprite;
   reverseEnd?: Sprite;
+  skinStart?: Sprite;
+  skinEnd?: Sprite;
   // spinners
   spinnerDisc?: Graphics;
   spinnerRing?: Graphics;
+  skinSpinnerBackground?: Sprite;
   skinSpinnerDisc?: Sprite;
   skinSpinnerApproach?: Sprite;
 }
@@ -72,6 +75,7 @@ export class PlayfieldRenderer {
   private judgementLayer = new Container();
   private cursorLayer = new Container();
   private cursorGfx = new Graphics();
+  private cursorMiddleSprite = new Sprite(Texture.EMPTY);
   private cursorSprite = new Sprite(Texture.EMPTY);
   private cursorTrailSprites: Sprite[] = [];
   private cursorBaseScale = { x: 1, y: 1 };
@@ -86,10 +90,7 @@ export class PlayfieldRenderer {
   private layout: PlayfieldLayout = { scale: 1, x: 0, y: 0 };
   private map: PreparedMap | null = null;
   private skinTextures: Partial<Record<VisualSkinKey, Texture>> = {};
-  private skinConfig: VisualSkinConfig = {
-    cursorRotate: true, cursorExpand: true, cursorCentre: true,
-    sliderBallFlip: true, sliderBallFrames: 1,
-  };
+  private skinConfig: VisualSkinConfig = { ...DEFAULT_VISUAL_SKIN_CONFIG };
   private visibility: VisibleObjectIndex | null = null;
   private judgement: Judgement | null = null;
   private frames: ReplayFrame[] = [];
@@ -110,9 +111,11 @@ export class PlayfieldRenderer {
     host.appendChild(this.app.canvas);
     this.app.stage.addChild(this.bg, this.field, this.hud);
     this.field.addChild(this.objectLayer, this.approachLayer, this.judgementLayer, this.cursorLayer);
-    this.cursorLayer.addChild(this.cursorGfx, this.cursorSprite);
+    this.cursorLayer.addChild(this.cursorGfx, this.cursorMiddleSprite, this.cursorSprite);
     this.cursorSprite.anchor.set(0.5);
     this.cursorSprite.visible = false;
+    this.cursorMiddleSprite.anchor.set(0.5);
+    this.cursorMiddleSprite.visible = false;
     for (let i = 0; i < 12; i++) {
       const trail = new Sprite(Texture.EMPTY);
       trail.anchor.set(0.5);
@@ -126,7 +129,7 @@ export class PlayfieldRenderer {
   }
 
   setSkinVisuals(images: Partial<Record<VisualSkinKey, ImageBitmap | HTMLImageElement>>, config?: VisualSkinConfig) {
-    this.skinConfig = config ?? { cursorRotate: true, cursorExpand: true, cursorCentre: true, sliderBallFlip: true, sliderBallFrames: 1 };
+    this.skinConfig = { ...DEFAULT_VISUAL_SKIN_CONFIG, ...(config ?? {}), comboColors: config?.comboColors ?? [] };
     this.cursorSprite.anchor.set(this.skinConfig.cursorCentre ? 0.5 : 0);
     this.skinTextures = {};
     for (const [name, image] of Object.entries(images)) {
@@ -142,14 +145,20 @@ export class PlayfieldRenderer {
       }
     }
     const cursor = this.skinTextures.cursor;
+    const cursorSize = 64 * this.skinConfig.cursorScale;
     this.cursorSprite.texture = cursor ?? Texture.EMPTY;
     this.cursorSprite.visible = Boolean(cursor);
     if (cursor) {
       // Playfield coordinates: osu!standard skin cursors use 128px at 1x.
-      this.cursorSprite.width = 64;
-      this.cursorSprite.height = 64;
+      this.cursorSprite.width = cursorSize;
+      this.cursorSprite.height = cursorSize;
       this.cursorBaseScale = { x: this.cursorSprite.scale.x, y: this.cursorSprite.scale.y };
     }
+    const middle = this.skinTextures.cursormiddle;
+    this.cursorMiddleSprite.texture = middle ?? Texture.EMPTY;
+    this.cursorMiddleSprite.visible = Boolean(middle);
+    this.cursorMiddleSprite.width = cursorSize;
+    this.cursorMiddleSprite.height = cursorSize;
   }
 
   setBackground(img: ImageBitmap | HTMLImageElement | null) {
@@ -295,12 +304,18 @@ export class PlayfieldRenderer {
     this.app.render();
   }
 
+  private displayColor(o: HitObj): number {
+    const map = this.map;
+    return map ? skinComboColor(map.comboColors, o.comboColor, this.skinConfig.comboColors) : o.comboColor;
+  }
+
   private makeCircle(o: HitObj): CircleParts {
     const r = this.map!.radius;
+    const color = this.displayColor(o);
     const root = new Container();
     const body = new Graphics();
-    body.circle(0, 0, r * 0.93).fill({ color: shade(o.comboColor, 0.55) });
-    body.circle(0, 0, r * 0.8).fill({ color: o.comboColor });
+    body.circle(0, 0, r * 0.93).fill({ color: shade(color, 0.55) });
+    body.circle(0, 0, r * 0.8).fill({ color });
     body.circle(0, -r * 0.18, r * 0.5).fill({ color: 0xffffff, alpha: 0.12 });
     body.circle(0, 0, r * 0.93).stroke({ width: r * 0.12, color: 0xffffff });
     const number = new Text({ text: String(o.comboNumber), style: { fontFamily: FONT, fontSize: r * 0.75, fontWeight: '700', fill: 0xffffff, dropShadow: { color: 0x000000, alpha: 0.5, blur: 2, distance: 0 } } });
@@ -315,7 +330,7 @@ export class PlayfieldRenderer {
       skinBody = new Sprite(bodyTexture);
       skinBody.anchor.set(0.5);
       skinBody.width = skinBody.height = r * 2;
-      skinBody.tint = o.comboColor;
+      skinBody.tint = color;
       root.addChildAt(skinBody, 1);
       body.visible = false;
     }
@@ -336,6 +351,14 @@ export class PlayfieldRenderer {
     const d: Display = { obj: o, root };
     const r = this.map!.radius;
     if (o.kind === 'spinner') {
+      if (this.skinTextures['spinner-background']) {
+        d.skinSpinnerBackground = new Sprite(this.skinTextures['spinner-background']);
+        d.skinSpinnerBackground.anchor.set(0.5);
+        d.skinSpinnerBackground.width = 512;
+        d.skinSpinnerBackground.height = 384;
+        if (this.skinConfig.spinnerBackground !== null) d.skinSpinnerBackground.tint = this.skinConfig.spinnerBackground;
+        root.addChild(d.skinSpinnerBackground);
+      }
       d.spinnerDisc = new Graphics();
       d.spinnerDisc.circle(0, 0, 180).fill({ color: 0x000000, alpha: 0.45 }).stroke({ width: 4, color: 0xffffff, alpha: 0.8 });
       d.spinnerDisc.circle(0, 0, 8).fill({ color: 0xffffff });
@@ -360,6 +383,7 @@ export class PlayfieldRenderer {
       return d;
     }
     if (o.kind === 'slider') {
+      const color = this.displayColor(o);
       d.body = new Graphics();
       d.bodyAlpha = new AlphaFilter({ alpha: 1 });
       d.body.filters = [d.bodyAlpha];
@@ -369,17 +393,32 @@ export class PlayfieldRenderer {
       d.cumLen = cum;
       d.decor = new Graphics();
       d.follow = new Graphics();
-      d.follow.circle(0, 0, r * 2.4).fill({ color: o.comboColor, alpha: 0.12 }).stroke({ width: 3, color: 0xffffff, alpha: 0.85 });
+      d.follow.circle(0, 0, r * 2.4).fill({ color, alpha: 0.12 }).stroke({ width: 3, color: 0xffffff, alpha: 0.85 });
       d.ball = new Graphics();
-      d.ball.circle(0, 0, r * 0.8).fill({ color: o.comboColor }).stroke({ width: r * 0.12, color: 0xffffff });
+      d.ball.circle(0, 0, r * 0.8).fill({ color }).stroke({ width: r * 0.12, color: 0xffffff });
       d.follow.visible = false;
       d.ball.visible = false;
       if (this.skinTextures.sliderb) {
         d.skinBall = new Sprite(this.skinTextures.sliderb);
         d.skinBall.anchor.set(0.5);
         d.skinBall.width = d.skinBall.height = r * 2;
-        d.skinBall.tint = o.comboColor;
+        d.skinBall.tint = color;
         d.skinBall.visible = false;
+      }
+      if (this.skinTextures.sliderstartcircle) {
+        d.skinStart = new Sprite(this.skinTextures.sliderstartcircle);
+        d.skinStart.anchor.set(0.5);
+        d.skinStart.width = d.skinStart.height = r * 2;
+        d.skinStart.tint = color;
+        d.skinStart.position.set(o.path[0].x, o.path[0].y);
+      }
+      if (this.skinTextures.sliderendcircle) {
+        d.skinEnd = new Sprite(this.skinTextures.sliderendcircle);
+        d.skinEnd.anchor.set(0.5);
+        d.skinEnd.width = d.skinEnd.height = r * 2;
+        d.skinEnd.tint = color;
+        const tail = o.path[o.path.length - 1];
+        d.skinEnd.position.set(tail.x, tail.y);
       }
       if (this.skinTextures.reversearrow) {
         d.reverseStart = new Sprite(this.skinTextures.reversearrow);
@@ -405,6 +444,7 @@ export class PlayfieldRenderer {
         d.skinFollow.visible = false;
       }
       root.addChild(d.body, d.decor);
+      if (d.skinStart) root.addChild(d.skinStart);
     }
     d.head = this.makeCircle(o);
     root.addChild(d.head.root);
@@ -414,16 +454,17 @@ export class PlayfieldRenderer {
       if (d.skinBall) root.addChild(d.skinBall);
       if (d.reverseStart) root.addChild(d.reverseStart);
       if (d.reverseEnd) root.addChild(d.reverseEnd);
+      if (d.skinEnd) root.addChild(d.skinEnd);
     }
     d.approach = new Graphics();
-    d.approach.circle(0, 0, r).stroke({ width: r * 0.08, color: o.comboColor });
+    d.approach.circle(0, 0, r).stroke({ width: r * 0.08, color: this.displayColor(o) });
     d.approach.position.set(o.x, o.y);
     this.approachLayer.addChild(d.approach);
     if (this.skinTextures.approachcircle) {
       d.skinApproach = new Sprite(this.skinTextures.approachcircle);
       d.skinApproach.anchor.set(0.5);
       d.skinApproach.width = d.skinApproach.height = r * 2;
-      d.skinApproach.tint = o.comboColor;
+      d.skinApproach.tint = this.displayColor(o);
       d.skinApproach.position.set(o.x, o.y);
       d.approach.visible = false;
       this.approachLayer.addChild(d.skinApproach);
@@ -465,6 +506,11 @@ export class PlayfieldRenderer {
       d.head.root.alpha = headAlpha;
       d.head.root.scale.set(headScale);
     }
+    if (d.skinStart) {
+      d.skinStart.alpha = headAlpha;
+      d.skinStart.scale.set(headScale);
+      d.skinStart.visible = headAlpha > 0.01;
+    }
 
     // Approach circle: shrinks from 4× to 1× over the preempt time. Hidden removes all but the first.
     if (d.approach) {
@@ -500,6 +546,10 @@ export class PlayfieldRenderer {
     if (t > s.end) bodyAlpha *= 1 - clamp01((t - s.end) / SLIDER_FADE);
     d.bodyAlpha!.alpha = bodyAlpha;
     d.decor!.alpha = bodyAlpha;
+    if (d.skinEnd) {
+      d.skinEnd.alpha = bodyAlpha;
+      d.skinEnd.visible = bodyAlpha > 0.01;
+    }
 
     // Snaking: the body grows along its path over the first third of the approach.
     const snake = clamp01((t - appear) / (map.preempt / 3));
@@ -561,6 +611,8 @@ export class PlayfieldRenderer {
 
   private drawSliderBody(d: Display, s: SliderObj, progress: number) {
     const r = this.map!.radius;
+    const color = skinComboColor(this.map!.comboColors, s.comboColor, this.skinConfig.comboColors);
+    const track = this.skinConfig.sliderTrackOverride ?? color;
     const pts = partialPath(s.path, d.cumLen!, progress);
     const g = d.body!;
     g.clear();
@@ -573,9 +625,9 @@ export class PlayfieldRenderer {
       for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
       g.stroke({ width, color, join: 'round', cap: 'round' });
     };
-    stroke(r * 2 * 0.98, 0xffffff); // border
-    stroke(r * 2 * 0.84, shade(s.comboColor, 0.28)); // track edge
-    stroke(r * 2 * 0.6, shade(s.comboColor, 0.42)); // track middle (lighter, like stable's gradient)
+    stroke(r * 2 * 0.98, this.skinConfig.sliderBorder ?? 0xffffff); // border
+    stroke(r * 2 * 0.84, shade(track, 0.28)); // track edge
+    stroke(r * 2 * 0.6, shade(track, 0.42)); // track middle (lighter, like stable's gradient)
   }
 
   private drawArrow(g: Graphics, s: SliderObj, atEnd: boolean, r: number) {
@@ -648,6 +700,7 @@ export class PlayfieldRenderer {
     if (!this.frames.length) {
       for (const sprite of this.cursorTrailSprites) sprite.visible = false;
       this.cursorSprite.visible = false;
+      this.cursorMiddleSprite.visible = false;
       return;
     }
     const c = cursorAt(this.frames, t, this.frameHint);
@@ -668,13 +721,21 @@ export class PlayfieldRenderer {
       }
     }
     const pressed = (c.keys & (KEY.M1 | KEY.M2)) !== 0;
+    const factor = pressed && this.skinConfig.cursorExpand ? 1.12 : 1;
     if (this.cursorSprite.visible) {
       this.cursorSprite.position.set(c.x, c.y);
       this.cursorSprite.rotation = this.skinConfig.cursorRotate ? Math.atan2(c.y - 192, c.x - 256) : 0;
-      const factor = pressed && this.skinConfig.cursorExpand ? 1.12 : 1;
       this.cursorSprite.scale.set(this.cursorBaseScale.x * factor, this.cursorBaseScale.y * factor);
     } else {
       g.circle(c.x, c.y, pressed ? 11 : 9.5).fill({ color: 0xffe08a, alpha: 0.95 }).stroke({ width: 2, color: 0xffffff });
+    }
+    const middle = Boolean(this.skinTextures.cursormiddle);
+    this.cursorMiddleSprite.visible = middle;
+    if (middle) {
+      const size = 64 * this.skinConfig.cursorScale * factor;
+      this.cursorMiddleSprite.position.set(c.x, c.y);
+      this.cursorMiddleSprite.width = size;
+      this.cursorMiddleSprite.height = size;
     }
   }
 
