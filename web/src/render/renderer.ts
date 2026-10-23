@@ -75,6 +75,7 @@ export class PlayfieldRenderer {
   private field = new Container();
   private followLayer = new Container();
   private followGfx = new Graphics();
+  private flashGfx = new Graphics();
   private followPoints: FollowPoint[] = [];
   private objectLayer = new Container({ sortableChildren: true });
   private approachLayer = new Container();
@@ -117,7 +118,7 @@ export class PlayfieldRenderer {
     host.appendChild(this.app.canvas);
     this.app.stage.addChild(this.bg, this.field, this.hud);
     this.followLayer.addChild(this.followGfx);
-    this.field.addChild(this.followLayer, this.objectLayer, this.approachLayer, this.judgementLayer, this.cursorLayer);
+    this.field.addChild(this.followLayer, this.objectLayer, this.approachLayer, this.judgementLayer, this.flashGfx, this.cursorLayer);
     this.cursorLayer.addChild(this.cursorGfx, this.cursorMiddleSprite, this.cursorSprite);
     this.cursorSprite.anchor.set(0.5);
     this.cursorSprite.visible = false;
@@ -309,6 +310,7 @@ export class PlayfieldRenderer {
       }
     }
     this.updateFollowPoints(t);
+    this.updateFlashlight(t);
     this.updateJudgements(t);
     this.updateCursor(t);
     this.updateHud(t);
@@ -684,6 +686,16 @@ export class PlayfieldRenderer {
       if (d.skinSpinnerDisc) d.skinSpinnerDisc.rotation = angle;
     }
     void map;
+  }
+
+  private updateFlashlight(t: number) {
+    const g = this.flashGfx;
+    g.clear();
+    const map = this.map;
+    if (!map?.mods.includes('FL') || !this.frames.length) return;
+    const cursor = cursorAt(this.frames, t, this.frameHint);
+    g.rect(0, 0, 512, 384).fill({ color: 0x000000, alpha: 0.86 });
+    g.circle(cursor.x, cursor.y, Math.max(110, map.radius * 6.5)).cut();
   }
 
   private updateFollowPoints(t: number) {
