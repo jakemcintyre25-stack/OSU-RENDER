@@ -5,6 +5,7 @@ import type { Judgement } from '../game/judge';
 import { eventAt } from '../game/judge';
 import { scoreHudLabel } from './hud-score';
 import { hitLightState } from './hit-light';
+import { followPointPositions } from './follow-points';
 import { cursorAt, KEY, type ReplayFrame } from '../load/replay';
 import { playfieldLayout, type PlayfieldLayout } from './layout';
 import { VisibleObjectIndex } from './visible-index';
@@ -70,6 +71,8 @@ export class PlayfieldRenderer {
   readonly app = new Application();
   private bg = new Sprite(Texture.EMPTY);
   private field = new Container();
+  private followLayer = new Container();
+  private followPairs: { next: number; g: Graphics }[] = [];
   private objectLayer = new Container({ sortableChildren: true });
   private approachLayer = new Container();
   private judgementLayer = new Container();
@@ -116,7 +119,7 @@ export class PlayfieldRenderer {
     });
     host.appendChild(this.app.canvas);
     this.app.stage.addChild(this.bg, this.field, this.hud);
-    this.field.addChild(this.objectLayer, this.approachLayer, this.judgementLayer, this.cursorLayer);
+    this.field.addChild(this.followLayer, this.objectLayer, this.approachLayer, this.judgementLayer, this.cursorLayer);
     this.cursorLayer.addChild(this.cursorGfx, this.cursorSprite);
     this.cursorSprite.anchor.set(0.5);
     this.cursorSprite.visible = false;
@@ -184,6 +187,7 @@ export class PlayfieldRenderer {
       .filter((e) => e.result !== undefined && e.result !== 300 && e.x !== undefined)
       .map((e) => ({ t: e.t, x: e.x!, y: e.y!, result: e.result! }));
     this.infoText.text = `${meta.player}${map.mods.length ? '  +' + map.mods.join('') : ''}\n${map.artist} - ${map.title} [${map.version}]`;
+    this.buildFollowPoints(map);
     for (const k of this.keyBoxes) k.presses = [];
     let prev = 0;
     for (const f of frames) {
@@ -201,8 +205,43 @@ export class PlayfieldRenderer {
   private clearObjects() {
     for (const d of this.displays.values()) this.destroyDisplay(d);
     this.displays.clear();
+    for (const pair of this.followPairs) pair.g.destroy();
+    this.followPairs = [];
+    this.followLayer.removeChildren();
     for (const t of this.judgementTexts.values()) t.destroy();
     this.judgementTexts.clear();
+  }
+
+  private buildFollowPoints(map: PreparedMap) {
+    for (let i = 1; i < map.objects.length; i++) {
+      const prev = map.objects[i - 1];
+      const next = map.objects[i];
+      // Stable does not draw follow points into a spinner or across a new combo.
+      if (prev.kind === 'spinner' || next.kind === 'spinner' || next.newCombo) continue;
+      const from = prev.kind === 'slider' ? prev.pointAt(1) : { x: prev.x, y: prev.y };
+      const points = followPointPositions(from, { x: next.x, y: next.y });
+      if (!points.length) continue;
+      const g = new Graphics();
+      for (const p of points) g.circle(p.x, p.y, map.radius * 0.16).fill({ color: 0xffffff, alpha: 0.7 });
+      g.visible = false;
+      this.followLayer.addChild(g);
+      this.followPairs.push({ next: i, g });
+    }
+  }
+
+  private updateFollowPoints(t: number) {
+    const map = this.map!;
+    for (const pair of this.followPairs) {
+      const prev = map.objects[pair.next - 1];
+      const next = map.objects[pair.next];
+      const start = prev.end;
+      const end = next.start;
+      const fadeIn = clamp01((t - start) / 180);
+      const fadeOut = clamp01((end + 100 - t) / 100);
+      const alpha = Math.min(fadeIn, fadeOut);
+      pair.g.visible = alpha > 0.02;
+      pair.g.alpha = alpha;
+    }
   }
 
   // ---------------------------------------------------------------- layout & HUD
@@ -305,6 +344,7 @@ export class PlayfieldRenderer {
         this.displays.delete(i);
       }
     }
+    this.updateFollowPoints(t);
     this.updateJudgements(t);
     this.updateCursor(t);
     this.updateHud(t);
