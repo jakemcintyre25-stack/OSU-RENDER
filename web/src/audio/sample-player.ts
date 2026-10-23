@@ -18,7 +18,7 @@ export class HitSoundPlayer {
   private nextLoop = 0;
   private next = 0;
   private generation = 0;
-  private active = new Map<AudioBufferSourceNode, GainNode>();
+  private active = new Map<AudioBufferSourceNode, { gain: GainNode; panner: StereoPannerNode | null }>();
 
   constructor(
     private readonly context: AudioContext,
@@ -64,13 +64,34 @@ export class HitSoundPlayer {
     return { loaded: buffers.size, failed };
   }
 
+  /** Connect a voice through its volume and optional stable positional pan. */
+  private connectVoice(
+    source: AudioBufferSourceNode,
+    volume: GainNode,
+    pan: number | undefined,
+  ): StereoPannerNode | null {
+    source.connect(volume);
+    const panner = Math.abs(pan ?? 0) > 1e-6 && typeof this.context.createStereoPanner === 'function'
+      ? this.context.createStereoPanner()
+      : null;
+    if (panner) {
+      panner.pan.value = Math.max(-1, Math.min(1, pan ?? 0));
+      volume.connect(panner);
+      panner.connect(this.destination);
+    } else {
+      volume.connect(this.destination);
+    }
+    return panner;
+  }
+
   /** Stop voices and seek to first event at/after visualTime (binary search). */
   reset(visualTime: number) {
-    for (const [source, gain] of this.active) {
+    for (const [source, voice] of this.active) {
       source.onended = null;
       try { source.stop(); } catch { /* source already finished */ }
       source.disconnect();
-      gain.disconnect();
+      voice.gain.disconnect();
+      voice.panner?.disconnect();
     }
     this.active.clear();
     let low = 0;
@@ -105,14 +126,14 @@ export class HitSoundPlayer {
       source.buffer = buffer;
       source.playbackRate.value = rate; // DT/HT currently changes pitch
       volume.gain.value = Math.max(0, Math.min(1, event.gain));
-      source.connect(volume);
-      volume.connect(this.destination);
+      const panner = this.connectVoice(source, volume, event.pan);
       source.onended = () => {
         this.active.delete(source);
         source.disconnect();
         volume.disconnect();
+        panner?.disconnect();
       };
-      this.active.set(source, volume);
+      this.active.set(source, { gain: volume, panner });
       source.start(Math.max(now, when));
     }
     // Continuous audio is bounded to *collected* slider tracking intervals.
@@ -138,14 +159,14 @@ export class HitSoundPlayer {
       source.playbackRate.value = rate;
       source.loop = true;
       volume.gain.value = Math.max(0, Math.min(1, loop.gain));
-      source.connect(volume);
-      volume.connect(this.destination);
+      const panner = this.connectVoice(source, volume, loop.pan);
       source.onended = () => {
         this.active.delete(source);
         source.disconnect();
         volume.disconnect();
+        panner?.disconnect();
       };
-      this.active.set(source, volume);
+      this.active.set(source, { gain: volume, panner });
       source.start(when, sampleOffset);
       source.stop(until);
     }

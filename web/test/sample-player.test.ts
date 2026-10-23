@@ -16,6 +16,12 @@ class FakeAudioContext {
   currentTime = 10;
   sources: FakeSource[] = [];
   gains: Array<{ gain: { value: number }; disconnect: ReturnType<typeof vi.fn>; connect: ReturnType<typeof vi.fn> }> = [];
+  panners: Array<{ pan: { value: number }; disconnect: ReturnType<typeof vi.fn>; connect: ReturnType<typeof vi.fn> }> = [];
+  createStereoPanner() {
+    const panner = { pan: { value: 0 }, connect: vi.fn(), disconnect: vi.fn() };
+    this.panners.push(panner);
+    return panner as unknown as StereoPannerNode;
+  }
   createBufferSource() {
     const source: FakeSource = {
       buffer: null, playbackRate: { value: 1 }, start: vi.fn(), stop: vi.fn(),
@@ -61,6 +67,20 @@ describe('M5 Web Audio sample scheduling and lifecycle', () => {
     expect(context.gains[0].gain.value).toBe(0.75);
     player.schedule(900, 10.05, 1, 0);
     expect(context.sources).toHaveLength(2); // do not schedule duplicates
+  });
+
+  it('routes panned hit sounds through a stereo panner and cleans it up', async () => {
+    const { context, player } = fixture();
+    const plan = namedPlan([1000]);
+    plan.events[0].pan = -0.25;
+    await player.load(plan);
+    player.reset(900);
+    player.schedule(900, 10.05, 1, 0);
+    expect(context.panners).toHaveLength(1);
+    expect(context.panners[0].pan.value).toBeCloseTo(-0.25, 6);
+    expect(context.panners[0].connect).toHaveBeenCalled();
+    player.reset(2000);
+    expect(context.panners[0].disconnect).toHaveBeenCalled();
   });
 
   it('preserves mod rate and visual offset in the scheduled AudioContext time', async () => {
