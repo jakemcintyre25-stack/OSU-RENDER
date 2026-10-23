@@ -64,19 +64,20 @@ Done:
 - HP engine: stable's simulated drain search, hit/combo-end gains, nested slider/spinner health, break pauses and negative-judgement HP-zero failure (visible bar not wired yet)
 - Autoplay generator (used for map preview and tests — judges 100% on the test map)
 - Recording: real-time WebM capture of the live canvas with synchronized music and hit-effect audio, codec negotiation for Opus muxing, video-only fallback, and 60-second/256 MiB limits
+- Deterministic export: full-length fixed-FPS rendering plus an offline music/hitsound mix, muxed as MP4 (H.264/AAC) or WebM (VP9/VP8 + Opus), with progress, cancel and honest codec fallback. A real 1280×720/30 fps MP4 has been produced and its H.264/AAC streams timestamp-checked in Chrome; see `docs/M9-EXPORT.md`
 
 Next (see the build plan):
 
 - Judgement to exact stable parity (slider leniency, 2B, spinner rpm, score V1, HP)
 - Finish default/user skin graphics, spinner rotation/bonus sounds, and pitch-preserving DT/HT time stretch. Slider loops already exist for recorded tracking sections but still require real-browser acoustic acceptance
 - Default skin sprites + custom `.osk` skins, follow points, hit lighting
-- Deterministic full-length export with WebCodecs and native MP4 (current capture is real-time WebM, capped at 60 seconds, and not frame-perfect)
+- Long-duration 1080p60, real-replay and peak-memory acceptance for deterministic export (720p30 MP4 and A/V timestamps are verified)
 - Lazer score rules
 - Complete One Miss Merchants profile/match links (the renderer-side `?user=<osu ID>` and `?score=<score ID>` routes and Share replay button are implemented; see `docs/INTEGRATION.md`)
 
 ## Licences
 
-No licence has been chosen for this code yet. Dependencies `osu-parsers`, `osu-classes`, `osu-standard-stable`, `pixi.js` and `fflate` are MIT. The test map in `fixtures/` comes from the osu! repository's test resources and is not redistributed here.
+No licence has been chosen for this code yet. Dependencies `osu-parsers`, `osu-classes`, `osu-standard-stable`, `pixi.js` and `fflate` are MIT; `mediabunny` is MPL-2.0 (file-level copyleft) and is bundled as a separate lazy-loaded chunk. The test map in `fixtures/` comes from the osu! repository's test resources and is not redistributed here.
 
 
 ## Judgement parity checks (M1)

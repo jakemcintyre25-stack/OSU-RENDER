@@ -12,6 +12,7 @@
   "dependencies": {
     "fflate": "^0.8.2",
     "js-md5": "^0.8.3",
+    "mediabunny": "^1.62.1",
     "osu-classes": "^3.1.0",
     "osu-parsers": "^4.1.7",
     "osu-standard-stable": "^5.0.1",
@@ -20,6 +21,7 @@
   "devDependencies": {
     "typescript": "~5.9.3",
     "vite": "^8.3.5",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "@types/node": "^26.6.5"
   }
 }
