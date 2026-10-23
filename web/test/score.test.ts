@@ -14,6 +14,13 @@ describe('ScoreV1 helpers', () => {
     expect(hitPoints(100, 4, 4, 1)).toBe(148);
   });
 
+  it('truncates combo × difficulty × mod before applying the hit value', () => {
+    // Stable casts the combined multiplier to an integer first:
+    // 10 × 4 × 1.06 = 42.4 → 42; 300 + floor(300 × 42 / 25) = 804.
+    // Keeping 42.4 would incorrectly produce 808.
+    expect(hitPoints(300, 11, 4, 1.06)).toBe(804);
+  });
+
   it('mod multipliers multiply', () => {
     expect(modMultiplier([])).toBe(1);
     expect(modMultiplier(['HD', 'HR'])).toBeCloseTo(1.1236, 6);

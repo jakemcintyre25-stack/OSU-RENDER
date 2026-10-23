@@ -71,12 +71,17 @@ export function difficultyMultiplier(hp: number, cs: number, od: number, objectC
 }
 
 /**
- * Points for a judged hit (circle, slider overall, spinner overall):
- * base + base × (max(0, comboBefore − 1) × difficulty × mod / 25), floored.
+ * Points for a judged hit (circle, slider overall, spinner overall).
+ *
+ * Stable multiplies the hit value by `(unsigned long long)(combo × difficulty
+ * × mod)`, i.e. it truncates the combined multiplier to an integer BEFORE
+ * applying the hit value and dividing by 25. Keeping the fractional product
+ * here over-scores every object on maps with non-integral mod multipliers.
  */
 export function hitPoints(base: number, comboBefore: number, difficulty: number, mod: number): number {
   const comboMultiplier = Math.max(0, comboBefore - 1);
-  return base + Math.floor((base * comboMultiplier * difficulty * mod) / 25);
+  const combined = Math.trunc(comboMultiplier * difficulty * mod);
+  return base + Math.floor((base * combined) / 25);
 }
 
 /**
