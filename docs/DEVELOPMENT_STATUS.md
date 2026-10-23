@@ -16,7 +16,7 @@ Updated: 23 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 | M6 Default skin and visual parity | **OPEN** | Basic Pixi renderer exists; sprite parity, shader, HUD, FL and effects remain. |
 | M7 Custom skins | **IN PROGRESS** | Optional .osk WAV/MP3/OGG hitsounds and slider loops are recognized in root-level archive entries; LayeredHitSounds honored. Visual skin.ini layout, sprites, persistence and default licensed sound set remain OPEN. |
 | M8 Player page | **IN PROGRESS** | Calculated ScoreV1 HUD, Sync and persisted 0.25×–2× speed, separate music/FX levels, persisted cursor-trail/key-overlay toggles, audio-outro seek range, clickable accessible miss/100 review markers, share-link action and latest-request-wins cancellation. Unit, abort and build checks pass; actual browser/mobile acceptance remains. |
-| M9 MP4 export | **OPEN** | No WebCodecs/offline audio export yet. |
+| M9 MP4 export | **IN PROGRESS** | Browser WebM MediaRecorder video-only capture works in tested recorder mocks, with supported codec negotiation, bounded size/time, cancellation, track cleanup and safe download. Not MP4: synchronized audio, deterministic offline rendering, browser-device acceptance, and full replay export remain OPEN. |
 | M10 Lazer | **OPEN** | Legacy/stable only; lazer detection and rule set remain. |
 | M11 Hardening | **IN PROGRESS** | ZIP/CRC32 limits, bounded replay frames, browser and Worker streamed `.osr` / `.osz` / `.osu` downloads, plus local-upload pre-read caps. The Worker replay upstream now uses a 64 MiB streaming ceiling rather than unrestricted allocation. Tested per-isolate mirror breaker: 3 failures → 10-minute cooldown; 404 not counted. R2/global breaker, security audit, decompression testing and production loads remain. |
 | M12 One Miss Merchants links | **IN PROGRESS** | Validated `?user=<osu ID>` auto-list and `?score=<score ID>` playback, canonical copy-link action, documented OMM read-only external-link contract in docs/INTEGRATION.md. OMM-side profile/match links, actual hostname, API/live-browser acceptance and rollback work remain OPEN. |
@@ -208,6 +208,12 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - `c1d473af`: reject canvas streams with no video track and stop their stray tracks; check incoming Blob size against remaining capture budget before retaining it.
 - `cf4cc5d9`: adapt browser recorder mocks and add empty-video-track regression.
 - **M9 IN PROGRESS:** New CI pending. Browser recording acceptance, synchronized audio, long-duration deterministic rendering and MP4 export remain OPEN. No user-provided fixture required for independent recorder hardening.
+
+### M9 CI regression recovery (23 October 2026)
+
+- `c1d473af` introduced a valid new guard for empty canvas video tracks, but the recorder-stop error test still supplied a partial fake stream without `getVideoTracks()`. GitHub Actions at `842a7c4c` failed **1 of 199 tests** with `TypeError: stream.getVideoTracks is not a function`; typecheck/build did not run in those failed jobs.
+- `c3473cb8`: corrected the recorder-stop test fixture to provide a video track, preserving the production guard and the intended stop-failure assertion. **Both GitHub Actions runs passed** on `c3473cb84798aed45581900d580cbac298a4a541` (IDs `39911773354` and `39911780104`).
+- M9 is now **IN PROGRESS**, not OPEN or PASS. WebM recorder tests are instrumented mocks; no real-browser codec, audio-sync or MP4 acceptance has occurred.
 
 ## Immediate next implementation work
 
