@@ -61,7 +61,7 @@ Done:
 - Playback: music-synced clock, song-outro-aware seek, AudioLeadIn, independent music/FX volumes, persisted sync offset and 0.25×–2× viewer speed; beatmap and user-.osk circle/slider/spinner-end sounds plus judged slider tracking loops use Web Audio
 - Drawing: hit circles, approach circles, snaking slider bodies, reverse arrows, ticks, slider ball + follow circle, spinners, HD fades, cursor + trail, key overlay, combo/accuracy, 100/50/miss popups, miss markers on the timeline
 - Judgement v0: hit windows, note-lock, slider tracking, spinners, combo. Compared against the replay's own counts in the ⓘ panel
-- HP engine: stable's simulated drain search, hit/combo-end gains, nested slider/spinner health, break pauses and negative-judgement HP-zero failure (visible bar not wired yet)
+- HP engine: stable's simulated drain search, hit/combo-end gains, nested slider/spinner health, break pauses and negative-judgement HP-zero failure, with a visible player HP bar and fail overlay
 - Autoplay generator (used for map preview and tests — judges 100% on the test map)
 - Recording: real-time WebM capture of the live canvas with synchronized music and hit-effect audio, codec negotiation for Opus muxing, video-only fallback, and 60-second/256 MiB limits
 - Deterministic export: full-length fixed-FPS rendering plus an offline music/hitsound mix, muxed as MP4 (H.264/AAC) or WebM (VP9/VP8 + Opus), with progress, cancel and honest codec fallback. A real 1280×720/30 fps MP4 has been produced and its H.264/AAC streams timestamp-checked in Chrome; see `docs/M9-EXPORT.md`
