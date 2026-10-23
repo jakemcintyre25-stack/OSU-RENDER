@@ -10,7 +10,7 @@ import { hitLightAt } from './effects';
 import { firstFollowPointAtOrAfter, planFollowPoints, type FollowPoint } from './follow-points';
 import { flashlightRadius, flashlightTrackDim } from './flashlight';
 import { VisibleObjectIndex } from './visible-index';
-import { DEFAULT_VISUAL_SKIN_CONFIG, skinComboColor, sliderBallFrame, type VisualSkinKey, type VisualSkinConfig } from './skin-visuals';
+import { DEFAULT_VISUAL_SKIN_CONFIG, fontDigitLayout, skinComboColor, sliderBallFrame, type VisualSkinKey, type VisualSkinConfig } from './skin-visuals';
 
 const HIT_FADE = 240; // ms for a hit circle to expand and fade after being hit
 const MISS_FADE = 120;
@@ -32,6 +32,7 @@ interface CircleParts {
   body: Graphics;
   light: Graphics;
   number: Text;
+  numberContainer?: Container;
   skinBody?: Sprite;
   skinOverlay?: Sprite;
 }
@@ -100,6 +101,7 @@ export class PlayfieldRenderer {
   private map: PreparedMap | null = null;
   private skinTextures: Partial<Record<VisualSkinKey, Texture>> = {};
   private sliderBallTextures: Texture[] = [];
+  private hitCircleFontTextures: Array<Texture | null> = [];
   private skinConfig: VisualSkinConfig = { ...DEFAULT_VISUAL_SKIN_CONFIG };
   private visibility: VisibleObjectIndex | null = null;
   private judgement: Judgement | null = null;
@@ -164,6 +166,7 @@ export class PlayfieldRenderer {
       const texture = this.skinTextures[`sliderb${i}`];
       if (texture) this.sliderBallTextures.push(texture);
     }
+    this.hitCircleFontTextures = Array.from({ length: 10 }, (_, digit) => this.skinTextures[`font${digit}`] ?? null);
     const trail = this.skinTextures.cursortrail;
     for (const sprite of this.cursorTrailSprites) {
       sprite.texture = trail ?? Texture.EMPTY;
@@ -359,7 +362,24 @@ export class PlayfieldRenderer {
     const number = new Text({ text: String(o.comboNumber), style: { fontFamily: FONT, fontSize: r * 0.75, fontWeight: '700', fill: 0xffffff, dropShadow: { color: 0x000000, alpha: 0.5, blur: 2, distance: 0 } } });
     number.anchor.set(0.5);
     number.resolution = this.textResolution();
-    root.addChild(light, body, number);
+    let numberContainer: Container | undefined;
+    const digitTextures = String(o.comboNumber).split('').map((digit) => this.hitCircleFontTextures[Number(digit)]);
+    if (digitTextures.length > 0 && digitTextures.every((texture): texture is Texture => Boolean(texture))) {
+      const height = r * 1.05;
+      const widths = digitTextures.map((texture) => (texture.width * height) / Math.max(1, texture.height));
+      const layout = fontDigitLayout(widths, this.skinConfig.hitCircleOverlap * (r / 64));
+      numberContainer = new Container();
+      digitTextures.forEach((texture, index) => {
+        const sprite = new Sprite(texture);
+        sprite.anchor.set(0.5);
+        sprite.width = widths[index];
+        sprite.height = height;
+        sprite.position.set(layout.positions[index], 0);
+        numberContainer!.addChild(sprite);
+      });
+      number.visible = false;
+    }
+    root.addChild(light, body, numberContainer ?? number);
     const bodyTexture = this.skinTextures.hitcircle;
     const overlayTexture = this.skinTextures.hitcircleoverlay;
     let skinBody: Sprite | undefined;
@@ -379,7 +399,7 @@ export class PlayfieldRenderer {
       root.addChildAt(skinOverlay, root.children.length - 1);
     }
     root.position.set(o.x, o.y);
-    return { root, body, light, number, skinBody, skinOverlay };
+    return { root, body, light, number, numberContainer, skinBody, skinOverlay };
   }
 
   private createDisplay(o: HitObj): Display {

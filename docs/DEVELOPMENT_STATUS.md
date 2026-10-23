@@ -14,12 +14,13 @@ Updated: 23 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 | M4 Score V1 | **IN PROGRESS** | Running ScoreV1, mod multipliers and slider/spinner part scoring exist; HUD now displays calculated score and details panel compares against the replay header. Spinner points now follow stable's half-spin ticks and 1.5-spin bonus gap. The difficulty multiplier now uses stable's summed-break drain length, banker's rounding and no 2–6 clamp. Per-object combo bonuses now truncate combo × difficulty × mod before applying the hit value, matching stable's integer cast. ScoreV2 replays are detected from mod bit 29 and skipped by `judge-check` rather than compared as ScoreV1. It is labelled provisional; real header parity remains unverified. |
  Preview DT/HT now uses a WSOLA pitch-preserving stretch. See docs/M5-FINDINGS.md. |
 | M6 Default skin and visual parity | **IN PROGRESS** | Procedural Pixi rendering covers circles, sliders, spinners, cursor/key HUD, default hit lighting, follow points and a Flashlight overlay with stable combo thresholds (100x/200x, break expansion and slider-tracking dim). Full sprite parity, shaders, default skin assets and real-browser screenshot comparison remain OPEN. |
-| M7 Custom skins | **IN PROGRESS** | Optional .osk hitsounds/slider loops and visual sprites are loaded from root-level archive entries; LayeredHitSounds honored. The renderer uses hitcircle/overlay, approach, slider ball/follow (including indexed animation), reverse arrows, slider start/end circles and overlays, spinner background/circle/approach, cursor/trail/middle, combo-colour overrides, CursorScale and SliderBorder/SliderTrackOverride; the selected skin is persisted in IndexedDB. Complete skin fonts/HitCircleOverlap, default licensed sounds and real-browser visual comparison remain OPEN. |
+| M7 Custom skins | **IN PROGRESS** | Optional .osk hitsounds/slider loops and visual sprites are loaded from root-level archive entries; LayeredHitSounds honored. The renderer uses hitcircle/overlay, approach, slider ball/follow (including indexed animation), reverse arrows, slider start/end circles and overlays, spinner background/circle/approach, cursor/trail/middle, combo-colour overrides, CursorScale and SliderBorder/SliderTrackOverride; the selected skin is persisted in IndexedDB. Skin-font digit sprites with `HitCircleOverlap` now render; default licensed sounds and real-browser visual comparison remain OPEN. |
 | M8 Player page | **IN PROGRESS** | Calculated ScoreV1 HUD, Sync and persisted 0.25×–2× speed, separate music/FX levels, persisted cursor-trail/key-overlay toggles, audio-outro seek range, clickable accessible miss/100 review markers, share-link action and latest-request-wins cancellation. Small-screen control wrapping, larger coarse-pointer markers and reduced-motion HP transitions are styled. Unit, abort and build checks pass; actual browser/mobile device acceptance remains. |
 | M9 MP4 export | **IN PROGRESS** | Two paths exist: bounded real-time WebM capture with synchronized audio, and a deterministic full-length exporter that steps fixed-FPS map time, mixes music/hitsounds in an OfflineAudioContext, and muxes MP4 (H.264/AAC) or WebM (VP9/VP8 + Opus) through Mediabunny. Export dialog, progress, cancel, codec probing and video-only fallback are implemented with 33 automated export tests. A real headless-Chrome run produced and re-parsed a 1280×720/30 fps MP4: 60 H.264 frames (2.000 s) plus 48 kHz stereo AAC (2.005 s), both starting at 0. DT/HT export music is pitch-stretched with WSOLA. Long-duration 1080p60, real-replay content, memory profiling and mobile acceptance remain OPEN. |
 | M10 Lazer | **IN PROGRESS** | Lazer-origin replays are now detected from their `30000000+` game-version field and rejected with an explicit unsupported message; `judge-check` uses the same real detection. Lazer hit windows, scoring (including judgment and mod settings), replay semantics, skin parity and real lazer fixtures remain OPEN. |
 | M11 Hardening | **IN PROGRESS** | ZIP/CRC32 limits, bounded replay frames, browser and Worker streamed `.osr` / `.osz` / `.osu` downloads, plus local-upload pre-read caps. The Worker replay upstream now uses a 64 MiB streaming ceiling rather than unrestricted allocation. Tested per-isolate mirror breaker: 3 failures → 10-minute cooldown; 404 not counted. Every API and asset response now carries baseline security headers (nosniff, referrer policy, permissions policy, HSTS). R2/global breaker, CSP, decompression testing and production loads remain. |
-\n| M12 One Miss Merchants links | **IN PROGRESS** | Validated `?user=<osu ID>` auto-list and `?score=<score ID>` playback, canonical copy-link action, documented OMM read-only external-link contract in docs/INTEGRATION.md. OMM-side profile/match links, actual hostname, API/live-browser acceptance and rollback work remain OPEN. |
+
+| M12 One Miss Merchants links | **IN PROGRESS** | Validated `?user=<osu ID>` auto-list and `?score=<score ID>` playback, canonical copy-link action, documented OMM read-only external-link contract in docs/INTEGRATION.md. OMM-side profile/match links, actual hostname, API/live-browser acceptance and rollback work remain OPEN. |
 
 ## Verified recent commits
 
@@ -308,9 +309,10 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - Skin `[Colours]` are parsed with strict `R,G,B` validation: `Combo1..Combo8` override the map's combo cycle (preserving its index), `SliderBorder` and `SliderTrackOverride` drive slider body colours, and `SpinnerBackground` tints the spinner background sprite. `[General] CursorScale` is honoured within 0.1–3.
 - The cursor middle overlays the cursor with press expansion; slider start/end sprites follow head fade and body fade; the spinner background sits behind the disc.
 - Indexed slider-ball frames (`sliderb0..sliderbN`, `@2x` aware) are loaded through `SliderBallFrames` and cycled at 60 fps while the slider runs; plain `sliderb` remains the fallback.
+- `[Fonts] HitCirclePrefix` and `HitCircleOverlap` now drive real digit sprites (`<prefix>-0..9`, `@2x` aware) with centred overlap layout; a missing digit falls back to the text renderer. Prefixes are validated against a safe sprite stem.
 - The selected `.osk` is stored in IndexedDB (128 MiB validation cap), restored before a replay/session opens, and can be removed with **Forget saved skin**. Storage/quota failures keep the skin session-only; corrupt stored data is cleared.
-- Automated evidence: `skin-visuals.test.ts` now covers all new sprite keys, combo colour mapping, cursor scale, slider colours, animation frames and malformed values. Full suite: **226 passed, 12 skipped**; typecheck and production build pass.
-- **Still OPEN:** complete skin fonts/`HitCircleOverlap`, default licensed sounds, and real-browser screenshot comparison. No visual parity claim is made.
+- Automated evidence: `skin-visuals.test.ts` now covers all new sprite keys, combo colour mapping, cursor scale, slider colours, skin fonts, animation frames and malformed values. Full suite: **281 passed, 12 skipped**; typecheck and production build pass.
+- **Still OPEN:** default licensed sounds and real-browser screenshot comparison. No visual parity claim is made.
 
 ### M6 default visual effects (24 October 2026)
 
@@ -319,7 +321,7 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - **Flashlight:** FL maps draw a playfield dimming layer with a cursor-following circular cut-out; the cursor layer stays above it so the pointer remains visible. This is a playfield-scoped approximation, not stable's exact FL radius/behaviour.
 - These are vector effects with no bundled copyrighted skin assets. The follow-point path is a straight-gap approximation, not stable's exact slider-path placement.
 - Automated evidence: 7 new pure tests for light decay and follow-point planning; full suite **265 passed, 12 skipped**; typecheck/build pass.
-- **M6 remains IN PROGRESS:** full default sprite parity, shaders, hit-circle number fonts, HUD effects and real-browser screenshot comparison.
+- **M6 remains IN PROGRESS:** full default sprite parity, shaders, HUD effects and real-browser screenshot comparison.
 
 ### M11 baseline security response headers (24 October 2026)
 
@@ -327,19 +329,21 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - Headers are replaced, not appended, so a weaker upstream/asset value cannot win. Response bodies, statuses and existing content types are preserved.
 - Tests cover health, method/not-found errors, static assets and duplicate-header replacement.
 - Automated evidence: **50 worker tests passed**, worker typecheck passed. Web tests are unaffected.
-- **M11 remains IN PROGRESS:** CSP needs a real-browser/export policy check before enabling; global/durable breaker, decompression testing, security audit and production load remain OPEN.\n### M5 pitch-preserving DT/HT preview (24 October 2026)
+- **M11 remains IN PROGRESS:** CSP needs a real-browser/export policy check before enabling; global/durable breaker, decompression testing, security audit and production load remain OPEN.
+### M5 pitch-preserving DT/HT preview (24 October 2026)
 
 - New dependency-free WSOLA stretcher (udio/time-stretch.ts) preserves pitch while changing playback duration; Clock.prepareRate(rate) caches a stretched buffer per rate and startSource plays it at rate 1 with rate-divided offsets. Preparation failure falls back to pitch-changing playbackRate with an explicit warning.
 - Automated evidence: 440 Hz DT/HT pitch/duration tests and a Clock buffer/offset test pass. Full suite count is refreshed by the release-candidate verification run.
 - **Limits:** compact WSOLA, not mastering-grade; real-music artifacts are unmeasured. The M9 export mixer now uses the same stretcher for DT/HT music.
-\n
+
+
 ## Immediate next implementation work
 
 1. **Independent:** run real-browser/mobile acceptance for the HP bar/fail overlay, hit lighting, follow points, Flashlight and saved-skin flow. Maintain explicit stable parity uncertainty until real evidence exists.
 2. **Independent:** fill out remaining M8 timeline/control polish and M5/M7 sound/skin semantics without distributing copyrighted samples.
 3. **Requires local rights-cleared fixtures:** run `npm run judge-check:strict` on exact-MD5-matched real osu!stable `.osr`/`.osz` pairs and the optional all-difficulties Renatus autoplay test. Resolve counts/combo/score parity before declaring M2/M4 PASS.
 4. **Requires integration environment:** run a real-browser/audio and Windows standalone EXE smoke test; establish the separate renderer hostname and OMM profile/match link contract. OMM-side deployment/merges remain unauthorized and are not prerequisites for independent work.
-5. Open beyond those: complete skin fonts/`HitCircleOverlap`, true DT/HT pitch-preserving stretch, long-duration 1080p60/memory acceptance, lazer rules and remaining production hardening.
+5. Open beyond those: long-duration 1080p60/memory acceptance, lazer rules, shaders and remaining production hardening.
 
 ## GitHub recovery and safety
 
