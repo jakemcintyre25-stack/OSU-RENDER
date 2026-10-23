@@ -37,6 +37,7 @@ interface Display {
   obj: HitObj;
   root: Container;
   head?: CircleParts;
+  tail?: CircleParts;
   light?: Graphics;
   approach?: Graphics;
   skinApproach?: Sprite;
@@ -310,7 +311,12 @@ export class PlayfieldRenderer {
     this.app.render();
   }
 
-  private makeCircle(o: HitObj, kind: 'hit' | 'slider-start' = 'hit'): CircleParts {
+  private makeCircle(
+    o: HitObj,
+    kind: 'hit' | 'slider-start' | 'slider-end' = 'hit',
+    at?: Vec,
+    showNumber = true,
+  ): CircleParts {
     const r = this.map!.radius;
     const root = new Container();
     const body = new Graphics();
@@ -320,14 +326,19 @@ export class PlayfieldRenderer {
     body.circle(0, 0, r * 0.93).stroke({ width: r * 0.12, color: 0xffffff });
     const number = new Text({ text: String(o.comboNumber), style: { fontFamily: FONT, fontSize: r * 0.75, fontWeight: '700', fill: 0xffffff, dropShadow: { color: 0x000000, alpha: 0.5, blur: 2, distance: 0 } } });
     number.anchor.set(0.5);
+    number.visible = showNumber;
     number.resolution = this.textResolution();
     root.addChild(body, number);
     const bodyTexture = kind === 'slider-start'
       ? (this.skinTextures.sliderstartcircle ?? this.skinTextures.hitcircle)
-      : this.skinTextures.hitcircle;
+      : kind === 'slider-end'
+        ? (this.skinTextures.sliderendcircle ?? this.skinTextures.hitcircle)
+        : this.skinTextures.hitcircle;
     const overlayTexture = kind === 'slider-start'
       ? (this.skinTextures.sliderstartcircleoverlay ?? this.skinTextures.hitcircleoverlay)
-      : this.skinTextures.hitcircleoverlay;
+      : kind === 'slider-end'
+        ? (this.skinTextures.sliderendcircleoverlay ?? this.skinTextures.hitcircleoverlay)
+        : this.skinTextures.hitcircleoverlay;
     let skinBody: Sprite | undefined;
     let skinOverlay: Sprite | undefined;
     if (bodyTexture) {
@@ -344,7 +355,7 @@ export class PlayfieldRenderer {
       skinOverlay.width = skinOverlay.height = r * 2;
       root.addChildAt(skinOverlay, root.children.length - 1);
     }
-    root.position.set(o.x, o.y);
+    root.position.set(at?.x ?? o.x, at?.y ?? o.y);
     return { root, body, number, skinBody, skinOverlay };
   }
 
@@ -431,6 +442,10 @@ export class PlayfieldRenderer {
     root.addChild(d.light);
     d.head = this.makeCircle(o, o.kind === 'slider' ? 'slider-start' : 'hit');
     root.addChild(d.head.root);
+    if (o.kind === 'slider') {
+      d.tail = this.makeCircle(o, 'slider-end', o.pointAt(1), false);
+      root.addChild(d.tail.root);
+    }
     if (d.ball && d.follow) {
       root.addChild(d.follow, d.ball);
       if (d.skinFollow) root.addChild(d.skinFollow);
@@ -562,6 +577,26 @@ export class PlayfieldRenderer {
     if (d.reverseEnd) {
       d.reverseEnd.visible = drawn.has(1);
       d.reverseEnd.alpha = bodyAlpha;
+    }
+
+    // Slider tail circle appears near the end and reacts to the tail judgement.
+    if (d.tail) {
+      const tailHit = j.parts?.at(-1) === true;
+      const tailAppear = s.end - Math.min(400, map.preempt);
+      let alpha = clamp01((t - tailAppear) / Math.min(map.fadeIn, 300)) * bodyAlpha;
+      let scale = 1;
+      if (t >= s.end) {
+        if (tailHit) {
+          const k = clamp01((t - s.end) / HIT_FADE);
+          scale = 1 + 0.4 * k;
+          alpha *= 1 - k;
+        } else {
+          alpha *= 1 - clamp01((t - s.end) / MISS_FADE);
+        }
+      }
+      d.tail.root.visible = alpha > 0.01;
+      d.tail.root.alpha = alpha;
+      d.tail.root.scale.set(scale);
     }
 
     // Ball and follow circle while the slider is running.
