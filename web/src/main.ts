@@ -507,7 +507,7 @@ wireDrop('osr-drop', 'osr-input', async (file) => {
 let localSkin: OszArchive | null = null;
 let localOsz: OszArchive | null = null;
 const skinStore = createIndexedDbSkinStore();
-const MOD_CHOICES = ['EZ', 'HR', 'HD', 'DT', 'NC', 'HT'];
+const MOD_CHOICES = ['EZ', 'HR', 'HD', 'DT', 'NC', 'HT', 'FL'];
 
 function showSkinStatus(name: string, archive: OszArchive, saved: boolean) {
   const usable = supportedSkinAudioFiles(archive);
