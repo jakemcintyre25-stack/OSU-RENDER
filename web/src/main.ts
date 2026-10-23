@@ -643,6 +643,12 @@ async function startPlayer(s: Session, scoreId: number | null = null, lease = pl
     if (samples.failed > 0) s.warnings.push(`${samples.failed} beatmap hitsound files could not be decoded by this browser.`);
     if (s.hitsounds.unavailable > 0) s.warnings.push('Some hitsounds are unavailable from this beatmap and your selected skin; bundled defaults are not included.');
     playerClock.rate = effectivePlaybackRate(s.map.rate, Number(($('playback-speed') as HTMLSelectElement).value));
+    loading('Preparing pitch-preserving audio…');
+    const stretched = await playerClock.prepareRate(playerClock.rate);
+    if (!active()) return;
+    if (!stretched && Math.abs(playerClock.rate - 1) > 1e-6) {
+      s.warnings.push('Pitch-preserving speed change is unavailable; audio pitch will follow playback speed.');
+    }
     playerClock.volume = Number(($('volume') as HTMLInputElement).value) / 100;
     playerClock.effectsVolume = Number(($('effects-volume') as HTMLInputElement).value) / 100;
     playerClock.offset = Number(($('sync-offset') as HTMLInputElement).value);
@@ -872,7 +878,15 @@ for (const [control, option] of [
 }
 $('playback-speed').addEventListener('change', (e) => {
   const speed = checkedPlayerSpeed(Number((e.target as HTMLSelectElement).value));
-  if (clock && session) clock.setRate(effectivePlaybackRate(session.map.rate, speed));
+  if (clock && session) {
+    const rate = effectivePlaybackRate(session.map.rate, speed);
+    clock.setRate(rate);
+    void clock.prepareRate(rate).then((ok) => {
+      if (!ok && Math.abs(rate - 1) > 1e-6) {
+        toast('Pitch-preserving speed change is unavailable; audio pitch follows speed.');
+      }
+    });
+  }
   store.set('playback-speed', String(speed));
 });
 const syncOffset = $('sync-offset') as HTMLInputElement;

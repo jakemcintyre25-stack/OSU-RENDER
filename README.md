@@ -60,7 +60,7 @@ Done:
 
 - Worker: recent plays, replay download, beatmap mirrors with fallback, checksum lookup, edge caching, rate limit
 - Map prep: mods (EZ/HR/HD/DT/NC/HT), stacking, slider paths, ticks/repeats, combo colours
-- Playback: music-synced clock, song-outro-aware seek, AudioLeadIn, independent music/FX volumes, persisted sync offset and 0.25×–2× viewer speed; beatmap and user-.osk circle/slider/spinner sounds, judged slider loops and spinner loop/bonus clips use Web Audio
+- Playback: music-synced clock, song-outro-aware seek, AudioLeadIn, independent music/FX volumes, persisted sync offset and 0.25×–2× viewer speed with pitch-preserving DT/HT preview; beatmap and user-.osk circle/slider/spinner sounds, judged slider loops and spinner loop/bonus clips use Web Audio
 - Drawing: hit circles, approach circles, snaking slider bodies, reverse arrows, ticks, slider ball + follow circle, spinners, hit lighting, follow points, Flashlight, HD fades, cursor + trail, key overlay, combo/accuracy, 100/50/miss popups, miss markers on the timeline
 - Custom skins: user `.osk` hit circles/overlays, approach circles, slider ball/follow, reverse arrows, slider start/end circles, spinner background/circle/approach, cursor/trail/middle, combo-colour overrides, CursorScale, slider border/track overrides, animated slider-ball frames and saved-skin persistence
 - Judgement v0: hit windows, note-lock, slider tracking, spinners, combo. Compared against the replay's own counts in the ⓘ panel

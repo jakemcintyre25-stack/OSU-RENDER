@@ -7,6 +7,7 @@
  */
 
 import type { HitSoundPlan } from './hitsounds';
+import { stretchChannels } from './time-stretch';
 
 export interface OfflineMixPlanInput {
   /** First exported map millisecond; may be negative for AudioLeadIn/preroll. */
@@ -127,9 +128,24 @@ export async function renderOfflineMix(input: RenderOfflineMixInput): Promise<Au
   effectsGain.connect(context.destination);
 
   let musicBuffer: AudioBuffer | null = null;
+  let musicStretched = false;
   if (audio) {
     throwIfAborted(signal);
     musicBuffer = await context.decodeAudioData(audio.slice(0));
+    if (Math.abs(rate - 1) > 1e-6) {
+      try {
+        const channels: Float32Array[] = [];
+        for (let c = 0; c < musicBuffer.numberOfChannels; c++) channels.push(musicBuffer.getChannelData(c).slice());
+        const stretched = stretchChannels(channels, rate);
+        const output = context.createBuffer(musicBuffer.numberOfChannels, stretched[0].length, musicBuffer.sampleRate);
+        for (let c = 0; c < stretched.length; c++) output.getChannelData(c).set(stretched[c]);
+        musicBuffer = output;
+        musicStretched = true;
+      } catch {
+        // Fall back to pitch-changing playbackRate rather than failing export.
+        musicStretched = false;
+      }
+    }
   }
   throwIfAborted(signal);
 
@@ -157,12 +173,13 @@ export async function renderOfflineMix(input: RenderOfflineMixInput): Promise<Au
   await Promise.all(Array.from({ length: Math.min(4, entries.length) }, worker));
   throwIfAborted(signal);
 
-  if (plan.music && musicBuffer && plan.music.offset < musicBuffer.duration) {
+  const musicOffset = plan.music ? plan.music.offset / (musicStretched ? rate : 1) : 0;
+  if (plan.music && musicBuffer && musicOffset < musicBuffer.duration) {
     const source = context.createBufferSource();
     source.buffer = musicBuffer;
-    source.playbackRate.value = plan.music.rate;
+    source.playbackRate.value = musicStretched ? 1 : plan.music.rate;
     source.connect(musicGain);
-    source.start(plan.music.when, plan.music.offset);
+    source.start(plan.music.when, musicOffset);
   }
 
   for (const event of plan.events) {

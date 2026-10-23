@@ -73,8 +73,16 @@ describe('offline export mix rendering', () => {
     sources: FakeSource[] = [];
     createGain() { const g = new FakeGain(); this.gains.push(g); return g; }
     createBufferSource() { const s = new FakeSource(); this.sources.push(s); return s; }
+    createBuffer(channels: number, length: number, sampleRate: number) {
+      const data = Array.from({ length: channels }, () => new Float32Array(length));
+      return {
+        duration: length / sampleRate, length, numberOfChannels: channels, sampleRate,
+        getChannelData: (channel: number) => data[channel],
+      } as unknown as AudioBuffer;
+    }
+    decodedDuration = 10;
     async decodeAudioData() {
-      return { duration: 10, numberOfChannels: 2, sampleRate: 48_000, length: 480_000 } as AudioBuffer;
+      return this.createBuffer(2, Math.round(48_000 * this.decodedDuration), 48_000);
     }
     async startRendering() {
       return { duration: this.duration, numberOfChannels: 2, sampleRate: 48_000 } as AudioBuffer;
@@ -104,6 +112,20 @@ describe('offline export mix rendering', () => {
     expect(context.sources[2].loop).toBe(true);
     expect(context.gains[0].connect).toHaveBeenCalledWith(context.destination);
     expect(context.gains[1].connect).toHaveBeenCalledWith(context.destination);
+  });
+
+  it('stretches export music for DT and plays it at rate 1', async () => {
+    const context = new FakeContext();
+    context.duration = 1;
+    context.decodedDuration = 2;
+    await renderOfflineMix({
+      audio: new ArrayBuffer(8), hitsounds: emptyPlan(), startMs: 750, rate: 1.5, durationSeconds: 1,
+      musicVolume: 1, effectsVolume: 1, createContext: () => context as unknown as OfflineAudioContext,
+    });
+    const music = context.sources[0] as unknown as { playbackRate: { value: number }; start: ReturnType<typeof vi.fn>; buffer: AudioBuffer };
+    expect(music.playbackRate.value).toBe(1);
+    expect(music.start).toHaveBeenCalledWith(0, 0.5);
+    expect(music.buffer.duration).toBeCloseTo(2 / 1.5, 2);
   });
 
   it('returns null without decoding when there is no music or audible sample', async () => {
