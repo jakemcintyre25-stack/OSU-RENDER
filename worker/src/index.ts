@@ -41,6 +41,20 @@ export const SECURITY_HEADERS: ReadonlyArray<readonly [string, string]> = [
   ['Referrer-Policy', 'strict-origin-when-cross-origin'],
   ['Permissions-Policy', 'camera=(), microphone=(), geolocation=()'],
   ['Strict-Transport-Security', 'max-age=31536000; includeSubDomains'],
+  ['Content-Security-Policy', [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https://assets.ppy.sh",
+    "media-src 'self' blob:",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+  ].join('; ')],
 ];
 
 export function applySecurityHeaders(response: Response): Response {
