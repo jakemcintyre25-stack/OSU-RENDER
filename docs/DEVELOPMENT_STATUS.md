@@ -17,7 +17,7 @@ Updated: 23 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 | M7 Custom skins | **IN PROGRESS** | Optional .osk WAV/MP3/OGG hitsounds and slider loops are recognized in root-level archive entries; LayeredHitSounds honored. Visual skin.ini layout, sprites, persistence and default licensed sound set remain OPEN. |
 | M8 Player page | **IN PROGRESS** | Calculated ScoreV1 HUD, Sync and persisted 0.25×–2× speed, separate music/FX levels, persisted cursor-trail/key-overlay toggles, audio-outro seek range, clickable accessible miss/100 review markers, share-link action and latest-request-wins cancellation. Unit, abort and build checks pass; actual browser/mobile acceptance remains. |
 | M9 MP4 export | **IN PROGRESS** | Real-time WebM MediaRecorder capture records the live canvas plus a synchronized music/hit-effect audio tap, with Opus codec negotiation, video-only fallback, bounded size/time, cancellation, track cleanup and safe download. Not MP4 and not deterministic: offline fixed-FPS rendering, full-length export beyond 60 seconds, browser-device acoustic acceptance and native MP4 remain OPEN. |
-| M10 Lazer | **OPEN** | Legacy/stable only; lazer detection and rule set remain. |
+| M10 Lazer | **IN PROGRESS** | Lazer-origin replays are now detected from their `30000000+` game-version field and rejected with an explicit unsupported message; `judge-check` uses the same real detection. Lazer hit windows, scoring (including judgment and mod settings), replay semantics, skin parity and real lazer fixtures remain OPEN. |
 | M11 Hardening | **IN PROGRESS** | ZIP/CRC32 limits, bounded replay frames, browser and Worker streamed `.osr` / `.osz` / `.osu` downloads, plus local-upload pre-read caps. The Worker replay upstream now uses a 64 MiB streaming ceiling rather than unrestricted allocation. Tested per-isolate mirror breaker: 3 failures → 10-minute cooldown; 404 not counted. R2/global breaker, security audit, decompression testing and production loads remain. |
 | M12 One Miss Merchants links | **IN PROGRESS** | Validated `?user=<osu ID>` auto-list and `?score=<score ID>` playback, canonical copy-link action, documented OMM read-only external-link contract in docs/INTEGRATION.md. OMM-side profile/match links, actual hostname, API/live-browser acceptance and rollback work remain OPEN. |
 
@@ -265,6 +265,14 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - Tests in `judge-matching.test.ts` and `judge-head.test.ts` now cover the lock, the release after judging, the 3 ms simultaneous-object tolerance and the unchanged first-hit behaviour.
 - Automated evidence: **211 web tests passed, 12 skipped**, web typecheck passed, production build passed.
 - **M2 remains IN PROGRESS:** stable's spinner acceleration smoothing is not specialised, and no real-replay rerun was possible.
+### M10 lazer replay detection and gating (23 October 2026)
+
+- Source: osu!lazer's `LegacyScoreEncoder` writes its database version (`30000000+`) into the legacy header's game-version field; stable writes a `YYYYMMDD` build date. `FIRST_LAZER_GAME_VERSION = 30_000_000` is therefore a reliable origin boundary, unlike filename heuristics or the ScoreV2 mod bit.
+- `LoadedReplay` now exposes `gameVersion` and `isLazer`; `sessionFromReplay` rejects lazer replays with a specific message instead of presenting a stable-parity judgement that does not apply.
+- `judge-check` already skipped `replay.isLazer`; that path now works from decoded header data rather than only from filenames.
+- Synthetic coverage: stable and lazer encoded `.osr` headers, the version boundary, and the session rejection path.
+- Automated evidence: **211 web tests passed, 12 skipped**, web typecheck passed, production build passed. CI remains authoritative.
+- **M10 remains IN PROGRESS:** lazer hit windows, judgements, score model, mod settings, replay semantics, skin parity and real lazer fixtures are still required. Detection is not lazer support.
 
 ## Immediate next implementation work
 
