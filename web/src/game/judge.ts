@@ -133,25 +133,24 @@ export function judge(map: PreparedMap, frames: ReplayFrame[], options: JudgeOpt
       }
       first++;
     }
-    // A click goes to the earliest still-open object it lands on (inside its radius and window).
-    // A click that lands on nothing is wasted; it does not hit a later object (osu! behaviour).
-    for (let k = first; k < map.objects.length; k++) {
-      const o = map.objects[k];
-      if (o.start - MISS_WINDOW > p.t) break; // later objects can't be reached yet
-      if (headDone[k]) continue;
-      const offset = p.t - o.start;
-      if (offset > w.w50) continue; // too late for this object; it will expire
-      const cands = options.pressPositionFrames ? [p, ...p.nearby] : [p];
-      if (!cands.some((c) => Math.hypot(c.x - o.x, c.y - o.y) <= r)) continue; // click missed this circle's area
-      const res = headResult(offset, w); // early clicks inside MISS_WINDOW count as a miss
-      headDone[k] = true;
-      headHit[k] = res;
-      if (res > 0) objects[k].hitTime = p.t;
-      else {
-        objects[k].resultTime = p.t;
-        if (o.kind === 'slider') objects[k].headMissTime = p.t;
-      }
-      break;
+    // osu!stable note-lock: while the earliest unjudged object is still live,
+    // input on any later overlapping object is ignored. A click that lands on
+    // empty space or on a later object is wasted; it must not skip the lock.
+    if (first >= map.objects.length) continue;
+    const o = map.objects[first];
+    if (headDone[first]) continue;
+    if (o.start - MISS_WINDOW > p.t) continue; // too early to interact at all
+    const offset = p.t - o.start;
+    if (offset > w.w50) continue; // too late; the object will expire
+    const cands = options.pressPositionFrames ? [p, ...p.nearby] : [p];
+    if (!cands.some((c) => Math.hypot(c.x - o.x, c.y - o.y) <= r)) continue; // click missed this circle's area
+    const res = headResult(offset, w); // early clicks inside MISS_WINDOW count as a miss
+    headDone[first] = true;
+    headHit[first] = res;
+    if (res > 0) objects[first].hitTime = p.t;
+    else {
+      objects[first].resultTime = p.t;
+      if (o.kind === 'slider') objects[first].headMissTime = p.t;
     }
   }
   map.objects.forEach((o, i) => {

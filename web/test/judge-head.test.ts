@@ -85,7 +85,7 @@ describe('stable hit windows, early clicks and note-lock', () => {
     expect(judge(circleMap(), attempt(600)).objects[0].result).toBe(0);
   });
 
-  it('matches a later circle when a press lands inside it instead of an earlier circle', () => {
+  it('locks out a later circle until the earlier circle is judged', () => {
     const frames: ReplayFrame[] = [
       { t: 990, x: 200, y: 100, keys: 0 },
       { t: 1020, x: 200, y: 100, keys: KEY.M1 },
@@ -95,7 +95,9 @@ describe('stable hit windows, early clicks and note-lock', () => {
       { t: 1050, x: 200, y: 100, keys: KEY.M1 },
     ];
     const judged = judge(circleMap([1000, 1020], [100, 200]), frames);
-    expect(judged.objects.map((obj) => obj.hitTime)).toEqual([1040, 1020]);
+    // The 1020 press is ignored because circle A is still unjudged. A is hit at
+    // 1040, which releases the lock; the 1050 press then hits B.
+    expect(judged.objects.map((obj) => obj.hitTime)).toEqual([1040, 1050]);
     expect(judged.objects.map((obj) => obj.result)).toEqual([300, 300]);
   });
 

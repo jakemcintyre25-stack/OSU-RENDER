@@ -41,12 +41,23 @@ const frames = (presses: { t: number; x: number; y: number }[]): ReplayFrame[] =
 };
 
 describe('click matching', () => {
-  it('a click on a later circle hits it while an earlier circle is still open', () => {
+  it('ignores a click on a later circle while the earlier circle is still locked', () => {
     const map = prepareMap(osu, []);
-    // Click lands on B (in its window) while A is still open and far away.
+    // B is inside its window, but A is still unjudged, so stable note-lock
+    // ignores the input on B rather than skipping A.
     const j = judge(map, frames([{ t: 1025, x: 300, y: 300 }]));
+    expect(j.objects[1].result).toBe(0);
+    expect(j.objects[0].result).toBe(0);
+  });
+
+  it('allows the later circle once the earlier circle has been judged', () => {
+    const map = prepareMap(osu, []);
+    const j = judge(map, frames([
+      { t: 1005, x: 100, y: 100 },
+      { t: 1025, x: 300, y: 300 },
+    ]));
+    expect(j.objects[0].result).toBe(300);
     expect(j.objects[1].result).toBe(300);
-    expect(j.objects[0].result).toBe(0); // A was never clicked
   });
 
   it('a click on the first circle hits it, not the later one', () => {
