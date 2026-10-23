@@ -60,6 +60,10 @@
 
     <div id="player" hidden>
       <div id="stage"></div>
+      <div id="hpbar" class="hpbar" hidden role="progressbar" aria-label="Health" aria-valuemin="0" aria-valuemax="200" aria-valuenow="200">
+        <div id="hpfill" class="hp-fill"></div>
+      </div>
+      <div id="fail" class="fail" hidden role="status">Failed</div>
       <div class="controls">
         <button id="back" title="Back (Esc)">←</button>
         <button id="playpause" title="Play / pause (Space)">▶</button>
