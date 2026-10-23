@@ -72,7 +72,7 @@ Next (see the build plan):
 - Finish default/user skin graphics, spinner rotation/bonus sounds, and pitch-preserving DT/HT time stretch. Slider loops already exist for recorded tracking sections but still require real-browser acoustic acceptance
 - Default skin sprites + custom `.osk` skins, follow points, hit lighting
 - Long-duration 1080p60, real-replay and peak-memory acceptance for deterministic export (720p30 MP4 and A/V timestamps are verified)
-- Lazer score rules
+- Lazer score rules (lazer-origin replays are detected and rejected with a clear message; native lazer judgement, scoring and mod settings remain open)
 - Complete One Miss Merchants profile/match links (the renderer-side `?user=<osu ID>` and `?score=<score ID>` routes and Share replay button are implemented; see `docs/INTEGRATION.md`)
 
 ## Licences
@@ -95,7 +95,7 @@ npm run judge-check -- --verbose example.osr
 
 Verbose output lists every object, its millisecond and `mm:ss.mmm` timestamp, judged result, and slider-part collection. Replay headers contain aggregate counts only, so the tool **cannot know the true judgement of an individual object**. All object results are displayed as potential mismatch candidates.
 
-Fixtures are local and gitignored: **never commit beatmaps, replays, audio, or skins**. If either directory is missing or empty, the command exits successfully with setup instructions. Lazer fixtures should go in `fixtures/replays/lazer/` (not scanned by M1) or use a `*.lazer.osr` filename, which is explicitly skipped until M10 adds lazer support.
+Fixtures are local and gitignored: **never commit beatmaps, replays, audio, or skins**. If either directory is missing or empty, the command exits successfully with setup instructions. Lazer fixtures should go in `fixtures/replays/lazer/` (not scanned by M1) or use a `*.lazer.osr` filename. `judge-check` also skips them from the decoded `30000000+` game-version header, so a misnamed lazer fixture cannot be scored as stable.
 
 GitHub Actions runs `npm test`, `npm run typecheck`, `npm run build`, and `npm run judge-check` on pushes and pull requests. Tests that require the optional `fixtures/renatus.osz` continue to skip when it is missing in CI. New fixture-independent CLI tests run under Node's built-in test runner as part of `npm test`.
 

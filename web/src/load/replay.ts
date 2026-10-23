@@ -19,6 +19,18 @@ export const REPLAY_LIMITS = Object.freeze({
   maxKeyMask: 65535,
 });
 
+/**
+ * osu!lazer's legacy `.osr` encoder writes its score database version
+ * (`30000000+`) into the header's game-version field. Stable writes a
+ * `YYYYMMDD` build date, so this boundary identifies lazer-origin replays
+ * without guessing from filenames or mod bits.
+ */
+export const FIRST_LAZER_GAME_VERSION = 30_000_000;
+
+export function isLazerGameVersion(gameVersion: number): boolean {
+  return Number.isFinite(gameVersion) && gameVersion >= FIRST_LAZER_GAME_VERSION;
+}
+
 export interface ReplayHeaderStats {
   count300: number;
   count100: number;
@@ -36,6 +48,10 @@ export interface LoadedReplay {
   /** The replay's stored total is ScoreV2, not ScoreV1. */
   scoreV2: boolean;
   mods: string[];
+  /** Header game-version / lazer total-score-version field. */
+  gameVersion: number;
+  /** True when the header version is lazer's 30000000+ range. */
+  isLazer: boolean;
   stats: ReplayHeaderStats | null;
   frames: ReplayFrame[];
   date: Date | null;
@@ -55,6 +71,7 @@ export async function decodeReplay(data: Uint8Array): Promise<LoadedReplay> {
   const score = await new ScoreDecoder().decodeFromBuffer(data, true);
   const info = score.info;
   const rawMods = Number(info.rawMods) || 0;
+  const gameVersion = Number(score.replay?.gameVersion ?? 0);
   const frames = cleanFrames(
     (score.replay?.frames ?? []).map((f) => {
       const lf = f as unknown as { startTime: number; position: { x: number; y: number }; buttonState?: number };
@@ -68,6 +85,8 @@ export async function decodeReplay(data: Uint8Array): Promise<LoadedReplay> {
     rawMods,
     scoreV2: isScoreV2Mods(rawMods),
     mods: modsFromBits(rawMods),
+    gameVersion,
+    isLazer: isLazerGameVersion(gameVersion),
     stats: {
       count300: info.count300,
       count100: info.count100,
