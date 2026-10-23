@@ -9,7 +9,8 @@ Updated 23 October 2026. **Status: IN PROGRESS, not full osu!stable audio parity
 - For indexed auto-generated samples, the beatmap's WAV, MP3 and OGG encodings are checked **before** any skin fallback. Explicit custom sample filenames match exactly and never silently substitute another extension.
 - Real chart/skin `sliderslide` and `sliderwhistle` clips now loop **only over actual judge tracking intervals**. A seek into an existing interval resumes its loop at the appropriate clip phase and aligns with the music source's 50ms startup scheduling lead-in. Loop voice nodes stop at the tracked interval boundary.
 - The selected map's `[General] AudioLeadIn` is parsed with an explicit operational input ceiling and honored at playback start. Existing synthetic PreparedMap fixtures can omit this optional field; actual prepared beatmaps set it.
-- An optional user-imported .osk supplies real root-level WAV/MP3/OGG hit sounds, slider loops and `spinnerspin`/`spinnerbonus` clips. The spinner loop covers the spun interval and bonus clips are placed on stable's half-spin bonus ticks. Limited `skin.ini` `LayeredHitSounds` is applied. No default skin sounds, skins, replays or beatmaps are distributed in this repository.
+- An optional user-imported .osk supplies real root-level WAV/MP3/OGG hit sounds, slider loops and `spinnerspin`/`spinnerbonus` clips. The spinner loop covers the judged first-to-last half-spin interval, and bonus clips use the judge's actual stable half-spin bonus timestamps rather than evenly spaced estimates. Limited `skin.ini` `LayeredHitSounds` is applied. No default skin sounds, skins, replays or beatmaps are distributed in this repository.
+- Circle, slider head/tick/repeat/tail events carry stable's positional pan `(x / 512 − 0.5) × 0.8` and are routed through a `StereoPannerNode` when non-centred; centred events keep the cheaper un-panned graph. Slider loops and spinner clips remain centred because their position changes during playback.
 - The music Web Audio clock schedules voices using a 250ms lookahead, DT/HT rates and visual sync offsets; it cancels abandoned sounds after pause, seek, speed change and disposal. Independent music and effects gain buses provide separate volume controls. Pending asynchronous AudioContext resume is invalidated on seek, pause, speed change or dispose. Four concurrent decoders, 48 live voices, unique-sample and byte/event bounds limit resources.
 
 ## Verification passes
@@ -23,7 +24,7 @@ Updated 23 October 2026. **Status: IN PROGRESS, not full osu!stable audio parity
 ## Still OPEN or unverified
 
 - A licence-approved set of distributable default skin samples; complete user skin.ini sound options, visual skin sprites and persistence.
-- Slider tracking exact audible parity on varied real osu!stable replays, sound panning, volume weighting, fade behaviour and sample timestamp edge cases. Spinner loop/bonus clips now exist but still need real-device listening checks.
+- Slider tracking exact audible parity on varied real osu!stable replays, volume weighting, fade behaviour and sample timestamp edge cases. Spinner loop/bonus clips and positional pan now exist but still need real-device listening checks.
 - Pitch-preserving DT/HT time stretching. The current `AudioBufferSourceNode.playbackRate` changes pitch along with playback speed; 0.25×–2× viewer speed has the same limitation.
 - Real browser/Windows audio latency, decode support, MP3 padding/acoustic sync, skin visual integration and offline MP4 audio mix.
 - Real osu! API replay access and real private fixture parity. The normal CI-friendly judgement check is not proof of real parity.
@@ -31,6 +32,6 @@ Updated 23 October 2026. **Status: IN PROGRESS, not full osu!stable audio parity
 ## Next independent tasks
 
 1. Add default skin sample lookup only when licensing and attribution can be satisfied; do not commit copyrighted media without authorization.
-2. Complete user skin visuals/remaining sound semantics and spinner loops with sound input grounded in actual replay/chart data.
+2. Complete user skin visuals/remaining sound semantics and verify spinner loop/bonus timing on real replays.
 3. Continue independent M3 HP/fail and M4 exact ScoreV1 test coverage, plus M2 real-replay validation when exact-MD5 private fixtures are available.
 4. Run headphone/browser listening comparisons with genuine legal .osz/.osk resources once accessible; record acoustic discrepancies rather than calling M5 PASS from synthetic CI.

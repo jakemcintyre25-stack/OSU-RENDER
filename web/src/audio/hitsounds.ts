@@ -13,12 +13,15 @@ export interface HitSoundEvent {
   sample: string;
   /** Relative hitsound volume from .osu metadata, 0..1. */
   gain: number;
+  /** Stable positional pan, -0.4 (left) .. 0.4 (right); omitted at centre. */
+  pan?: number;
 }
 export interface HitSoundLoop {
   start: number;
   end: number;
   sample: string;
   gain: number;
+  pan?: number;
 }
 export interface HitSoundPlan {
   events: HitSoundEvent[];
@@ -59,6 +62,8 @@ const safePath = (value: string) => {
       normalized.split('/').some((p) => !p || p === '.' || p === '..')) return null;
   return normalized.toLowerCase();
 };
+/** osu!stable positional pan: (x / 512 - 0.5) * 0.8, i.e. -0.4..0.4. */
+const panForX = (x: number) => Math.max(-0.4, Math.min(0.4, (x / 512 - 0.5) * 0.8));
 const toBuffer = (bytes: Uint8Array): ArrayBuffer =>
   bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 
@@ -193,20 +198,29 @@ export function planHitsounds(
     }
     return resource.path;
   };
-  const scheduleFile = (t: number, file: string, volume: number, allowSkin = true) => {
+  const clampPan = (pan: number) => Math.max(-1, Math.min(1, Number.isFinite(pan) ? pan : 0));
+  const scheduleFile = (t: number, file: string, volume: number, allowSkin = true, pan = 0) => {
     if (plan.events.length >= MAX_HITSOUND_EVENTS) { plan.unavailable++; return; }
     const path = reserve(file, allowSkin);
-    if (path) plan.events.push({ t, sample: path, gain: Math.max(0, Math.min(1, volume / 100)) });
+    if (!path) return;
+    const event: HitSoundEvent = { t, sample: path, gain: Math.max(0, Math.min(1, volume / 100)) };
+    const value = clampPan(pan);
+    if (Math.abs(value) > 1e-6) event.pan = value;
+    plan.events.push(event);
   };
-  const scheduleLoop = (start: number, end: number, file: string, volume: number) => {
+  const scheduleLoop = (start: number, end: number, file: string, volume: number, pan = 0) => {
     if (!(end > start) || !Number.isFinite(start) || !Number.isFinite(end)) return;
     if ((plan.loops?.length ?? 0) >= MAX_HITSOUND_EVENTS) return;
     const path = reserve(file, true);
-    if (path) plan.loops!.push({ start, end, sample: path, gain: Math.max(0, Math.min(1, volume / 100)) });
+    if (!path) return;
+    const loop: HitSoundLoop = { start, end, sample: path, gain: Math.max(0, Math.min(1, volume / 100)) };
+    const value = clampPan(pan);
+    if (Math.abs(value) > 1e-6) loop.pan = value;
+    plan.loops!.push(loop);
   };
   const scheduleHit = (
     t: number, bits: number, settings: SampleSettings,
-    normalOverride = 0, addOverride = 0, metadataTime = t,
+    normalOverride = 0, addOverride = 0, metadataTime = t, pan = 0,
   ) => {
     // The sample is defined by the hit object's timing section; its playback
     // occurs at the actual successful press timestamp (which may be early).
@@ -219,7 +233,7 @@ export function planHitsounds(
     const volume = settings.volume || tp.volume;
     if (settings.filename) {
       // A named custom sample entirely replaces the layered hit sound.
-      scheduleFile(t, settings.filename, volume, false);
+      scheduleFile(t, settings.filename, volume, false, pan);
       return;
     }
     const suffix = sampleIndex > 1 ? String(sampleIndex) : '';
@@ -227,10 +241,10 @@ export function planHitsounds(
     // don't force normal onto a note with only whistle/finish/clap additions.
     // A bare hitSound=0 must still play the default normal sample.
     if (layeredHitSounds || (bits & 1) !== 0 || (bits & 14) === 0) {
-      scheduleFile(t, names[normal] + '-hitnormal' + suffix + '.wav', volume);
+      scheduleFile(t, names[normal] + '-hitnormal' + suffix + '.wav', volume, true, pan);
     }
     for (const [mask, hit] of [[2, 'whistle'], [4, 'finish'], [8, 'clap']] as const) {
-      if ((bits & mask) !== 0) scheduleFile(t, names[addition] + '-hit' + hit + suffix + '.wav', volume);
+      if ((bits & mask) !== 0) scheduleFile(t, names[addition] + '-hit' + hit + suffix + '.wav', volume, true, pan);
     }
   };
 
@@ -246,45 +260,42 @@ export function planHitsounds(
     }
     const bits = int(row[4]);
     if (kind === 'spinner') {
+      const settings = sampleSettings(row[6]);
+      const volume = settings.volume || activeSample(object.start).volume;
       // Spinning sound is a skin loop, independent of whether the spinner is
-      // eventually completed. Bonus clips follow stable's half-spin ticks.
-      const halfSpins = judged.halfSpins ?? 0;
-      if (halfSpins > 0) {
+      // eventually completed. Use the judge's real first/last half-spin
+      // timestamps instead of spreading ticks uniformly over the spinner.
+      if (judged.spinnerSpinRange) {
         // Missing optional spinner samples must not inflate the unavailable
         // count for every bonus tick; check once before scheduling.
         if (lookupSample('spinnerspin.wav', true)) {
-          scheduleLoop(object.start, object.end, 'spinnerspin.wav', 100);
+          scheduleLoop(judged.spinnerSpinRange[0], judged.spinnerSpinRange[1], 'spinnerspin.wav', volume);
         }
-        if (lookupSample('spinnerbonus.wav', true)) {
-          const required = judged.halfSpinsRequired ?? 0;
-          const bonusThreshold = required + 3;
-          const total = Math.max(1, halfSpins);
-          for (let count = 2; count <= halfSpins; count++) {
-            if (count > bonusThreshold && (count - bonusThreshold) % 2 === 0) {
-              const t = object.start + (object.end - object.start) * (count / total);
-              scheduleFile(t, 'spinnerbonus.wav', 100);
-            }
-          }
+        const bonuses = judged.spinnerBonusTicks ?? [];
+        if (bonuses.length && lookupSample('spinnerbonus.wav', true)) {
+          for (const t of bonuses) scheduleFile(t, 'spinnerbonus.wav', volume);
         }
       }
       // osu!stable allows a spinner to carry a normal + addition hitsound
       // at its end. Do not sound an unsuccessful spinner completion.
-      if (judged.result > 0) scheduleHit(object.end, bits, sampleSettings(row[6]));
+      if (judged.result > 0) scheduleHit(object.end, bits, settings);
       continue;
     }
     if (kind === 'circle') {
-      if (judged.hitTime !== null) scheduleHit(judged.hitTime, bits, sampleSettings(row[5]), 0, 0, object.start);
+      if (judged.hitTime !== null) {
+        scheduleHit(judged.hitTime, bits, sampleSettings(row[5]), 0, 0, object.start, panForX(object.x));
+      }
       continue;
     }
     if (object.kind !== 'slider') continue;
     const base = sampleSettings(row[10]);
     const edgeBits = row[8]?.split('|').map((v) => int(v)) ?? [];
     const edgeSets = row[9]?.split('|').map((v) => v.split(':').map((x) => int(x))) ?? [];
-    const playEdge = (t: number, edge: number, metadataTime = t) => {
+    const playEdge = (t: number, edge: number, metadataTime = t, x = object.x) => {
       const sets = edgeSets[edge] ?? [0, 0];
-      scheduleHit(t, edgeBits[edge] ?? bits, base, sets[0], sets[1], metadataTime);
+      scheduleHit(t, edgeBits[edge] ?? bits, base, sets[0], sets[1], metadataTime, panForX(x));
     };
-    if (judged.hitTime !== null) playEdge(judged.hitTime, 0, object.start);
+    if (judged.hitTime !== null) playEdge(judged.hitTime, 0, object.start, object.x);
     // Follow the judge's actual tracking windows, not the slider's full span.
     // The clip must be supplied by the map or selected .osk; no synthesized
     // substitute is created when sliderslide/sliderwhistle is missing.
@@ -312,13 +323,13 @@ export function planHitsounds(
         const choice = base.normal || tp.set || metadataSet;
         const sample = names[choice] ? choice : metadataSet;
         const suffix = (base.index || tp.index) > 1 ? String(base.index || tp.index) : '';
-        scheduleFile(part.t, names[sample] + '-slidertick' + suffix + '.wav', base.volume || tp.volume);
+        scheduleFile(part.t, names[sample] + '-slidertick' + suffix + '.wav', base.volume || tp.volume, true, panForX(part.x));
       } else if (part.kind === 'repeat') {
-        playEdge(part.t, edge++);
+        playEdge(part.t, edge++, part.t, part.x);
       } else {
         // Stable judges the slider tail a little early for leniency, while
         // the physical tail hitsound is an edge at the slider's actual end.
-        playEdge(object.end, object.spans);
+        playEdge(object.end, object.spans, object.end, object.pointAt(1).x);
       }
     }
   }
