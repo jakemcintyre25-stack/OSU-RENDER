@@ -232,7 +232,8 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - `judgeSpinner` now accumulates at most one half-spin per held replay frame and uses stable's threshold order: requirement zero auto-clears, below 25% misses, `> requirement` is 300, `> requirement - 2` is 100, otherwise 50.
 - `spinnerSpinPoints` awards 100 on ordinary even half-spins and 1100 only after the `requirement + 3` half-spin threshold, reproducing stable's 1.5-spin bonus gap.
 - `judge-check` verbose output shows half-spin counts and the stable requirement.
-- Automated evidence: **193 tracked web tests passed, 12 skipped**, web typecheck passed, production build passed. The concurrent M9 worktree also had 23 untracked export tests; those passed but are not part of this commit. CI remains authoritative.
+- Automated evidence: **193 tracked web tests passed, 12 skipped**, web typecheck passed, production build passed. The concurrent M9 worktree also had 23 untracked export tests; those passed but are not part of this commit.
+- **Both GitHub Actions runs passed** on `5997702` (push `39937721422`, pull request `39937727347`), including the full test, typecheck and build jobs.
 - **M2/M4 remain IN PROGRESS:** stable's acceleration smoothing is not reconstructed and no rights-cleared real replay set was available to rerun `judge-check:strict`. Synthetic tests prove the quoted rules, not real header parity.
 
 ## Immediate next implementation work
