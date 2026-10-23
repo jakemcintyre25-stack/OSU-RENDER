@@ -56,6 +56,7 @@ describe('M7 .osk visual skin loading', () => {
       sliderBallFlip: false, sliderBallFrames: 12, animationFramerate: 60, cursorScale: 1,
       comboColors: [], sliderBorder: null, sliderTrackOverride: null, spinnerBackground: null,
       hitCirclePrefix: 'default', hitCircleOverlap: 0,
+      comboPrefix: 'default', comboOverlap: 0,
     });
     const invalid = skin({ 'skin.ini': strToU8('[General]\nCursorRotate: banana\nSliderBallFrames: 99999') });
     expect(visualSkinConfig(invalid).cursorRotate).toBe(true);
@@ -154,6 +155,8 @@ describe('M7 .osk visual skin loading', () => {
     expect(visualSkinConfig(archive)).toMatchObject({ hitCirclePrefix: 'custom', hitCircleOverlap: -6 });
     const invalid = skin({ 'skin.ini': strToU8('[Fonts]\nHitCirclePrefix: ../bad\nHitCircleOverlap: 999') });
     expect(visualSkinConfig(invalid)).toMatchObject({ hitCirclePrefix: 'default', hitCircleOverlap: 0 });
+    const combo = skin({ 'skin.ini': strToU8('[Fonts]\nComboPrefix: Combo\nComboOverlap: -3') });
+    expect(visualSkinConfig(combo)).toMatchObject({ comboPrefix: 'combo', comboOverlap: -3 });
   });
 
   it('resolves font digit sprites for the configured prefix', () => {
@@ -169,6 +172,9 @@ describe('M7 .osk visual skin loading', () => {
     expect([...custom.font3!]).toEqual([...png(3)]);
     expect([...custom.font9!]).toEqual([...png(4)]);
     expect(custom.font0).toBeUndefined();
+    const combos = visualSkinFiles(archive, 0, 'default', 'custom');
+    expect([...combos.combo3!]).toEqual([...png(3)]);
+    expect([...combos.combo9!]).toEqual([...png(4)]);
   });
 
   it('lays out font digits centred with overlap', () => {

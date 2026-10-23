@@ -93,6 +93,9 @@ export class PlayfieldRenderer {
   private cursorBaseScale = { x: 1, y: 1 };
   private hud = new Container();
   private comboText!: Text;
+  private comboSkin = new Container();
+  private comboX!: Text;
+  private comboFontTextures: Array<Texture | null> = [];
   private accText!: Text;
   private scoreText!: Text;
   private infoText!: Text;
@@ -181,6 +184,7 @@ export class PlayfieldRenderer {
       if (texture) this.sliderBallTextures.push(texture);
     }
     this.hitCircleFontTextures = Array.from({ length: 10 }, (_, digit) => this.skinTextures[`font${digit}`] ?? null);
+    this.comboFontTextures = Array.from({ length: 10 }, (_, digit) => this.skinTextures[`combo${digit}`] ?? null);
     const trail = this.skinTextures.cursortrail;
     for (const sprite of this.cursorTrailSprites) {
       sprite.texture = trail ?? Texture.EMPTY;
@@ -254,12 +258,16 @@ export class PlayfieldRenderer {
     const style = (size: number, weight: '400' | '700' = '700') => ({ fontFamily: FONT, fontSize: size, fill: 0xffffff, fontWeight: weight, dropShadow: { color: 0x000000, alpha: 0.6, blur: 3, distance: 1 } });
     this.comboText = new Text({ text: '', style: style(48) });
     this.comboText.anchor.set(0, 1);
+    this.comboX = new Text({ text: 'x', style: style(48) });
+    this.comboX.anchor.set(0, 1);
+    this.comboSkin.addChild(this.comboX);
+    this.comboSkin.visible = false;
     this.accText = new Text({ text: '', style: style(32) });
     this.accText.anchor.set(1, 0);
     this.scoreText = new Text({ text: '', style: style(18, '400') });
     this.scoreText.anchor.set(1, 0);
     this.infoText = new Text({ text: '', style: style(15, '400') });
-    this.hud.addChild(this.comboText, this.accText, this.scoreText, this.infoText);
+    this.hud.addChild(this.comboSkin, this.comboText, this.accText, this.scoreText, this.infoText);
     const keys: [string, number][] = [['K1', KEY.K1], ['K2', KEY.K2], ['M1', KEY.M1], ['M2', KEY.M2]];
     for (const [name, mask] of keys) {
       const g = new Graphics();
@@ -289,6 +297,8 @@ export class PlayfieldRenderer {
     const u = h / 768; // HUD scale relative to a 768px-tall screen, like stable
     this.comboText.scale.set(u);
     this.comboText.position.set(12 * u, h - 8 * u);
+    this.comboSkin.scale.set(u);
+    this.comboSkin.position.set(12 * u, h - 8 * u);
     this.accText.scale.set(u);
     this.accText.position.set(w - 14 * u, 10 * u);
     this.scoreText.scale.set(u);
@@ -299,7 +309,7 @@ export class PlayfieldRenderer {
     // would overlap it, so keep the playfield clear.
     this.infoText.visible = w >= 640;
     const res = this.app.renderer.resolution;
-    for (const t of [this.comboText, this.accText, this.scoreText, this.infoText]) t.resolution = res;
+    for (const t of [this.comboText, this.comboX, this.accText, this.scoreText, this.infoText]) t.resolution = res;
     this.keyBoxes.forEach((k, i) => {
       const size = 34 * u;
       const x = w - size - 8 * u;
@@ -862,6 +872,7 @@ export class PlayfieldRenderer {
   private updateHud(t: number) {
     const e = this.judgement ? eventAt(this.judgement, t) : null;
     this.comboText.text = `${e?.combo ?? 0}x`;
+    this.updateComboHud(e?.combo ?? 0);
     this.accText.text = `${((e?.accuracy ?? 1) * 100).toFixed(2)}%`;
     this.scoreText.text = scoreHudLabel(e?.score);
     const c = this.frames.length ? cursorAt(this.frames, t, this.frameHint) : null;
@@ -874,6 +885,30 @@ export class PlayfieldRenderer {
       k.label.style.fill = down ? 0x000000 : 0xffffff;
       k.count.text = String(countUpTo(k.presses, t));
     }
+  }
+
+  private updateComboHud(combo: number) {
+    const digits = String(combo).split('');
+    const textures = digits.map((digit) => this.comboFontTextures[Number(digit)]);
+    const hasFont = textures.length > 0 && textures.every((texture): texture is Texture => Boolean(texture));
+    this.comboText.visible = !hasFont;
+    this.comboSkin.visible = hasFont;
+    if (!hasFont) return;
+    this.comboSkin.removeChildren();
+    const height = 48;
+    const overlap = this.skinConfig.comboOverlap * (height / 128);
+    let x = 0;
+    textures.forEach((texture) => {
+      const sprite = new Sprite(texture);
+      sprite.anchor.set(0, 1);
+      sprite.height = height;
+      sprite.width = (texture.width * height) / Math.max(1, texture.height);
+      sprite.x = x;
+      this.comboSkin.addChild(sprite);
+      x += sprite.width + overlap;
+    });
+    this.comboX.x = x;
+    this.comboSkin.addChild(this.comboX);
   }
 
   destroy() {
