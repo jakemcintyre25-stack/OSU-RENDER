@@ -135,3 +135,21 @@ https://osu.ppy.sh/wiki/en/Gameplay/Judgement/osu%21
 The judge now implements that rule for 300/100/50. For OD5, the 300 window is 50ms: `49.4ms` is a 300, whereas `49.5ms` is a 100. Synthetic tests also cover fractional OD windows, 100/50 edges and the optional experimental offset override. GitHub Actions passed.
 
 This corrects the known boundary algorithm without claiming all real human replay header counts are now exact; the local fixture set must be re-run, and the earlier comparison tables above are historical.
+
+---
+
+## M2 correction: stable half-spin spinner model
+
+Date: 23 October 2026. Source for the stable behaviour: the stable `SpinnerOsu` excerpts collected in [ppy/osu#24661](https://github.com/ppy/osu/pull/24661) and the [spinner judgement wiki](https://osu.ppy.sh/wiki/en/Gameplay/Judgement/osu%21). This is a source-derived implementation, not a fit to the small local replay set.
+
+The previous judge used full spins and a per-millisecond 477 RPM cap. That is not how stable counts spinners:
+
+- `rotationRequirement = (int)(lengthSeconds * MapDifficultyRange(OD, 3, 5, 7.5))` is measured in **half-spins**.
+- Each held replay frame adds at most `min(1, |angleDelta| / π)` half-spins.
+- The resulting `scoringRotationCount` is an integer half-spin count.
+- A bonus tick (1100) is awarded when `count > rotationRequirement + 3` and `(count - (rotationRequirement + 3)) % 2 == 0`; ordinary full-spin ticks (100) are awarded on the other even counts. This creates stable's 1.5-spin bonus gap.
+- Result: requirement zero auto-clears; below 25% is a miss; `count > requirement` is 300; `count > requirement - 2` is 100; otherwise 50.
+
+Implemented in `web/src/game/prepare.ts` (`spinnerHalfSpinsRequired`), `web/src/game/judge.ts` (`spinnerHalfSpins`, `judgeSpinner`) and `web/src/game/score.ts` (`spinnerSpinPoints`). Synthetic tests cover the requirement formula, both spin directions, direction reversal, the one-half-spin-per-frame cap, key-up gaps, the 300/100/50/miss boundaries and the 1.5-spin bonus gap.
+
+**Still open:** stable's original per-frame acceleration smoothing is not reconstructed, and no rights-cleared real replay has been rerun through `judge-check:strict` for these changes. The spinner fix must be validated against real headers before M2 can claim parity; the synthetic tests only prove the implemented rules match the quoted source logic.

@@ -66,3 +66,17 @@ The earlier implementation accidentally awarded **zero** flat points for a succe
   whether stable floors the total or each part.
 - Judge count errors (M2) now dominate the score error on near-match replays.
 - HP (M3) is still not implemented.
+
+## Spinner ScoreV1 correction: half-spins and the 1.5-spin bonus gap (23 October 2026)
+
+The previous helper awarded `100` per full spin up to the requirement and switched to `1100` immediately after it. Stable's actual `SpinnerOsu.GetScorePoints()` instead counts half-spins and awards:
+
+- `1100` when `count > requirement + 3` and the parity condition matches;
+- otherwise `100` on the other even half-spin counts;
+- nothing on the remaining odd half-spins.
+
+This means the first bonus arrives after a 1.5-spin gap beyond completion, not on the first spin after completion. It also means an even/odd half-spin asymmetry that a full-spin model cannot reproduce.
+
+Implemented in `spinnerSpinPoints(halfSpins, requiredHalfSpins)`, fed by the real judged half-spin total. Synthetic tests cover counts before, at and after the bonus threshold.
+
+**Still open:** no historical replay score table above has been recomputed because the rights-cleared replays are not in this environment. The correction is source-derived and unit-tested, not proven against real headers. Spinner bonus points should now stop inflating scores on spinner-heavy maps, but M4 remains IN PROGRESS until the local fixture set is rerun.

@@ -9,9 +9,9 @@ Updated: 23 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 | Milestone | Status | Verification and outstanding work |
 |---|---|---|
 | M1 Judgement harness | **PASS** | `npm run judge-check`, verbose diagnostics and CI implemented. Empty optional fixtures exit zero. Real replay fixtures stay local. |
-| M2 Stable judgement parity | **IN PROGRESS** | Strict checksum matching rejects updated beatmaps with unchanged IDs; `.osu`-only fallback labels uncertainty. Strict parity mode fails when no stable replay is checked. Slider timing, combo breaks, hit-window edges and 2B autoplay have synthetic tests; exact real-replay parity, spinner smoothing and complex note-lock remain unverified. |
+| M2 Stable judgement parity | **IN PROGRESS** | Strict checksum matching rejects updated beatmaps with unchanged IDs; `.osu`-only fallback labels uncertainty. Strict parity mode fails when no stable replay is checked. Slider timing, combo breaks, hit-window edges and 2B autoplay have synthetic tests. Spinner judgement now uses stable's half-spin requirement, one-half-spin-per-frame accumulation and 300/100/50/miss thresholds; stable's acceleration smoothing, exact real-replay parity and complex note-lock remain unverified. |
 | M3 HP and fail | **IN PROGRESS** | Verified SD/PF failure timestamps from circle grades and slider-head/tick/repeat combo breaks, with NF precedence. Exact stable HP drain, hit gains, break pauses, HP timeline and HP-zero failure remain. |
-| M4 Score V1 | **IN PROGRESS** | Running ScoreV1, mod multipliers and slider/spinner part scoring exist; HUD now displays calculated score and details panel compares against the replay header. It is labelled provisional. Real header parity remains unverified. |
+| M4 Score V1 | **IN PROGRESS** | Running ScoreV1, mod multipliers and slider/spinner part scoring exist; HUD now displays calculated score and details panel compares against the replay header. Spinner points now follow stable's half-spin ticks and 1.5-spin bonus gap instead of switching to 1100 immediately after completion. It is labelled provisional; real header parity remains unverified. |
 | M5 Audio timing and hitsounds | **IN PROGRESS** | Chart/user .osk hitsounds, successful spinner completion and judged tracked slider loops are scheduled on shared Web Audio time; independent music/FX gains, AudioLeadIn and map-before-skin WAV/MP3/OGG precedence are tested. Browser acoustic parity, spin/bonus sounds, licensed defaults and pitch-preserving DT/HT remain. See docs/M5-FINDINGS.md. |
 | M6 Default skin and visual parity | **OPEN** | Basic Pixi renderer exists; sprite parity, shader, HUD, FL and effects remain. |
 | M7 Custom skins | **IN PROGRESS** | Optional .osk WAV/MP3/OGG hitsounds and slider loops are recognized in root-level archive entries; LayeredHitSounds honored. Visual skin.ini layout, sprites, persistence and default licensed sound set remain OPEN. |
@@ -224,6 +224,16 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - Automated evidence: **192 web tests passed, 12 skipped** (5 new audio-capture tests), **42 worker tests passed**, web typecheck passed, production build passed. This sandbox could not use Vitest's default forked pool or the `judge-check` child-process test (piped child-process spawn is denied); those were run as far as the sandbox allows with `--pool=threads`.
 - **Both GitHub Actions runs passed** on `a147a75` (push `39935520244`, pull request `39935524449`), covering the full test, typecheck and build jobs including the child-process `judge-check` test that this sandbox cannot spawn.
 - **Still OPEN:** this is real-time MediaRecorder capture, not deterministic fixed-FPS rendering; it is WebM-only, capped at 60 seconds/256 MiB, and has not been acoustically verified on a real browser or device. Native MP4, offline audio mixing, full-length export, frame-drop resistance and A/V timestamp inspection remain M9 acceptance work.
+
+### M2/M4 stable spinner parity (23 October 2026)
+
+- Source-derived from the stable `SpinnerOsu` excerpts in [ppy/osu#24661](https://github.com/ppy/osu/pull/24661), not fitted to the previous ten replay totals.
+- `spinnerHalfSpinsRequired` implements stable's `MapDifficultyRange(OD, 3, 5, 7.5)` half-spins-per-second requirement, truncated per spinner duration.
+- `judgeSpinner` now accumulates at most one half-spin per held replay frame and uses stable's threshold order: requirement zero auto-clears, below 25% misses, `> requirement` is 300, `> requirement - 2` is 100, otherwise 50.
+- `spinnerSpinPoints` awards 100 on ordinary even half-spins and 1100 only after the `requirement + 3` half-spin threshold, reproducing stable's 1.5-spin bonus gap.
+- `judge-check` verbose output shows half-spin counts and the stable requirement.
+- Automated evidence: **193 tracked web tests passed, 12 skipped**, web typecheck passed, production build passed. The concurrent M9 worktree also had 23 untracked export tests; those passed but are not part of this commit. CI remains authoritative.
+- **M2/M4 remain IN PROGRESS:** stable's acceleration smoothing is not reconstructed and no rights-cleared real replay set was available to rerun `judge-check:strict`. Synthetic tests prove the quoted rules, not real header parity.
 
 ## Immediate next implementation work
 
