@@ -94,6 +94,20 @@ footer { margin-top: 24px; text-align: center; }
   background: rgba(11, 13, 18, 0.95); border-top: 1px solid var(--line);
 }
 .controls button { padding: 6px 12px; min-width: 0; }
+.hit-error {
+  display: flex; align-items: center; gap: 10px; padding: 5px 12px;
+  background: rgba(11, 13, 18, 0.9); border-top: 1px solid var(--line);
+  color: var(--muted); font-size: 12px;
+}
+.hit-error[hidden] { display: none; }
+.hit-error-label { white-space: nowrap; }
+.hit-error-track {
+  position: relative; width: 180px; height: 16px; border: 1px solid var(--line);
+  border-radius: 4px; background: #0a0c10; overflow: hidden;
+}
+.hit-error-zero { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--muted); opacity: 0.6; }
+.hit-error-point { position: absolute; top: 2px; width: 3px; height: 12px; border-radius: 1px; transform: translateX(-50%); }
+.hit-error-text { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .controls .seek-wrap { flex-basis: 160px; }
 .time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; white-space: nowrap; }
 .seek-wrap { position: relative; flex: 1; display: flex; align-items: center; }
