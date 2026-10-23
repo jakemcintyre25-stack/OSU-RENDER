@@ -2,6 +2,8 @@
 
 Watch osu!standard replays in the browser. Pick a recent play (or drop in a `.osr`), and the site pulls the replay, beatmap, music and background, then plays it back with WebGL — no render servers, nothing to install.
 
+Release-candidate scope, evidence and known limits: [docs/RELEASE-CANDIDATE.md](docs/RELEASE-CANDIDATE.md).
+
 ## How it fits together
 
 ```
