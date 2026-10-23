@@ -96,3 +96,16 @@ The previous implementation used the union of clipped breaks, a floating-point d
 Implemented as `roundTiesEven`, `stableDrainSeconds` and a rewritten `difficultyMultiplier`. Integration tests parse a real `.osu` with three overlapping breaks and assert the 29-second summed drain, not the previous 50-second union.
 
 **Still open:** the exact-count replay score tables have not been recomputed, and the 3–23× `16558c56` / `2c6d18da` / `3f4e99ff` gap remains unexplained. The no-clamp and banker's-rounding changes are source-derived but still need real-header confirmation. M4 remains IN PROGRESS.
+
+## Combo-bonus integer truncation (23 October 2026)
+
+Stable's per-object score code casts the combined combo × difficulty × mod multiplier to an integer **before** multiplying by the hit value and dividing by 25:
+
+```csharp
+m_iScoreV1 += hitValue + ((hitValue * (unsigned long long)((double)scoreComboMultiplier
+    * (double)difficultyMultiplier * (double)m_osu->getScoreMultiplier())) / 25);
+```
+
+The previous `hitPoints()` kept the full fractional product, which over-scores objects whenever the combined multiplier is fractional (for example HD/HR's 1.06). At combo 10, difficulty 4, HD 1.06: `10 × 4 × 1.06 = 42.4`, stable truncates to 42 and awards 804 for a 300; the old code awarded 808.
+
+`hitPoints()` now truncates the combined multiplier first. This is a small per-object difference that accumulates over thousands of objects and is a plausible contributor to the residual −0.006% on exact-count replays, but those tables still have not been rerun against real headers.
