@@ -53,6 +53,8 @@ export interface PreparedMap {
   title: string;
   artist: string;
   version: string;
+  /** osu! file format version; stable's HP break handling changes below v8. */
+  fileFormat?: number;
   creator: string;
   mods: string[];
   /** Playback speed: 1.5 for DT/NC, 0.75 for HT. */
@@ -184,6 +186,7 @@ export function prepareMap(osuText: string, mods: string[] = []): PreparedMap {
     title: parsed.metadata.title,
     artist: parsed.metadata.artist,
     version: parsed.metadata.version,
+    fileFormat: parsed.fileFormat,
     creator: parsed.metadata.creator,
     mods,
     rate: rateForMods(mods),
