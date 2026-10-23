@@ -80,3 +80,19 @@ This means the first bonus arrives after a 1.5-spin gap beyond completion, not o
 Implemented in `spinnerSpinPoints(halfSpins, requiredHalfSpins)`, fed by the real judged half-spin total. Synthetic tests cover counts before, at and after the bonus threshold.
 
 **Still open:** no historical replay score table above has been recomputed because the rights-cleared replays are not in this environment. The correction is source-derived and unit-tested, not proven against real headers. Spinner bonus points should now stop inflating scores on spinner-heavy maps, but M4 remains IN PROGRESS until the local fixture set is rerun.
+
+## Difficulty multiplier correction: stable drain quirks and banker's rounding (23 October 2026)
+
+Source: [`OsuLegacyScoreSimulator`](https://github.com/ppy/osu/blob/master/osu.Game.Rulesets.Osu/Difficulty/OsuLegacyScoreSimulator.cs) and the stable-compatibility notes in [ppy/osu@02975b9](https://github.com/ppy/osu/commit/02975b94985b5327bd2c953013ed4e6c01bc385d).
+
+The previous implementation used the union of clipped breaks, a floating-point drain time with a one-second floor, `Math.round`, and a 2–6 clamp. None of those match stable's score path:
+
+- Every break is summed, including overlapping and out-of-range breaks. Stable does **not** union or clip them.
+- Break and object endpoints use banker's rounding (`Math.Round` default), then the first-to-last span minus summed breaks is integer-divided by 1000.
+- A zero drain length means density 16, not a divide-by-one guard.
+- The final multiplier uses banker's rounding.
+- The stable path has **no 2–6 clamp**; the rounded value is used directly.
+
+Implemented as `roundTiesEven`, `stableDrainSeconds` and a rewritten `difficultyMultiplier`. Integration tests parse a real `.osu` with three overlapping breaks and assert the 29-second summed drain, not the previous 50-second union.
+
+**Still open:** the exact-count replay score tables have not been recomputed, and the 3–23× `16558c56` / `2c6d18da` / `3f4e99ff` gap remains unexplained. The no-clamp and banker's-rounding changes are source-derived but still need real-header confirmation. M4 remains IN PROGRESS.

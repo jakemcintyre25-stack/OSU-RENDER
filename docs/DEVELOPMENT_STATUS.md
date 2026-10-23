@@ -11,7 +11,7 @@ Updated: 23 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 | M1 Judgement harness | **PASS** | `npm run judge-check`, verbose diagnostics and CI implemented. Empty optional fixtures exit zero. Real replay fixtures stay local. |
 | M2 Stable judgement parity | **IN PROGRESS** | Strict checksum matching rejects updated beatmaps with unchanged IDs; `.osu`-only fallback labels uncertainty. Strict parity mode fails when no stable replay is checked. Slider timing, combo breaks, hit-window edges and 2B autoplay have synthetic tests. Spinner judgement now uses stable's half-spin requirement, one-half-spin-per-frame accumulation and 300/100/50/miss thresholds; stable's acceleration smoothing, exact real-replay parity and complex note-lock remain unverified. |
 | M3 HP and fail | **IN PROGRESS** | Verified SD/PF failure timestamps from circle grades and slider-head/tick/repeat combo breaks, with NF precedence. Exact stable HP drain, hit gains, break pauses, HP timeline and HP-zero failure remain. |
-| M4 Score V1 | **IN PROGRESS** | Running ScoreV1, mod multipliers and slider/spinner part scoring exist; HUD now displays calculated score and details panel compares against the replay header. Spinner points now follow stable's half-spin ticks and 1.5-spin bonus gap instead of switching to 1100 immediately after completion. It is labelled provisional; real header parity remains unverified. |
+| M4 Score V1 | **IN PROGRESS** | Running ScoreV1, mod multipliers and slider/spinner part scoring exist; HUD now displays calculated score and details panel compares against the replay header. Spinner points now follow stable's half-spin ticks and 1.5-spin bonus gap. The difficulty multiplier now uses stable's summed-break drain length, banker's rounding and no 2–6 clamp. It is labelled provisional; real header parity remains unverified. |
 | M5 Audio timing and hitsounds | **IN PROGRESS** | Chart/user .osk hitsounds, successful spinner completion and judged tracked slider loops are scheduled on shared Web Audio time; independent music/FX gains, AudioLeadIn and map-before-skin WAV/MP3/OGG precedence are tested. Browser acoustic parity, spin/bonus sounds, licensed defaults and pitch-preserving DT/HT remain. See docs/M5-FINDINGS.md. |
 | M6 Default skin and visual parity | **OPEN** | Basic Pixi renderer exists; sprite parity, shader, HUD, FL and effects remain. |
 | M7 Custom skins | **IN PROGRESS** | Optional .osk WAV/MP3/OGG hitsounds and slider loops are recognized in root-level archive entries; LayeredHitSounds honored. Visual skin.ini layout, sprites, persistence and default licensed sound set remain OPEN. |
@@ -235,6 +235,15 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - Automated evidence: **193 tracked web tests passed, 12 skipped**, web typecheck passed, production build passed. The concurrent M9 worktree also had 23 untracked export tests; those passed but are not part of this commit.
 - **Both GitHub Actions runs passed** on `5997702` (push `39937721422`, pull request `39937727347`), including the full test, typecheck and build jobs.
 - **M2/M4 remain IN PROGRESS:** stable's acceleration smoothing is not reconstructed and no rights-cleared real replay set was available to rerun `judge-check:strict`. Synthetic tests prove the quoted rules, not real header parity.
+
+### M4 stable difficulty multiplier and drain quirks (23 October 2026)
+
+- Source: `OsuLegacyScoreSimulator` and `CalculateDifficultyPeppyStars` in [ppy/osu](https://github.com/ppy/osu/blob/master/osu.Game.Rulesets.Osu/Difficulty/OsuLegacyScoreSimulator.cs), including the x87/precision rationale in [ppy/osu@02975b9](https://github.com/ppy/osu/commit/02975b94985b5327bd2c953013ed4e6c01bc385d).
+- `stableDrainSeconds` now sums **every** break using banker-rounded endpoints, then integer-divides the first-to-last span. Overlapping breaks are deliberately counted twice, matching stable rather than the previous union/clipping model.
+- `difficultyMultiplier` now treats `drainSeconds === 0` as density 16, uses banker's rounding, and no longer applies the unverified 2–6 clamp.
+- Integration tests parse a real `.osu` with three overlapping breaks and assert the 29-second summed drain; unit tests cover banker rounding and the zero-drain branch.
+- Automated evidence: **196 web tests passed, 12 skipped**, web typecheck passed, production build passed. CI remains authoritative.
+- **M4 remains IN PROGRESS:** the historical replay score tables were not recomputed because the rights-cleared fixtures are unavailable, and the unexplained NM/`3f4e99ff` 3–23× score gap is still open. Source alignment is not real-header proof.
 
 ## Immediate next implementation work
 
