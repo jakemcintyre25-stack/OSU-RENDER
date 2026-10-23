@@ -43,7 +43,7 @@ This is the assembled candidate for the browser osu!standard replay renderer. It
 2. **Unexplained historical score gap.** Three NM/HD replays had header totals 3–23× lower than ScoreV1; their mod bits did not indicate ScoreV2. This remains an open investigation.
 3. **Full lazer rules** (judgements, score model, mod settings) are out of v1 and explicitly rejected.
 4. **Visual parity is partial.** Shaders and complete default-skin sprites remain open; a Flashlight approximation and procedural lighting/follow points exist. Skin fonts, animation and persistence now render, but still need real-browser screenshot comparison.
-5. **Long-duration export acceptance.** 1080p60 exists but has not been benchmarked for a full 3-minute map, peak memory or mobile. Export DT/HT pitch is preserved by WSOLA; real-music artifacts are unmeasured.
+5. **Long-duration export acceptance.** A 10-second 1920×1080/60 export did not complete within 120 seconds in this headless software-WebGL environment, so GPU/real-device performance, a full 3-minute map and peak memory remain unverified. Export DT/HT pitch is preserved by WSOLA; real-music artifacts are unmeasured.
 6. **Deployment and OMM-side links** require explicit authorization; no merge or deploy is performed here.
 
 ## Merge order
