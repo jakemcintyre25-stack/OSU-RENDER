@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { zipSync, strToU8 } from 'fflate';
 import { openOsz } from '../src/load/osz';
-import { visualSkinFiles, decodeVisualSkin, visualSkinConfig, skinComboColor, sliderBallFrame } from '../src/render/skin-visuals';
+import { visualSkinFiles, decodeVisualSkin, visualSkinConfig, skinComboColor, sliderBallFrame, fontDigitLayout } from '../src/render/skin-visuals';
 
 const png = (n: number) => new Uint8Array([137, 80, 78, 71, n]);
 const skin = (files: Record<string, Uint8Array>) => openOsz(zipSync(files));
@@ -55,6 +55,7 @@ describe('M7 .osk visual skin loading', () => {
       cursorRotate: false, cursorExpand: false, cursorCentre: true,
       sliderBallFlip: false, sliderBallFrames: 12, cursorScale: 1,
       comboColors: [], sliderBorder: null, sliderTrackOverride: null, spinnerBackground: null,
+      hitCirclePrefix: 'default', hitCircleOverlap: 0,
     });
     const invalid = skin({ 'skin.ini': strToU8('[General]\nCursorRotate: banana\nSliderBallFrames: 99999') });
     expect(visualSkinConfig(invalid).cursorRotate).toBe(true);
@@ -138,5 +139,35 @@ describe('M7 .osk visual skin loading', () => {
     expect(sliderBallFrame(-1, 3, 100)).toBe(2);
     expect(sliderBallFrame(100, 0)).toBe(0);
     expect(sliderBallFrame(100, 3, 0)).toBe(0);
+  });
+
+  it('parses safe skin font prefixes and overlap values', () => {
+    const archive = skin({ 'skin.ini': strToU8('[Fonts]\nHitCirclePrefix: Custom\nHitCircleOverlap: -6') });
+    expect(visualSkinConfig(archive)).toMatchObject({ hitCirclePrefix: 'custom', hitCircleOverlap: -6 });
+    const invalid = skin({ 'skin.ini': strToU8('[Fonts]\nHitCirclePrefix: ../bad\nHitCircleOverlap: 999') });
+    expect(visualSkinConfig(invalid)).toMatchObject({ hitCirclePrefix: 'default', hitCircleOverlap: 0 });
+  });
+
+  it('resolves font digit sprites for the configured prefix', () => {
+    const archive = skin({
+      'default-0.png': png(1), 'default-1@2x.png': png(2),
+      'custom-3.png': png(3), 'custom-9.png': png(4),
+    });
+    const defaults = visualSkinFiles(archive);
+    expect([...defaults.font0!]).toEqual([...png(1)]);
+    expect([...defaults.font1!]).toEqual([...png(2)]);
+    expect(defaults.font2).toBeUndefined();
+    const custom = visualSkinFiles(archive, 0, 'custom');
+    expect([...custom.font3!]).toEqual([...png(3)]);
+    expect([...custom.font9!]).toEqual([...png(4)]);
+    expect(custom.font0).toBeUndefined();
+  });
+
+  it('lays out font digits centred with overlap', () => {
+    expect(fontDigitLayout([10, 10], -2)).toEqual({ width: 18, positions: [-4, 4] });
+    expect(fontDigitLayout([10, 10], 0)).toEqual({ width: 20, positions: [-5, 5] });
+    expect(fontDigitLayout([10], 0)).toEqual({ width: 10, positions: [0] });
+    expect(fontDigitLayout([], 0)).toEqual({ width: 0, positions: [] });
+    expect(fontDigitLayout([10, 10], 999).width).toBe(148);
   });
 });
