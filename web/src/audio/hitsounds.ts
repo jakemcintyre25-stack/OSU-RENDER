@@ -198,6 +198,10 @@ export function planHitsounds(
     const path = reserve(file, allowSkin);
     if (path) plan.events.push({ t, sample: path, gain: Math.max(0, Math.min(1, volume / 100)) });
   };
+  const sampleAvailable = (file: string) => {
+    const resource = lookupSample(file, true);
+    return Boolean(resource?.bytes && resource.bytes.byteLength <= MAX_SAMPLE_FILE_BYTES);
+  };
   const scheduleLoop = (start: number, end: number, file: string, volume: number) => {
     if (!(end > start) || !Number.isFinite(start) || !Number.isFinite(end)) return;
     if ((plan.loops?.length ?? 0) >= MAX_HITSOUND_EVENTS) return;
@@ -246,9 +250,17 @@ export function planHitsounds(
     }
     const bits = int(row[4]);
     if (kind === 'spinner') {
+      const settings = sampleSettings(row[6]);
+      const timingPoint = activeSample(object.start);
+      const volume = settings.volume || timingPoint.volume;
+      // Real skin/chart spin loop, restricted to the spinner interval. It is
+      // optional; a missing spinnerspin sample must not count as an error.
+      if (sampleAvailable('spinnerspin.wav')) {
+        scheduleLoop(object.start, object.end, 'spinnerspin.wav', volume);
+      }
       // osu!stable allows a spinner to carry a normal + addition hitsound
       // at its end. Do not sound an unsuccessful spinner completion.
-      if (judged.result > 0) scheduleHit(object.end, bits, sampleSettings(row[6]));
+      if (judged.result > 0) scheduleHit(object.end, bits, settings);
       continue;
     }
     if (kind === 'circle') {

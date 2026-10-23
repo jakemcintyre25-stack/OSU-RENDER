@@ -68,4 +68,18 @@ describe('M5 beatmap-defined spinner completion hitsounds', () => {
     expect(planned.events).toHaveLength(2);
     expect(planned.unavailable).toBe(1);
   });
+
+  it('loops a supplied spinnerspin sample over the spinner interval', () => {
+    const osz = openOsz(zipSync({
+      'spinner.osu': strToU8(chart),
+      'spinnerspin.wav': new Uint8Array([7, 8]),
+    }));
+    const map = prepareMap(chart);
+    const judged = judge(map, generateAutoplay(map));
+    const plan = planHitsounds(chart, map, judged, osz, 'spinner.osu');
+    expect(plan.loops).toEqual([
+      { start: 1000, end: 3000, sample: 'spinnerspin.wav', gain: 0.8 },
+    ]);
+    expect(plan.samples.has('spinnerspin.wav')).toBe(true);
+  });
 });

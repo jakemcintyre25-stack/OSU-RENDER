@@ -5,7 +5,7 @@ Updated 23 October 2026. **Status: IN PROGRESS, not full osu!stable audio parity
 ## Implemented
 
 - The .osu file's General/TimingPoints/HitObjects sample metadata is used for real Normal, Soft, Drum, addition layers, sample numbers, volumes and custom filenames.
-- Judged successful circles, slider heads, ticks/repeats and physical tail edges produce sample events. Successful spinner completion emits genuine .osu samples; failed spinner completion does not. The slider's early tail judgement timestamp is distinct from the audible end edge.
+- Judged successful circles, slider heads, ticks/repeats and physical tail edges produce sample events. Successful spinner completion emits genuine .osu samples; failed spinner completion does not. A chart/skin `spinnerspin` sample now loops across the spinner interval when supplied; missing spin audio is optional and is not counted as an unavailable completion sample. The slider's early tail judgement timestamp is distinct from the audible end edge.
 - For indexed auto-generated samples, the beatmap's WAV, MP3 and OGG encodings are checked **before** any skin fallback. Explicit custom sample filenames match exactly and never silently substitute another extension.
 - Real chart/skin `sliderslide` and `sliderwhistle` clips now loop **only over actual judge tracking intervals**. A seek into an existing interval resumes its loop at the appropriate clip phase and aligns with the music source's 50ms startup scheduling lead-in. Loop voice nodes stop at the tracked interval boundary.
 - The selected map's `[General] AudioLeadIn` is parsed with an explicit operational input ceiling and honored at playback start. Existing synthetic PreparedMap fixtures can omit this optional field; actual prepared beatmaps set it.
@@ -23,7 +23,7 @@ Updated 23 October 2026. **Status: IN PROGRESS, not full osu!stable audio parity
 ## Still OPEN or unverified
 
 - A licence-approved set of distributable default skin samples; complete user skin.ini sound options, visual skin sprites and persistence.
-- Spinner spinning/bonus sounds beyond spinner completion; slider tracking exact audible parity on varied real osu!stable replays, sound panning, volume weighting, fade behaviour and sample timestamp edge cases.
+- Spinner bonus-tick sounds (the spin loop itself is implemented); slider tracking exact audible parity on varied real osu!stable replays, sound panning, volume weighting, fade behaviour and sample timestamp edge cases.
 - Pitch-preserving DT/HT time stretching. The current `AudioBufferSourceNode.playbackRate` changes pitch along with playback speed; 0.25×–2× viewer speed has the same limitation.
 - Real browser/Windows audio latency, decode support, MP3 padding/acoustic sync, skin visual integration and offline MP4 audio mix.
 - Real osu! API replay access and real private fixture parity. The normal CI-friendly judgement check is not proof of real parity.
