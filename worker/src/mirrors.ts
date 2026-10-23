@@ -3,7 +3,7 @@
 
 import { HttpError } from './osu';
 import { validateMirrorZip } from './zip-envelope';
-import { MirrorHealth, mirrorHealth } from './mirror-health';
+import { MirrorHealth, mirrorHealth, parseRetryAfter } from './mirror-health';
 
 export const MIRRORS: { name: string; url: (setId: string) => string }[] = [
   { name: 'catboy', url: (id) => `https://catboy.best/d/${id}` },
@@ -30,7 +30,7 @@ export async function fetchBeatmapset(
   const errors: string[] = [];
   for (const m of MIRRORS) {
     if (!health.canAttempt(m.name, now())) {
-      errors.push(`${m.name}: skipped during 10-minute cooldown`);
+      errors.push(`${m.name}: skipped during cooldown`);
       continue;
     }
     try {
@@ -43,7 +43,9 @@ export async function fetchBeatmapset(
         // 404 means this beatmap may be absent, not that the host is unhealthy.
         // Backoff only for server, rate-limit or access failures.
         if (res.status >= 500 || res.status === 429 || res.status === 403) {
-          health.recordFailure(m.name, now());
+          const at = now();
+          const retryAfter = parseRetryAfter(res.headers.get('retry-after'), at);
+          health.recordFailure(m.name, at, retryAfter);
         }
         errors.push(`${m.name}: HTTP ${res.status}`);
         continue;
