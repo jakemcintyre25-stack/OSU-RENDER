@@ -3,6 +3,13 @@
 import { HitSoundPlayer } from './sample-player';
 import type { HitSoundPlan } from './hitsounds';
 
+/** A live tap of the music and hit-effect buses for browser video capture. */
+export interface CaptureAudio {
+  track: MediaStreamTrack;
+  /** Disconnect the tap and stop its track. Safe to call more than once. */
+  dispose: () => void;
+}
+
 export class Clock {
   private ctx: AudioContext;
   private gain: GainNode;
@@ -10,6 +17,7 @@ export class Clock {
   private hitsounds: HitSoundPlayer;
   private buffer: AudioBuffer | null = null;
   private source: AudioBufferSourceNode | null = null;
+  private captureTaps = new Set<{ dest: MediaStreamAudioDestinationNode; track: MediaStreamTrack }>();
   /** Map time (ms) when playback last (re)started. */
   private startMapTime = 0;
   /** AudioContext time (s) when playback last (re)started. */
@@ -71,6 +79,48 @@ export class Clock {
   /** Sound effects use an independent output bus from beatmap music. */
   set effectsVolume(v: number) {
     if (Number.isFinite(v)) this.effectsGain.gain.value = Math.max(0, Math.min(1, v));
+  }
+
+  /** Tap music and hit effects into a real-time MediaStream for video capture.
+   * The returned track is silent while playback is paused, as expected.
+   */
+  createCaptureAudio(): CaptureAudio {
+    if (this.disposed) throw new Error('Audio is no longer available');
+    const dest = this.ctx.createMediaStreamDestination();
+    const track = dest.stream.getAudioTracks()[0];
+    if (!track) throw new Error('Audio capture produced no track');
+    this.gain.connect(dest);
+    this.effectsGain.connect(dest);
+    const tap = { dest, track };
+    this.captureTaps.add(tap);
+    let released = false;
+    return {
+      track,
+      dispose: () => {
+        if (released) return;
+        released = true;
+        this.releaseCaptureTap(tap);
+      },
+    };
+  }
+
+  private releaseCaptureTap(tap: { dest: MediaStreamAudioDestinationNode; track: MediaStreamTrack }): void {
+    if (!this.captureTaps.delete(tap)) return;
+    try {
+      this.gain.disconnect(tap.dest);
+    } catch {
+      /* already disconnected */
+    }
+    try {
+      this.effectsGain.disconnect(tap.dest);
+    } catch {
+      /* already disconnected */
+    }
+    try {
+      tap.track.stop();
+    } catch {
+      /* track already ended */
+    }
   }
 
   /** Current visual map time in ms, including user audio/visual offset. */
@@ -172,6 +222,7 @@ export class Clock {
     this.disposed = true;
     this.playing = false;
     this.stopSource();
+    for (const tap of [...this.captureTaps]) this.releaseCaptureTap(tap);
     this.hitsounds.dispose();
     void this.ctx.close();
   }

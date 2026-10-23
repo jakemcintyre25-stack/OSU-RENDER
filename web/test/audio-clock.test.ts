@@ -1,12 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Clock } from '../src/audio/clock';
 
+interface TestCaptureTap {
+  stream: { getAudioTracks: () => Array<{ kind: string; readyState: string; stop: ReturnType<typeof vi.fn> }> };
+  disconnect: ReturnType<typeof vi.fn>;
+  track: { kind: string; readyState: string; stop: ReturnType<typeof vi.fn> };
+}
+
 class TestAudioContext {
   currentTime = 10;
   state: AudioContextState = 'running';
   destination = {} as AudioDestinationNode;
   gains: Array<{ gain: { value: number }; connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }> = [];
   sources: Array<{ playbackRate: { value: number }; start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }> = [];
+  dests: TestCaptureTap[] = [];
+  createMediaStreamDestination(): MediaStreamAudioDestinationNode {
+    const track = { kind: 'audio', readyState: 'live', stop: vi.fn() };
+    const tap = { stream: { getAudioTracks: () => [track] }, disconnect: vi.fn(), track };
+    this.dests.push(tap);
+    return tap as unknown as MediaStreamAudioDestinationNode;
+  }
   createGain(): GainNode {
     const gain = { gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() };
     this.gains.push(gain);
@@ -186,6 +199,32 @@ describe('Web Audio master clock seek, rate, pause and visual offset', () => {
     expect(audio.sources[1].start.mock.calls[0][0]).toBeCloseTo(10.15, 6);
     clock.dispose();
     expect(audio.sources[1].stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('taps music and hit effects into one capture stream and releases it idempotently', () => {
+    const clock = new Clock();
+    const capture = clock.createCaptureAudio();
+    expect(audio.dests).toHaveLength(1);
+    const dest = audio.dests[0];
+    expect(audio.gains[0].connect).toHaveBeenCalledWith(dest);
+    expect(audio.gains[1].connect).toHaveBeenCalledWith(dest);
+    capture.dispose();
+    capture.dispose();
+    expect(dest.track.stop).toHaveBeenCalledOnce();
+    expect(audio.gains[0].disconnect).toHaveBeenCalledWith(dest);
+    expect(audio.gains[1].disconnect).toHaveBeenCalledWith(dest);
+    clock.dispose();
+  });
+
+  it('releases an active capture tap when the player is disposed', () => {
+    const clock = new Clock();
+    const capture = clock.createCaptureAudio();
+    clock.dispose();
+    expect(audio.dests[0].track.stop).toHaveBeenCalledOnce();
+    expect(audio.gains[0].disconnect).toHaveBeenCalledWith(audio.dests[0]);
+    expect(() => clock.createCaptureAudio()).toThrow('no longer available');
+    capture.dispose();
+    expect(audio.dests[0].track.stop).toHaveBeenCalledOnce();
   });
 
 });

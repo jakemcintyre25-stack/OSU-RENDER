@@ -134,14 +134,16 @@ async function toggleCapture() {
     if (captureAutoStop) clearTimeout(captureAutoStop);
     captureAutoStop = null;
     try {
-      const { blob } = await videoCapture.stop();
+      const { blob, mime, audio } = await videoCapture.stop();
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = safeCaptureFilename(session?.player ?? 'player');
+      link.download = safeCaptureFilename(session?.player ?? 'player', mime);
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      toast('Video-only WebM saved. Audio and MP4 export are not implemented yet.', true);
+      toast(audio
+        ? 'WebM with synchronized audio saved (real-time capture; MP4 export is not implemented yet).'
+        : 'Video-only WebM saved; this browser could not record audio.', true);
     } catch (error) {
       toast((error as Error).message);
     } finally {
@@ -150,13 +152,23 @@ async function toggleCapture() {
     return;
   }
   if (!renderer || !session) return;
+  let audio: ReturnType<Clock['createCaptureAudio']> | null = null;
   try {
-    videoCapture.start(renderer.app.canvas);
+    try {
+      audio = clock?.createCaptureAudio() ?? null;
+    } catch {
+      // A browser without MediaStreamAudioDestinationNode can still record video.
+      audio = null;
+    }
+    const withAudio = videoCapture.start(renderer.app.canvas, 30, { audio });
     // Save before the encoder's hard 60-second safety stop.
     captureAutoStop = setTimeout(() => { if (videoCapture.active) void toggleCapture(); }, 59_000);
     captureButton();
-    toast('Recording video only, maximum 60 seconds. Press Stop recording to save.');
+    toast(withAudio
+      ? 'Recording WebM with synchronized audio, maximum 60 seconds. Press Stop recording to save.'
+      : 'Recording video only, maximum 60 seconds. Press Stop recording to save.');
   } catch (error) {
+    audio?.dispose();
     toast((error as Error).message);
   }
 }
