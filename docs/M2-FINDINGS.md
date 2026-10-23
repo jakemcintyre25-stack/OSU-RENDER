@@ -153,3 +153,17 @@ The previous judge used full spins and a per-millisecond 477 RPM cap. That is no
 Implemented in `web/src/game/prepare.ts` (`spinnerHalfSpinsRequired`), `web/src/game/judge.ts` (`spinnerHalfSpins`, `judgeSpinner`) and `web/src/game/score.ts` (`spinnerSpinPoints`). Synthetic tests cover the requirement formula, both spin directions, direction reversal, the one-half-spin-per-frame cap, key-up gaps, the 300/100/50/miss boundaries and the 1.5-spin bonus gap.
 
 **Still open:** stable's original per-frame acceleration smoothing is not reconstructed, and no rights-cleared real replay has been rerun through `judge-check:strict` for these changes. The spinner fix must be validated against real headers before M2 can claim parity; the synthetic tests only prove the implemented rules match the quoted source logic.
+
+---
+
+## M2 correction: stable note-lock
+
+Date: 23 October 2026. Reference: the [Notelock wiki](https://osu.ppy.sh/wiki/en/Gameplay/Judgement/Notelock).
+
+Round 2's headline structural change — "a click goes to the earliest still-open circle it lands on" — contradicts stable's note-lock. The wiki is explicit: when two hit-object windows overlap and the earlier object is still unjudged, input on the later object is ignored until the earlier object's hit window passes.
+
+The judge now enforces that rule: only the earliest live head (circle or slider head) can receive a press. A click that lands on a later object or on empty space is wasted; it cannot skip an unjudged earlier object. Expiry still releases the lock at the earlier object's MEH-window end. Slider heads remain individually lockable, and a hit slider head immediately releases the lock so later objects can be hit while the slider body is still active.
+
+Tests updated in `judge-matching.test.ts` and `judge-head.test.ts`: a later-object click during the lock is ignored, and the same click succeeds after the earlier object is judged.
+
+**Still open:** the narrow simultaneous-object (2B) tolerance used by stable for objects a few milliseconds apart is not specialised yet, and the previous synthetic/real-replay totals still need a fixture rerun. The round-2 tables above predate this correction.
