@@ -109,3 +109,9 @@ m_iScoreV1 += hitValue + ((hitValue * (unsigned long long)((double)scoreComboMul
 The previous `hitPoints()` kept the full fractional product, which over-scores objects whenever the combined multiplier is fractional (for example HD/HR's 1.06). At combo 10, difficulty 4, HD 1.06: `10 × 4 × 1.06 = 42.4`, stable truncates to 42 and awards 804 for a 300; the old code awarded 808.
 
 `hitPoints()` now truncates the combined multiplier first. This is a small per-object difference that accumulates over thousands of objects and is a plausible contributor to the residual −0.006% on exact-count replays, but those tables still have not been rerun against real headers.
+
+## ScoreV2 detection (23 October 2026)
+
+Stable stores ScoreV2 as mod bit 29. `decodeReplay()` now exposes `scoreV2`, and `judge-check` skips those replays explicitly with `(ScoreV2; M4 tracks ScoreV1)` instead of reporting a misleading score mismatch.
+
+This does **not** explain the three 3–23× gaps: those replay headers had no ScoreV2 bit. They remain unresolved and likely need a different explanation (ruleset/build/header provenance or a non-standard score source). The detection only prevents future ScoreV2 fixtures from being scored as ScoreV1.
