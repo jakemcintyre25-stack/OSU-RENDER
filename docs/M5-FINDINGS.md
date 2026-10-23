@@ -23,7 +23,7 @@ Updated 23 October 2026. **Status: IN PROGRESS, not full osu!stable audio parity
 ## Still OPEN or unverified
 
 - A licence-approved set of distributable default skin samples; complete user skin.ini sound options, visual skin sprites and persistence.
-- Spinner spinning/bonus sounds beyond spinner completion; slider tracking exact audible parity on varied real osu!stable replays, sound panning, volume weighting, fade behaviour and sample timestamp edge cases.
+- Spinner spin-loop volume/frequency modulation and exact stable sample timing; slider tracking exact audible parity on varied real osu!stable replays, sound panning, volume weighting, fade behaviour and sample timestamp edge cases.
 - Pitch-preserving DT/HT time stretching. The current `AudioBufferSourceNode.playbackRate` changes pitch along with playback speed; 0.25×–2× viewer speed has the same limitation.
 - Real browser/Windows audio latency, decode support, MP3 padding/acoustic sync, skin visual integration and offline MP4 audio mix.
 - Real osu! API replay access and real private fixture parity. The normal CI-friendly judgement check is not proof of real parity.
@@ -34,3 +34,14 @@ Updated 23 October 2026. **Status: IN PROGRESS, not full osu!stable audio parity
 2. Complete user skin visuals/remaining sound semantics and spinner loops with sound input grounded in actual replay/chart data.
 3. Continue independent M3 HP/fail and M4 exact ScoreV1 test coverage, plus M2 real-replay validation when exact-MD5 private fixtures are available.
 4. Run headphone/browser listening comparisons with genuine legal .osz/.osk resources once accessible; record acoustic discrepancies rather than calling M5 PASS from synthetic CI.
+
+## Spinner spin/bonus samples (23 October 2026)
+
+The judge now records the timestamp of every counted half-spin while retaining the existing stable half-spin/bonus rules. `judgeSpinner` exposes:
+
+- `spinnerSpinRange` — first-to-last judged half-spin, used for the loop window;
+- `spinnerBonusTicks` — the half-spin timestamps that award stable's 1100-point bonus.
+
+`planHitsounds` uses those timestamps to schedule real `spinnerspin` and `spinnerbonus` assets from the beatmap or a user-selected `.osk`. The loop is limited to the judged spin range and bonus sounds use the same parity threshold as ScoreV1. No default or copyrighted sample is fabricated; absent assets are reported through `unavailable`.
+
+Tests cover a real synthetic `.osk` with both assets, the loop window, bonus-tick placement and the no-spin/no-sound case. **Still unverified:** stable's frequency/volume modulation of the spinning loop, exact sound start phase on seek, and real-browser acoustic parity. M5 remains IN PROGRESS.

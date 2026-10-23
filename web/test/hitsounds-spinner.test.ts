@@ -58,7 +58,9 @@ describe('M5 beatmap-defined spinner completion hitsounds', () => {
     const map = prepareMap(chart);
     const judged = judge(map, []);
     expect(judged.objects[0].result).toBe(0);
-    expect(planHitsounds(chart, map, judged, createArchive(), 'spinner.osu').events).toEqual([]);
+    const planned = planHitsounds(chart, map, judged, createArchive(), 'spinner.osu');
+    expect(planned.events).toEqual([]);
+    expect(planned.loops).toEqual([]);
   });
 
   it('does not manufacture the missing clap layer when its file is absent', () => {
@@ -66,6 +68,27 @@ describe('M5 beatmap-defined spinner completion hitsounds', () => {
     const judged = judge(map, generateAutoplay(map));
     const planned = planHitsounds(chart, map, judged, createArchive(false), 'spinner.osu');
     expect(planned.events).toHaveLength(2);
-    expect(planned.unavailable).toBe(1);
+    // Missing clap plus the absent spinner loop/bonus assets, which are
+    // reported as unavailable rather than synthesized.
+    expect(planned.unavailable).toBeGreaterThanOrEqual(2);
+  });
+
+  it('plays a real user-skin spinnerspin loop and spinnerbonus ticks', () => {
+    const map = prepareMap(chart);
+    const judged = judge(map, generateAutoplay(map));
+    const skin = openOsz(zipSync({
+      'spinnerspin.wav': new Uint8Array([7]),
+      'spinnerbonus.wav': new Uint8Array([8]),
+    }));
+    const planned = planHitsounds(chart, map, judged, createArchive(), 'spinner.osu', skin);
+    expect(planned.loops).toHaveLength(1);
+    const loop = planned.loops![0];
+    expect(loop.sample).toBe('skin:spinnerspin.wav');
+    expect(loop.start).toBeGreaterThanOrEqual(1000);
+    expect(loop.end).toBeLessThanOrEqual(3000);
+    expect(loop.end).toBeGreaterThan(loop.start);
+    const bonuses = planned.events.filter((event) => event.sample === 'skin:spinnerbonus.wav');
+    expect(bonuses.length).toBeGreaterThan(0);
+    expect(bonuses.every((event) => event.t > 1000 && event.t < 3000)).toBe(true);
   });
 });

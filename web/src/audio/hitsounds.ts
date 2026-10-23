@@ -75,8 +75,8 @@ function sampleSettings(value: string | undefined): SampleSettings {
 
 /**
  * Build actual sample events for circles and slider heads, repeats, tails and
- * ticks and spinner end hits. Spinner spin/bonus, skin default samples and continuous slider
- * sliding loops are explicitly not implemented here.
+ * ticks, spinner end hits, and real map/user-skin spinner spin and bonus
+ * samples. Skin default samples are not fabricated or bundled here.
  *
  * Every event references a beatmap-archive file that exists. Object order and
  * timestamp are verified against the prepared osu!standard map; if the parser
@@ -246,9 +246,20 @@ export function planHitsounds(
     }
     const bits = int(row[4]);
     if (kind === 'spinner') {
+      const settings = sampleSettings(row[6]);
+      const volume = settings.volume || activeSample(object.start).volume;
       // osu!stable allows a spinner to carry a normal + addition hitsound
       // at its end. Do not sound an unsuccessful spinner completion.
-      if (judged.result > 0) scheduleHit(object.end, bits, sampleSettings(row[6]));
+      if (judged.result > 0) scheduleHit(object.end, bits, settings);
+      // Real skin/map spinner assets only; no default samples are fabricated.
+      // The loop covers the judged first-to-last half-spin window, and bonus
+      // ticks use stable's half-spin parity threshold from the judge.
+      if (judged.spinnerSpinRange) {
+        scheduleLoop(judged.spinnerSpinRange[0], judged.spinnerSpinRange[1], 'spinnerspin.wav', volume);
+      }
+      for (const t of judged.spinnerBonusTicks ?? []) {
+        scheduleFile(t, 'spinnerbonus.wav', volume);
+      }
       continue;
     }
     if (kind === 'circle') {
