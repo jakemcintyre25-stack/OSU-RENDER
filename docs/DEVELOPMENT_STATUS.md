@@ -18,7 +18,7 @@ Updated: 23 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 | M8 Player page | **IN PROGRESS** | Calculated ScoreV1 HUD, Sync and persisted 0.25×–2× speed, separate music/FX levels, persisted cursor-trail/key-overlay toggles, audio-outro seek range, clickable accessible miss/100 review markers, share-link action and latest-request-wins cancellation. Small-screen controls now wrap without clipping, the HP bar no longer overlaps map text, and toast feedback sits above the controls. Real headless-Chrome screenshots at 1280×720 and 390×844 verify the player; physical mobile/coarse-pointer acceptance remains. |
 | M9 MP4 export | **IN PROGRESS** | Two paths exist: bounded real-time WebM capture with synchronized audio, and a deterministic full-length exporter that steps fixed-FPS map time, mixes music/hitsounds in an OfflineAudioContext, and muxes MP4 (H.264/AAC) or WebM (VP9/VP8 + Opus) through Mediabunny. Export dialog, progress, cancel, codec probing and video-only fallback are implemented with 33 automated export tests. A real headless-Chrome run produced and re-parsed a 1280×720/30 fps MP4: 60 H.264 frames (2.000 s) plus 48 kHz stereo AAC (2.005 s), both starting at 0. DT/HT export music is pitch-stretched with WSOLA. Long-duration 1080p60, real-replay content, memory profiling and mobile acceptance remain OPEN. |
 | M10 Lazer | **IN PROGRESS** | Lazer-origin replays are now detected from their `30000000+` game-version field and rejected with an explicit unsupported message; `judge-check` uses the same real detection. Lazer hit windows, scoring (including judgment and mod settings), replay semantics, skin parity and real lazer fixtures remain OPEN. |
-| M11 Hardening | **IN PROGRESS** | ZIP/CRC32 limits, bounded replay frames, browser and Worker streamed `.osr` / `.osz` / `.osu` downloads, plus local-upload pre-read caps. The Worker replay upstream now uses a 64 MiB streaming ceiling rather than unrestricted allocation. Tested per-isolate mirror breaker: 3 failures → 10-minute cooldown; 404 not counted. Every API and asset response now carries baseline security headers (nosniff, referrer policy, permissions policy, HSTS). R2/global breaker, CSP, decompression testing and production loads remain. |
+| M11 Hardening | **IN PROGRESS** | ZIP/CRC32 limits, bounded replay frames, browser and Worker streamed `.osr` / `.osz` / `.osu` downloads, plus local-upload pre-read caps. The Worker replay upstream now uses a 64 MiB streaming ceiling rather than unrestricted allocation. Tested per-isolate mirror breaker: 3 failures → 10-minute cooldown; 404 not counted. Every API and asset response carries baseline security headers (nosniff, referrer policy, permissions policy, HSTS). An optional KV-backed global mirror-health implementation is available through the `MIRROR_HEALTH` binding, with the per-isolate breaker as the default fallback. CSP, durable atomic coordination, decompression testing and production loads remain. |
 
 | M12 One Miss Merchants links | **IN PROGRESS** | Validated `?user=<osu ID>` auto-list and `?score=<score ID>` playback, canonical copy-link action, documented OMM read-only external-link contract in docs/INTEGRATION.md. OMM-side profile/match links, actual hostname, API/live-browser acceptance and rollback work remain OPEN. |
 
@@ -330,7 +330,17 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - Headers are replaced, not appended, so a weaker upstream/asset value cannot win. Response bodies, statuses and existing content types are preserved.
 - Tests cover health, method/not-found errors, static assets and duplicate-header replacement.
 - Automated evidence: **50 worker tests passed**, worker typecheck passed. Web tests are unaffected.
-- **M11 remains IN PROGRESS:** CSP needs a real-browser/export policy check before enabling; global/durable breaker, decompression testing, security audit and production load remain OPEN.
+- **M11 remains IN PROGRESS:** CSP needs a real-browser/export policy check before enabling; decompression testing, security audit and production load remain OPEN.
+
+### M11 optional KV-backed mirror health (24 October 2026)
+
+- Refactored the failure/cooldown decision into one pure `nextMirrorStatus()` transition shared by the in-memory and KV implementations.
+- Added `KvMirrorHealth` using an optional `MIRROR_HEALTH` KV binding. It preserves the 3-failure threshold, 10-minute cooldown, 24-hour Retry-After cap, 404 exemption and never-shorten rule.
+- `fetchBeatmapset` now awaits a sync/async `MirrorHealthLike`, so the per-isolate `mirrorHealth` remains the default when no KV binding is configured.
+- No binding is added to `wrangler.jsonc` by default; operators can opt in with the documented comment.
+- Tests cover KV round-trips, cross-instance cooldown sharing, Retry-After, corrupt entries and the fetch fallback.
+- Automated evidence: **53 worker tests passed**, worker typecheck passed.
+- **Still OPEN:** KV is eventually consistent, not atomic; real Cloudflare load/consistency testing and a durable breaker remain. This does not claim production M11 completion.
 ### M5 pitch-preserving DT/HT preview (24 October 2026)
 
 - New dependency-free WSOLA stretcher (udio/time-stretch.ts) preserves pitch while changing playback duration; Clock.prepareRate(rate) caches a stretched buffer per rate and startSource plays it at rate 1 with rate-divided offsets. Preparation failure falls back to pitch-changing playbackRate with an explicit warning.

@@ -1,9 +1,12 @@
 import { getRecentPlays, getReplay, lookupBeatmapByChecksum, HttpError, type OsuEnv } from './osu';
 import { fetchBeatmapset, fetchOsuFile } from './mirrors';
+import { KvMirrorHealth, mirrorHealth } from './mirror-health';
 
 export interface Env extends OsuEnv {
   ASSETS: Fetcher;
   LIMITER?: RateLimit;
+  /** Optional KV namespace for cross-isolate mirror reputation. */
+  MIRROR_HEALTH?: KVNamespace;
 }
 
 const json = (data: unknown, status = 200, extra: HeadersInit = {}) =>
@@ -88,7 +91,8 @@ export async function handleApi(req: Request, env: Env, ctx: ExecutionContext): 
     if (!ID.test(m[1])) return json({ error: 'Bad beatmapset ID' }, 400);
     const id = m[1];
     return cached(req, ctx, 60 * 60 * 24 * 7, async () => {
-      const { body, mirror } = await fetchBeatmapset(id);
+      const health = env.MIRROR_HEALTH ? new KvMirrorHealth(env.MIRROR_HEALTH) : mirrorHealth;
+      const { body, mirror } = await fetchBeatmapset(id, fetch, health);
       return new Response(body, { headers: { 'Content-Type': 'application/zip', 'X-Mirror': mirror } });
     });
   }
