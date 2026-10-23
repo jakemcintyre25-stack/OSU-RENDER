@@ -150,8 +150,13 @@ footer { margin-top: 24px; text-align: center; }
 @media (max-width: 720px) {
   .controls { flex-wrap: wrap; gap: 6px; padding: 6px 8px; }
   .controls .ctl { flex: 1 1 auto; }
+  .controls button { min-width: 0; font-size: 12px; padding: 6px 8px; }
+  .controls #capture-video,
+  .controls #export-video,
+  .controls #share-score { flex: 1 1 calc(33.333% - 6px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .hpbar { top: 8px; left: 8px; width: min(200px, 55vw); height: 12px; }
   .fail { font-size: clamp(22px, 10vw, 40px); }
+  .toast { bottom: 128px; font-size: 13px; }
 }
 @media (pointer: coarse) {
   .markers .marker { width: 14px; }

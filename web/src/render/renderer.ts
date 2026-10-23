@@ -281,6 +281,9 @@ export class PlayfieldRenderer {
     this.scoreText.position.set(w - 14 * u, 50 * u);
     this.infoText.scale.set(u);
     this.infoText.position.set(14 * u, 10 * u);
+    // On narrow screens the HP bar occupies the top-left; map/player text
+    // would overlap it, so keep the playfield clear.
+    this.infoText.visible = w >= 640;
     const res = this.app.renderer.resolution;
     for (const t of [this.comboText, this.accText, this.scoreText, this.infoText]) t.resolution = res;
     this.keyBoxes.forEach((k, i) => {
