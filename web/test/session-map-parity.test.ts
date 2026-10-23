@@ -59,6 +59,8 @@ describe('replay -> beatmap provenance', () => {
     const session = await sessionFromReplay(await replayBytes(), fakeArchive(hash), null, 4444);
     expect(session.replay?.beatmapMD5).toBe(hash);
     expect(session.map.objects).toHaveLength(1);
+    expect(session.hp.coefficients.maximum).toBe(200);
+    expect(session.hp.trace.snapshots.length).toBeGreaterThan(0);
     expect(session.warnings.some((w) => /checksum|does not match/i.test(w))).toBe(false);
   });
 

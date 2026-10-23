@@ -5,12 +5,15 @@ import { decodeReplay, type LoadedReplay, type ReplayFrame } from './load/replay
 import { prepareMap, type PreparedMap } from './game/prepare';
 import { generateAutoplay } from './game/autoplay';
 import { judge, type Judgement } from './game/judge';
+import { stableHpFromJudgement, type StableHpTrace } from './game/hp-stable';
 import { planHitsounds, type HitSoundPlan } from './audio/hitsounds';
 
 export interface Session {
   map: PreparedMap;
   frames: ReplayFrame[];
   judgement: Judgement;
+  /** Stable-parity HP trace and calibrated failure time for this play. */
+  hp: StableHpTrace;
   replay: LoadedReplay | null;
   player: string;
   audio: ArrayBuffer | null;
@@ -79,6 +82,7 @@ async function finish(
   if (osz && map.audioFile && !audioBytes) warnings.push(`The map's audio file (${map.audioFile}) is missing from the download.`);
   const background = await decodeImage(asset(map.backgroundFile));
   const judgement = judge(map, frames);
+  const hp = stableHpFromJudgement(map, judgement);
   let hitsounds: HitSoundPlan = { events: [], samples: new Map(), unavailable: 0 };
   if (osz || skinArchive) {
     try {
@@ -89,7 +93,7 @@ async function finish(
     }
   }
   return {
-    map, frames, judgement, replay: null, player,
+    map, frames, judgement, hp, replay: null, player,
     audio: audioBytes ? toArrayBuffer(audioBytes) : null,
     hitsounds, background, warnings,
   };
