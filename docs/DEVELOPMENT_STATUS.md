@@ -16,7 +16,7 @@ Updated: 23 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 | M6 Default skin and visual parity | **OPEN** | Basic Pixi renderer exists; sprite parity, shader, HUD, FL and effects remain. |
 | M7 Custom skins | **IN PROGRESS** | Optional .osk WAV/MP3/OGG hitsounds and slider loops are recognized in root-level archive entries; LayeredHitSounds honored. Visual skin.ini layout, sprites, persistence and default licensed sound set remain OPEN. |
 | M8 Player page | **IN PROGRESS** | Calculated ScoreV1 HUD, Sync and persisted 0.25×–2× speed, separate music/FX levels, persisted cursor-trail/key-overlay toggles, audio-outro seek range, clickable accessible miss/100 review markers, share-link action and latest-request-wins cancellation. Unit, abort and build checks pass; actual browser/mobile acceptance remains. |
-| M9 MP4 export | **IN PROGRESS** | Browser WebM MediaRecorder video-only capture works in tested recorder mocks, with supported codec negotiation, bounded size/time, cancellation, track cleanup and safe download. Not MP4: synchronized audio, deterministic offline rendering, browser-device acceptance, and full replay export remain OPEN. |
+| M9 MP4 export | **IN PROGRESS** | Real-time WebM MediaRecorder capture records the live canvas plus a synchronized music/hit-effect audio tap, with Opus codec negotiation, video-only fallback, bounded size/time, cancellation, track cleanup and safe download. Not MP4 and not deterministic: offline fixed-FPS rendering, full-length export beyond 60 seconds, browser-device acoustic acceptance and native MP4 remain OPEN. |
 | M10 Lazer | **OPEN** | Legacy/stable only; lazer detection and rule set remain. |
 | M11 Hardening | **IN PROGRESS** | ZIP/CRC32 limits, bounded replay frames, browser and Worker streamed `.osr` / `.osz` / `.osu` downloads, plus local-upload pre-read caps. The Worker replay upstream now uses a 64 MiB streaming ceiling rather than unrestricted allocation. Tested per-isolate mirror breaker: 3 failures → 10-minute cooldown; 404 not counted. R2/global breaker, security audit, decompression testing and production loads remain. |
 | M12 One Miss Merchants links | **IN PROGRESS** | Validated `?user=<osu ID>` auto-list and `?score=<score ID>` playback, canonical copy-link action, documented OMM read-only external-link contract in docs/INTEGRATION.md. OMM-side profile/match links, actual hostname, API/live-browser acceptance and rollback work remain OPEN. |
@@ -215,13 +215,22 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - `c3473cb8`: corrected the recorder-stop test fixture to provide a video track, preserving the production guard and the intended stop-failure assertion. **Both GitHub Actions runs passed** on `c3473cb84798aed45581900d580cbac298a4a541` (IDs `39911773354` and `39911780104`).
 - M9 is now **IN PROGRESS**, not OPEN or PASS. WebM recorder tests are instrumented mocks; no real-browser codec, audio-sync or MP4 acceptance has occurred.
 
+### M9 synchronized-audio capture (23 October 2026)
+
+- Prior checkpoint `ff75aaa` kept the recorder lifecycle green. `8d72fad` adds a real-time audio tap without changing preview playback or the master clock.
+- `Clock.createCaptureAudio()` connects the independent music and hit-effect buses to one `MediaStreamAudioDestinationNode`, returns its audio track, and releases the graph/track idempotently on recorder stop, cancellation or player disposal.
+- `ReplayVideoCapture` negotiates Opus WebM codecs when an audio tap is supplied, adds the track to the canvas stream, reports whether audio was actually captured, and falls back to the existing video-only path when the browser cannot mux Opus. Every success, error and stop-throw path now releases both media tracks and the audio tap.
+- Player copy distinguishes “WebM with synchronized audio” from video-only fallback, and the download filename follows the negotiated container.
+- Automated evidence: **192 web tests passed, 12 skipped** (5 new audio-capture tests), **42 worker tests passed**, web typecheck passed, production build passed. This sandbox could not use Vitest's default forked pool or the `judge-check` child-process test (piped child-process spawn is denied); those were run as far as the sandbox allows with `--pool=threads`, so GitHub Actions remains the authoritative full-CI check.
+- **Still OPEN:** this is real-time MediaRecorder capture, not deterministic fixed-FPS rendering; it is WebM-only, capped at 60 seconds/256 MiB, and has not been acoustically verified on a real browser or device. Native MP4, offline audio mixing, full-length export, frame-drop resistance and A/V timestamp inspection remain M9 acceptance work.
+
 ## Immediate next implementation work
 
 1. **Independent:** finish M3's calibrated HP drain/gain, no-drain-during-breaks and HP-zero failure checks. Maintain explicit stable parity uncertainty until real evidence exists.
 2. **Independent:** fill out M8 timeline marker interactions, additional tested controls, and M5/M7 sound/skin semantics without distributing copyrighted samples.
 3. **Requires local rights-cleared fixtures:** run `npm run judge-check:strict` on exact-MD5-matched real osu!stable `.osr`/`.osz` pairs and the optional all-difficulties Renatus autoplay test. Resolve counts/combo/score parity before declaring M2/M4 PASS.
 4. **Requires integration environment:** run a real-browser/audio and Windows standalone EXE smoke test; establish the separate renderer hostname and OMM profile/match link contract. OMM-side deployment/merges remain unauthorized and are not prerequisites for independent work.
-5. Open beyond those: default/custom visual skin parity, DT/HT pitch-preserving stretch, full video/audio MP4 export, lazer rules and production hardening.
+5. Open beyond those: default/custom visual skin parity, DT/HT pitch-preserving stretch, deterministic full-length WebCodecs/MP4 export (real-time WebM with synchronized audio now exists), lazer rules and production hardening.
 
 ## GitHub recovery and safety
 
