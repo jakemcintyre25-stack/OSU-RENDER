@@ -97,7 +97,25 @@ export class ReplayVideoCapture {
   stop(): Promise<CaptureResult> {
     if (!this.recorder || !this.promise) return Promise.reject(new Error('No active capture'));
     const promise = this.promise;
-    if (this.recorder.state !== 'inactive') this.recorder.stop();
+    if (this.recorder.state !== 'inactive') {
+      try {
+        this.recorder.stop();
+      } catch (error) {
+        // A browser encoder can throw synchronously without ever firing onstop.
+        // Release its tracks and settle the capture instead of leaving a hanging promise.
+        const recorder = this.recorder;
+        const stream = recorder.stream;
+        if (this.timeout) clearTimeout(this.timeout);
+        this.timeout = null;
+        stream.getTracks().forEach(track => track.stop());
+        this.recorder = null;
+        this.chunks = [];
+        this.resolve = null;
+        this.reject?.(error instanceof Error ? error : new Error('Failed to stop browser video encoder'));
+        this.reject = null;
+        this.promise = null;
+      }
+    }
     return promise;
   }
 
