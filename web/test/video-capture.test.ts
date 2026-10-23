@@ -6,7 +6,7 @@ describe('M9 browser video capture', () => {
 
   it('records actual recorder chunks and releases media tracks on stop', async () => {
     const stopTrack = vi.fn();
-    const stream = { getTracks: () => [{ stop: stopTrack }] };
+    const stream = { getTracks: () => [{ stop: stopTrack }], getVideoTracks: () => [{}] };
     const canvas = { captureStream: vi.fn(() => stream) } as unknown as HTMLCanvasElement;
     class FakeRecorder {
       static isTypeSupported = (mime: string) => mime === 'video/webm';
@@ -34,9 +34,20 @@ describe('M9 browser video capture', () => {
     expect(canvas.captureStream).toHaveBeenCalledWith(30);
   });
 
+  it('rejects a canvas stream with no video track and releases stray tracks', () => {
+    const stopTrack = vi.fn();
+    const canvas = { captureStream: () => ({
+      getVideoTracks: () => [], getTracks: () => [{ stop: stopTrack }],
+    }) } as unknown as HTMLCanvasElement;
+    class FakeRecorder { static isTypeSupported = () => true; }
+    vi.stubGlobal('MediaRecorder', FakeRecorder);
+    expect(() => new ReplayVideoCapture().start(canvas)).toThrow('no video track');
+    expect(stopTrack).toHaveBeenCalledOnce();
+  });
+
   it('cleans up media tracks and permits retry when recorder.start throws', () => {
     const stopTrack = vi.fn();
-    const canvas = { captureStream: () => ({ getTracks: () => [{ stop: stopTrack }] }) } as unknown as HTMLCanvasElement;
+    const canvas = { captureStream: () => ({ getTracks: () => [{ stop: stopTrack }], getVideoTracks: () => [{}] }) } as unknown as HTMLCanvasElement;
     class BrokenRecorder {
       static isTypeSupported = () => true;
       start() { throw new Error('encoder initialization failed'); }
