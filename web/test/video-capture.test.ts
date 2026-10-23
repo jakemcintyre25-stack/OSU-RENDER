@@ -62,7 +62,7 @@ describe('M9 browser video capture', () => {
 
   it('rejects and releases tracks when a browser encoder throws during stop', async () => {
     const stopTrack = vi.fn();
-    const stream = { getTracks: () => [{ stop: stopTrack }] };
+    const stream = { getTracks: () => [{ stop: stopTrack }], getVideoTracks: () => [{}] };
     const canvas = { captureStream: () => stream } as unknown as HTMLCanvasElement;
     class BrokenStopRecorder {
       static isTypeSupported = () => true;
