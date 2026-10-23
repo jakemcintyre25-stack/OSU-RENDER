@@ -28,14 +28,16 @@ SliderTickRate:1
 100,100,101000,1,0,0:0:0:0:
 `;
 
-describe('real map ScoreV1 active drain-time integration', () => {
-  it('subtracts the union of overlapping breaks instead of double counting them', () => {
+describe('real map ScoreV1 stable drain-time integration', () => {
+  it('reproduces stable summing overlapping breaks instead of unioning them', () => {
     const map = prepareMap(source);
-    // The union [10000,60000] removes 50 seconds from a 100-second interval.
-    expect(map.scoreDifficulty).toBe(difficultyMultiplier(5, 4, 5, 2, 50));
+    // Stable sums 30s + 30s + 11s = 71s, leaving 29 seconds of a 100-second interval.
+    expect(map.scoreDifficulty).toBe(difficultyMultiplier(5, 4, 5, 2, 29));
   });
-  it('retains identical ScoreV1 difficulty when overlapping breaks are merged', () => {
+  it('uses a different drain length when overlapping breaks are merged', () => {
     const merged = source.replace('2,10000,40000\n2,20000,50000\n2,49000,60000', '2,10000,60000');
-    expect(prepareMap(source).scoreDifficulty).toBe(prepareMap(merged).scoreDifficulty);
+    // The merged break is 50s, leaving 50 seconds. This documents stable's
+    // overlapping-break quirk rather than treating merged breaks as equivalent.
+    expect(prepareMap(merged).scoreDifficulty).toBe(difficultyMultiplier(5, 4, 5, 2, 50));
   });
 });

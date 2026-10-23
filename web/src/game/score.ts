@@ -24,13 +24,50 @@ export function modMultiplier(mods: string[]): number {
   return [...active].reduce((m, mod) => m * (MOD_MULTIPLIERS[mod] ?? 1), 1);
 }
 
+/** C# `Math.Round` default: round midpoint values to the nearest even integer. */
+export function roundTiesEven(value: number): number {
+  const floor = Math.floor(value);
+  const fraction = value - floor;
+  if (fraction === 0.5) return floor % 2 === 0 ? floor : floor + 1;
+  return Math.round(value);
+}
+
+/**
+ * osu!stable's ScoreV1 drain length, in truncated whole seconds.
+ *
+ * Stable sums EVERY break — overlapping and out-of-range breaks are not
+ * unioned or clipped — after rounding each endpoint with banker's rounding,
+ * then performs integer division by 1000. This reproduces a stable quirk that
+ * the previous union/clipping implementation intentionally "fixed" but which
+ * is required for exact score parity.
+ */
+export function stableDrainSeconds(
+  firstStart: number,
+  lastStart: number,
+  breaks: ReadonlyArray<{ start: number; end: number }>,
+): number {
+  const first = roundTiesEven(firstStart);
+  const last = roundTiesEven(lastStart);
+  const breakMs = breaks.reduce(
+    (sum, b) => sum + (roundTiesEven(b.end) - roundTiesEven(b.start)),
+    0,
+  );
+  return Math.trunc((last - first - breakMs) / 1000);
+}
+
 /**
  * ScoreV1 difficulty multiplier. Uses the map's ORIGINAL HP/CS/OD (mods do not change them),
- * the object count, and the drain time in seconds (breaks excluded).
+ * the object count, and stable's integer-second drain length.
+ *
+ * Stable's source path has no 2..6 clamp: the rounded value is used directly.
+ * A zero drain length means density 16 (the `CalculateDifficultyPeppyStars`
+ * branch), not a guard against division by zero.
  */
 export function difficultyMultiplier(hp: number, cs: number, od: number, objectCount: number, drainSeconds: number): number {
-  const density = Math.min(16, Math.max(0, (objectCount / Math.max(1, drainSeconds)) * 8));
-  return Math.max(2, Math.min(6, Math.round(((hp + cs + od + density) / 38) * 5)));
+  const density = drainSeconds !== 0
+    ? Math.min(16, Math.max(0, (objectCount / drainSeconds) * 8))
+    : 16;
+  return roundTiesEven(((hp + cs + od + density) / 38) * 5);
 }
 
 /**

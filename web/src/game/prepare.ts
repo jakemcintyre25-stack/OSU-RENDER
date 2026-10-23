@@ -4,9 +4,8 @@
 
 import { BeatmapDecoder } from 'osu-parsers';
 import { StandardRuleset, Circle, Slider, Spinner, SliderTick, SliderRepeat, SliderTail } from 'osu-standard-stable';
-import { difficultyMultiplier } from './score';
+import { difficultyMultiplier, stableDrainSeconds } from './score';
 import { parseAudioLeadIn } from '../audio/lead-in';
-import { activeDrainMilliseconds } from './hp-timeline';
 
 export interface Vec {
   x: number;
@@ -103,15 +102,17 @@ export function prepareMap(osuText: string, mods: string[] = []): PreparedMap {
   // ScoreV1 uses the map's original values; mods don't change the difficulty multiplier's inputs.
   const original = ruleset.applyToBeatmapWithMods(parsed, ruleset.createModCombination('NM'));
   const originalHits = original.hitObjects;
-  // A beatmap may contain overlapping, adjacent or out-of-range breaks.
-  // Union and clip them before excluding paused time from ScoreV1 density.
-  // Preserve the established first-to-last object-start density convention.
+  // Stable score parity requires its own drain-length quirks: every break is
+  // summed (overlapping breaks count twice), endpoints use banker's rounding,
+  // and the result is truncated to whole seconds. Preserve the established
+  // first-to-last object-start density convention.
   const firstStart = originalHits[0]?.startTime ?? 0;
   const lastStart = originalHits.at(-1)?.startTime ?? firstStart;
-  const drainSeconds = Math.max(1, activeDrainMilliseconds(
-    firstStart, lastStart,
+  const drainSeconds = stableDrainSeconds(
+    firstStart,
+    lastStart,
     (parsed.events.breaks ?? []).map(b => ({ start: b.startTime, end: b.endTime })),
-  ) / 1000);
+  );
   const scoreDifficulty = difficultyMultiplier(
     original.difficulty.drainRate,
     original.difficulty.circleSize,
