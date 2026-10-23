@@ -59,7 +59,7 @@ Done:
 - Worker: recent plays, replay download, beatmap mirrors with fallback, checksum lookup, edge caching, rate limit
 - Map prep: mods (EZ/HR/HD/DT/NC/HT), stacking, slider paths, ticks/repeats, combo colours
 - Playback: music-synced clock, song-outro-aware seek, AudioLeadIn, independent music/FX volumes, persisted sync offset and 0.25×–2× viewer speed; beatmap and user-.osk circle/slider/spinner sounds, judged slider loops and spinner loop/bonus clips use Web Audio
-- Drawing: hit circles, approach circles, snaking slider bodies, reverse arrows, ticks, slider ball + follow circle, spinners, hit lighting, follow points, HD fades, cursor + trail, key overlay, combo/accuracy, 100/50/miss popups, miss markers on the timeline
+- Drawing: hit circles, approach circles, snaking slider bodies, reverse arrows, ticks, slider ball + follow circle, spinners, hit lighting, follow points, Flashlight overlay, HD fades, cursor + trail, key overlay, combo/accuracy, 100/50/miss popups, miss markers on the timeline
 - Judgement v0: hit windows, note-lock, slider tracking, spinners, combo. Compared against the replay's own counts in the ⓘ panel
 - HP engine: stable's simulated drain search, hit/combo-end gains, nested slider/spinner health, break pauses and negative-judgement HP-zero failure, with a visible player HP bar and fail overlay
 - Autoplay generator (used for map preview and tests — judges 100% on the test map)
