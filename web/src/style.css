@@ -117,3 +117,9 @@ footer { margin-top: 24px; text-align: center; }
   background: #2a1414; border: 1px solid #5a2323; color: #ffd6d6; padding: 10px 14px; border-radius: 10px; font-size: 14px;
 }
 .toast.ok { background: #10242a; border-color: #1d4a55; color: #d6f6ff; }
+
+.link-button {
+  background: none; border: 0; padding: 0; color: var(--muted); font-size: 13px;
+  text-decoration: underline; cursor: pointer;
+}
+.link-button:hover { color: var(--text); filter: none; }
