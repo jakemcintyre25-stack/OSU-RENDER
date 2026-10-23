@@ -680,7 +680,7 @@ export class PlayfieldRenderer {
       if (d.skinBall) {
         d.skinBall.position.set(b.x, b.y);
         if (this.sliderBallTextures.length > 1) {
-          d.skinBall.texture = this.sliderBallTextures[sliderBallFrame(t, this.sliderBallTextures.length)];
+          d.skinBall.texture = this.sliderBallTextures[sliderBallFrame(t, this.sliderBallTextures.length, 1000 / Math.max(1, this.skinConfig.animationFramerate))];
         }
         const span = Math.max(0, Math.min(s.spans - 1, Math.floor((t - s.start) / Math.max(1, s.spanDuration))));
         const reverse = this.skinConfig.sliderBallFlip && span % 2 === 1;

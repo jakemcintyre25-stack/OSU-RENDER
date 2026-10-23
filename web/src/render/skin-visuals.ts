@@ -15,6 +15,8 @@ export interface VisualSkinConfig {
   cursorCentre: boolean;
   sliderBallFlip: boolean;
   sliderBallFrames: number;
+  /** [General] AnimationFramerate; 60 when absent/invalid. */
+  animationFramerate: number;
   /** 128 px skin cursor scaling; 1 is the osu! default. */
   cursorScale: number;
   /** [Colours] Combo1..Combo8 overrides, empty when the skin has none. */
@@ -30,7 +32,7 @@ export interface VisualSkinConfig {
 
 export const DEFAULT_VISUAL_SKIN_CONFIG: VisualSkinConfig = {
   cursorRotate: true, cursorExpand: true, cursorCentre: true,
-  sliderBallFlip: true, sliderBallFrames: 1, cursorScale: 1,
+  sliderBallFlip: true, sliderBallFrames: 1, animationFramerate: 60, cursorScale: 1,
   comboColors: [], sliderBorder: null, sliderTrackOverride: null, spinnerBackground: null,
   hitCirclePrefix: 'default', hitCircleOverlap: 0,
 };
@@ -69,6 +71,10 @@ export function visualSkinConfig(skin: OszArchive): VisualSkinConfig {
       if (key === 'sliderballframes' && /^\d+$/.test(value)) {
         const n = Number(value);
         if (n >= 1 && n <= 128) config.sliderBallFrames = n;
+      }
+      if (key === 'animationframerate' && /^\d+$/.test(value)) {
+        const n = Number(value);
+        if (n >= 1 && n <= 120) config.animationFramerate = n;
       }
       if (key === 'cursorscale' && /^\d+(?:\.\d+)?$/.test(value)) {
         const n = Number(value);
