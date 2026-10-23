@@ -5,7 +5,7 @@ export const VISUAL_SKIN_KEYS = [
   'cursor', 'cursormiddle', 'cursortrail', 'reversearrow', 'sliderstartcircle',
   'sliderendcircle', 'spinner-background', 'spinner-circle', 'spinner-approachcircle',
 ] as const;
-export type VisualSkinKey = typeof VISUAL_SKIN_KEYS[number];
+export type VisualSkinKey = typeof VISUAL_SKIN_KEYS[number] | `sliderb${number}`;
 export type VisualSkinFiles = Partial<Record<VisualSkinKey, Uint8Array>>;
 
 export interface VisualSkinConfig {
@@ -97,7 +97,7 @@ export function skinComboColor(mapColors: number[], mapColor: number, skinColors
 /** Resolve supported .osk root sprites. @2x assets take priority over 1x.
  * No nested files, arbitrary paths, SVG, or untrusted skin.ini references.
  */
-export function visualSkinFiles(skin: OszArchive): VisualSkinFiles {
+export function visualSkinFiles(skin: OszArchive, sliderBallFrames = 0): VisualSkinFiles {
   const found: VisualSkinFiles = {};
   for (const key of VISUAL_SKIN_KEYS) {
     const hi = skin.files.get(`${key}@2x.png`);
@@ -105,7 +105,20 @@ export function visualSkinFiles(skin: OszArchive): VisualSkinFiles {
     if (hi?.length) found[key] = hi;
     else if (lo?.length) found[key] = lo;
   }
+  const frameCount = Math.max(0, Math.min(128, Math.floor(sliderBallFrames)));
+  for (let i = 0; i < frameCount; i++) {
+    const hi = skin.files.get(`sliderb${i}@2x.png`);
+    const lo = skin.files.get(`sliderb${i}.png`);
+    if (hi?.length) found[`sliderb${i}`] = hi;
+    else if (lo?.length) found[`sliderb${i}`] = lo;
+  }
   return found;
+}
+
+/** Deterministic slider-ball animation frame at map time t. */
+export function sliderBallFrame(t: number, frameCount: number, frameMs = 1000 / 60): number {
+  if (!Number.isFinite(t) || !Number.isInteger(frameCount) || frameCount < 1 || !(frameMs > 0)) return 0;
+  return ((Math.floor(t / frameMs) % frameCount) + frameCount) % frameCount;
 }
 
 export async function decodeVisualSkin(
@@ -113,7 +126,9 @@ export async function decodeVisualSkin(
   decode: (bytes: Uint8Array) => Promise<ImageBitmap | HTMLImageElement>,
 ): Promise<Partial<Record<VisualSkinKey, ImageBitmap | HTMLImageElement>>> {
   const result: Partial<Record<VisualSkinKey, ImageBitmap | HTMLImageElement>> = {};
-  for (const [key, bytes] of Object.entries(visualSkinFiles(skin))) {
+  const config = visualSkinConfig(skin);
+  for (const [key, bytes] of Object.entries(visualSkinFiles(skin, config.sliderBallFrames))) {
+    if (!bytes) continue;
     try {
       result[key as VisualSkinKey] = await decode(bytes);
     } catch {

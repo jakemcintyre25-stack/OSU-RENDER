@@ -70,7 +70,7 @@ Next (see the build plan):
 
 - Judgement to exact stable parity (slider leniency, 2B, spinner rpm, score V1, HP)
 - Finish default/user skin graphics, spinner rotation/bonus sounds, and pitch-preserving DT/HT time stretch. Slider loops already exist for recorded tracking sections but still require real-browser acoustic acceptance
-- Remaining visual work: shaders, animated slider-ball frames, skin fonts/HitCircleOverlap, selected-skin persistence, default licensed sounds and real-browser visual comparison
+- Remaining visual work: shaders, skin fonts/HitCircleOverlap, selected-skin persistence, default licensed sounds and real-browser visual comparison
 - Deterministic full-length export with WebCodecs and native MP4 (current capture is real-time WebM, capped at 60 seconds, and not frame-perfect)
 - Lazer score rules
 - Complete One Miss Merchants profile/match links (the renderer-side `?user=<osu ID>` and `?score=<score ID>` routes and Share replay button are implemented; see `docs/INTEGRATION.md`)
