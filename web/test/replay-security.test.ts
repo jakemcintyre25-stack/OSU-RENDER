@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanFrames, cursorAt, REPLAY_LIMITS, type ReplayFrame } from '../src/load/replay';
+import { cleanFrames, cursorAt, isScoreV2Mods, REPLAY_LIMITS, SCORE_V2_MOD_BIT, type ReplayFrame } from '../src/load/replay';
 
 const good = (t: number): ReplayFrame => ({ t, x: 256, y: 192, keys: 0 });
 
@@ -35,6 +35,12 @@ describe('replay input safety before judgement and WebGL rendering', () => {
       expect(() => cleanFrames([{ ...good(10), keys }])).toThrow(/invalid replay/i);
     }
     expect(cleanFrames([{ ...good(10), keys: 31 }])).toHaveLength(1);
+  });
+
+  it('detects ScoreV2 mods so ScoreV1 totals are not compared against them', () => {
+    expect(isScoreV2Mods(0)).toBe(false);
+    expect(isScoreV2Mods(SCORE_V2_MOD_BIT)).toBe(true);
+    expect(isScoreV2Mods(SCORE_V2_MOD_BIT | 8)).toBe(true);
   });
 
   it('rejects an excessive number of frames without sorting or allocating another large array', () => {

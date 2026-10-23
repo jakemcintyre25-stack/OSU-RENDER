@@ -164,6 +164,11 @@ export async function runJudgeCheck(args = [], options = {}) {
           skipped++;
           continue;
         }
+        if (replay.scoreV2) {
+          write(`${name} | skipped (ScoreV2; M4 tracks ScoreV1)`);
+          skipped++;
+          continue;
+        }
         const found = byHash.get(replay.beatmapMD5?.toLowerCase());
         if (!found) {
           warn(`${name}: no .osz difficulty matches replay MD5 ${replay.beatmapMD5 || '(missing)'}`);

@@ -33,10 +33,19 @@ export interface LoadedReplay {
   rulesetId: number;
   beatmapMD5: string;
   rawMods: number;
+  /** The replay's stored total is ScoreV2, not ScoreV1. */
+  scoreV2: boolean;
   mods: string[];
   stats: ReplayHeaderStats | null;
   frames: ReplayFrame[];
   date: Date | null;
+}
+
+/** Stable's ScoreV2 mod bit. ScoreV2 totals are not comparable with ScoreV1. */
+export const SCORE_V2_MOD_BIT = 1 << 29;
+
+export function isScoreV2Mods(rawMods: number): boolean {
+  return (rawMods & SCORE_V2_MOD_BIT) !== 0;
 }
 
 export async function decodeReplay(data: Uint8Array): Promise<LoadedReplay> {
@@ -45,6 +54,7 @@ export async function decodeReplay(data: Uint8Array): Promise<LoadedReplay> {
   }
   const score = await new ScoreDecoder().decodeFromBuffer(data, true);
   const info = score.info;
+  const rawMods = Number(info.rawMods) || 0;
   const frames = cleanFrames(
     (score.replay?.frames ?? []).map((f) => {
       const lf = f as unknown as { startTime: number; position: { x: number; y: number }; buttonState?: number };
@@ -55,8 +65,9 @@ export async function decodeReplay(data: Uint8Array): Promise<LoadedReplay> {
     player: info.username ?? '',
     rulesetId: info.rulesetId ?? 0,
     beatmapMD5: (info.beatmapHashMD5 ?? '').toLowerCase(),
-    rawMods: info.rawMods as number,
-    mods: modsFromBits(Number(info.rawMods) || 0),
+    rawMods,
+    scoreV2: isScoreV2Mods(rawMods),
+    mods: modsFromBits(rawMods),
     stats: {
       count300: info.count300,
       count100: info.count100,
