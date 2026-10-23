@@ -2,6 +2,7 @@ import './style.css';
 import { getRecent, getReplayFile, getBeatmapset, getOsuFile, lookupBeatmap, type RecentPlay } from './api';
 import { openOsz, type OszArchive } from './load/osz';
 import { assertLocalUploadSize } from './load/upload-limits';
+import { createIndexedDbSkinStore } from './load/skin-store';
 import { decodeReplay } from './load/replay';
 import { sessionFromReplay, sessionFromAutoplay, type Session } from './session';
 import { PlayfieldRenderer } from './render/renderer';
@@ -411,6 +412,7 @@ async function openPlay(p: RecentPlay) {
     const { osz, osuFallback } = await downloadMap(p.beatmapsetId, p.beatmapId, lease);
     if (!lease.isCurrent()) return;
     loading('Preparing…');
+    await skinReady;
     const s = await sessionFromReplay(replayBytes, osz, osuFallback, p.beatmapId, localSkin);
     if (!lease.isCurrent()) return;
     await startPlayer(s, p.scoreId, lease);
@@ -475,6 +477,7 @@ wireDrop('osr-drop', 'osr-input', async (file) => {
     const local = localOsz?.difficulties.find((d) => d.md5.toLowerCase() === md5);
     if (localOsz && local) {
       loading('Preparing…');
+      await skinReady;
       const session = await sessionFromReplay(bytes, localOsz, null, local.beatmapId ?? 0, localSkin);
       if (lease.isCurrent()) await startPlayer(session, null, lease);
       return;
@@ -490,6 +493,7 @@ wireDrop('osr-drop', 'osr-input', async (file) => {
     const { osz, osuFallback } = await downloadMap(found.beatmapsetId, found.beatmapId, lease);
     if (!lease.isCurrent()) return;
     loading('Preparing…');
+    await skinReady;
     const session = await sessionFromReplay(bytes, osz, osuFallback, found.beatmapId, localSkin);
     if (lease.isCurrent()) await startPlayer(session, null, lease);
   } catch (err) {
@@ -502,27 +506,56 @@ wireDrop('osr-drop', 'osr-input', async (file) => {
 
 let localSkin: OszArchive | null = null;
 let localOsz: OszArchive | null = null;
+const skinStore = createIndexedDbSkinStore();
 const MOD_CHOICES = ['EZ', 'HR', 'HD', 'DT', 'NC', 'HT'];
+
+function showSkinStatus(name: string, archive: OszArchive, saved: boolean) {
+  const usable = supportedSkinAudioFiles(archive);
+  // Visual-only .osk archives are valid: their sprites are used by the renderer.
+  const visualCount = Object.keys(visualSkinFiles(archive)).length;
+  if (!usable.length && !visualCount) throw new Error('This skin contains no supported audio or visual files.');
+  $('osk-status').textContent = `${name}: ${usable.length} hitsound files and ${visualCount} visual sprites.${saved ? ' Saved for this browser.' : ' This session only.'}`;
+  $('osk-drop').querySelector('span')!.textContent = name;
+  ($('osk-clear') as HTMLButtonElement).hidden = false;
+}
 
 wireDrop('osk-drop', 'osk-input', async (file) => {
   try {
     loading('Checking skin archive…');
     assertLocalUploadSize('osk', file.size);
-    const archive = openOsz(new Uint8Array(await file.arrayBuffer()));
-    const usable = supportedSkinAudioFiles(archive);
-    // Visual-only .osk archives are valid: their sprites are used by the renderer.
-    const visualCount = Object.keys(visualSkinFiles(archive)).length;
-    if (!usable.length && !visualCount) throw new Error('This skin contains no supported audio or visual files.');
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const archive = openOsz(bytes);
+    showSkinStatus(file.name, archive, false);
     localSkin = archive;
-    $('osk-status').textContent = `${file.name}: ${usable.length} hitsound files and ${visualCount} visual sprites. The next replay will use supported assets.`;
-    $('osk-drop').querySelector('span')!.textContent = file.name;
+    const saved = await skinStore.save({ name: file.name, bytes: bytes.slice().buffer as ArrayBuffer, savedAt: Date.now() });
+    if (saved) showSkinStatus(file.name, archive, true);
     loading(null);
-    toast('Supported skin assets loaded for the next replay.', true);
+    toast(saved ? 'Skin loaded and saved for this browser.' : 'Skin loaded for this session only.', true);
   } catch (error) {
     loading(null);
     toast((error as Error).message);
   }
 });
+
+$('osk-clear').addEventListener('click', async () => {
+  localSkin = null;
+  await skinStore.clear();
+  $('osk-status').textContent = 'Uses your own skin audio for sounds missing from the beatmap. Supported visual skin sprites also apply to the next replay you open.';
+  $('osk-drop').querySelector('span')!.textContent = 'Drop a .osk skin archive or click to choose';
+  ($('osk-clear') as HTMLButtonElement).hidden = true;
+});
+
+async function restoreSavedSkin() {
+  try {
+    const stored = await skinStore.load();
+    if (!stored || localSkin) return;
+    const archive = openOsz(new Uint8Array(stored.bytes));
+    localSkin = archive;
+    showSkinStatus(stored.name, archive, true);
+  } catch {
+    await skinStore.clear();
+  }
+}
 
 wireDrop('osz-drop', 'osz-input', async (file) => {
   try {
@@ -886,6 +919,7 @@ const speedChoice = checkedPlayerSpeed(Number(store.get('playback-speed') ?? 1))
 ($('playback-speed') as HTMLSelectElement).value = String(speedChoice);
 const savedUser = store.get('username');
 if (savedUser) ($('username') as HTMLInputElement).value = savedUser;
+const skinReady = restoreSavedSkin();
 
 const launch = parseLaunchTarget(location.search);
 if (launch.kind === 'user') {
@@ -904,6 +938,7 @@ if (launch.kind === 'user') {
       const { osz, osuFallback } = await downloadMap(beatmapsetId, beatmapId, lease);
       if (!lease.isCurrent()) return;
       loading('Preparing…');
+      await skinReady;
       const result = await sessionFromReplay(replayBytes, osz, osuFallback, beatmapId, localSkin);
       if (lease.isCurrent()) await startPlayer(result, launch.id, lease);
     } catch (err) {

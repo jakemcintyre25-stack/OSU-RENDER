@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { zipSync, strToU8 } from 'fflate';
 import { openOsz } from '../src/load/osz';
-import { visualSkinFiles, decodeVisualSkin, visualSkinConfig, skinComboColor } from '../src/render/skin-visuals';
+import { visualSkinFiles, decodeVisualSkin, visualSkinConfig, skinComboColor, sliderBallFrame } from '../src/render/skin-visuals';
 
 const png = (n: number) => new Uint8Array([137, 80, 78, 71, n]);
 const skin = (files: Record<string, Uint8Array>) => openOsz(zipSync(files));
@@ -111,5 +111,32 @@ describe('M7 .osk visual skin loading', () => {
     expect(Object.keys(visualSkinFiles(archive)).sort()).toEqual([
       'cursormiddle', 'sliderendcircle', 'sliderstartcircle', 'spinner-background',
     ]);
+  });
+
+  it('loads indexed slider-ball animation frames and decodes them with the config', async () => {
+    const archive = skin({
+      'skin.ini': strToU8('[General]\nSliderBallFrames: 3'),
+      'sliderb.png': png(9),
+      'sliderb0.png': png(1), 'sliderb1.png': png(2), 'sliderb2@2x.png': png(3),
+    });
+    const files = visualSkinFiles(archive, 3);
+    expect([...files.sliderb0!]).toEqual([...png(1)]);
+    expect([...files.sliderb1!]).toEqual([...png(2)]);
+    expect([...files.sliderb2!]).toEqual([...png(3)]);
+    expect(Object.keys(files).sort()).toEqual(['sliderb', 'sliderb0', 'sliderb1', 'sliderb2']);
+    const decoded = await decodeVisualSkin(archive, async () => ({ width: 16, height: 16 }) as HTMLImageElement);
+    expect(decoded.sliderb0).toBeDefined();
+    expect(decoded.sliderb1).toBeDefined();
+    expect(decoded.sliderb2).toBeDefined();
+  });
+
+  it('cycles slider-ball animation frames deterministically', () => {
+    expect(sliderBallFrame(0, 3, 100)).toBe(0);
+    expect(sliderBallFrame(99, 3, 100)).toBe(0);
+    expect(sliderBallFrame(150, 3, 100)).toBe(1);
+    expect(sliderBallFrame(350, 3, 100)).toBe(0);
+    expect(sliderBallFrame(-1, 3, 100)).toBe(2);
+    expect(sliderBallFrame(100, 0)).toBe(0);
+    expect(sliderBallFrame(100, 3, 0)).toBe(0);
   });
 });

@@ -9,7 +9,7 @@ import { playfieldLayout, type PlayfieldLayout } from './layout';
 import { hitLightAt } from './effects';
 import { firstFollowPointAtOrAfter, planFollowPoints, type FollowPoint } from './follow-points';
 import { VisibleObjectIndex } from './visible-index';
-import { DEFAULT_VISUAL_SKIN_CONFIG, skinComboColor, type VisualSkinKey, type VisualSkinConfig } from './skin-visuals';
+import { DEFAULT_VISUAL_SKIN_CONFIG, skinComboColor, sliderBallFrame, type VisualSkinKey, type VisualSkinConfig } from './skin-visuals';
 
 const HIT_FADE = 240; // ms for a hit circle to expand and fade after being hit
 const MISS_FADE = 120;
@@ -97,6 +97,7 @@ export class PlayfieldRenderer {
   private layout: PlayfieldLayout = { scale: 1, x: 0, y: 0 };
   private map: PreparedMap | null = null;
   private skinTextures: Partial<Record<VisualSkinKey, Texture>> = {};
+  private sliderBallTextures: Texture[] = [];
   private skinConfig: VisualSkinConfig = { ...DEFAULT_VISUAL_SKIN_CONFIG };
   private visibility: VisibleObjectIndex | null = null;
   private judgement: Judgement | null = null;
@@ -153,7 +154,13 @@ export class PlayfieldRenderer {
     this.cursorSprite.anchor.set(this.skinConfig.cursorCentre ? 0.5 : 0);
     this.skinTextures = {};
     for (const [name, image] of Object.entries(images)) {
+      if (!image) continue;
       this.skinTextures[name as VisualSkinKey] = Texture.from(image);
+    }
+    this.sliderBallTextures = [];
+    for (let i = 0; i < this.skinConfig.sliderBallFrames; i++) {
+      const texture = this.skinTextures[`sliderb${i}`];
+      if (texture) this.sliderBallTextures.push(texture);
     }
     const trail = this.skinTextures.cursortrail;
     for (const sprite of this.cursorTrailSprites) {
@@ -426,8 +433,9 @@ export class PlayfieldRenderer {
       d.ball.circle(0, 0, r * 0.8).fill({ color }).stroke({ width: r * 0.12, color: 0xffffff });
       d.follow.visible = false;
       d.ball.visible = false;
-      if (this.skinTextures.sliderb) {
-        d.skinBall = new Sprite(this.skinTextures.sliderb);
+      const ballTexture = this.skinTextures.sliderb ?? this.sliderBallTextures[0];
+      if (ballTexture) {
+        d.skinBall = new Sprite(ballTexture);
         d.skinBall.anchor.set(0.5);
         d.skinBall.width = d.skinBall.height = r * 2;
         d.skinBall.tint = color;
@@ -629,6 +637,9 @@ export class PlayfieldRenderer {
       d.follow!.position.set(b.x, b.y);
       if (d.skinBall) {
         d.skinBall.position.set(b.x, b.y);
+        if (this.sliderBallTextures.length > 1) {
+          d.skinBall.texture = this.sliderBallTextures[sliderBallFrame(t, this.sliderBallTextures.length)];
+        }
         const span = Math.max(0, Math.min(s.spans - 1, Math.floor((t - s.start) / Math.max(1, s.spanDuration))));
         const reverse = this.skinConfig.sliderBallFlip && span % 2 === 1;
         d.skinBall.scale.x = Math.abs(d.skinBall.scale.x) * (reverse ? -1 : 1);

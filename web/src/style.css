@@ -159,3 +159,8 @@ footer { margin-top: 24px; text-align: center; }
 @media (prefers-reduced-motion: reduce) {
   .hp-fill { transition: none; }
 }
+.link-button {
+  background: none; border: 0; padding: 0; color: var(--muted); font-size: 13px;
+  text-decoration: underline; cursor: pointer;
+}
+.link-button:hover { color: var(--text); filter: none; }
