@@ -4,6 +4,7 @@ import { sliderBallAt } from '../game/prepare';
 import type { Judgement } from '../game/judge';
 import { eventAt } from '../game/judge';
 import { scoreHudLabel } from './hud-score';
+import { hitLightState } from './hit-light';
 import { cursorAt, KEY, type ReplayFrame } from '../load/replay';
 import { playfieldLayout, type PlayfieldLayout } from './layout';
 import { VisibleObjectIndex } from './visible-index';
@@ -36,6 +37,7 @@ interface Display {
   obj: HitObj;
   root: Container;
   head?: CircleParts;
+  light?: Graphics;
   approach?: Graphics;
   skinApproach?: Sprite;
   // sliders
@@ -419,6 +421,10 @@ export class PlayfieldRenderer {
       }
       root.addChild(d.body, d.decor);
     }
+    d.light = new Graphics();
+    d.light.circle(0, 0, r * 1.1).fill({ color: 0xffffff, alpha: 0.55 });
+    d.light.visible = false;
+    root.addChild(d.light);
     d.head = this.makeCircle(o);
     root.addChild(d.head.root);
     if (d.ball && d.follow) {
@@ -477,6 +483,12 @@ export class PlayfieldRenderer {
     if (d.head) {
       d.head.root.alpha = headAlpha;
       d.head.root.scale.set(headScale);
+    }
+    if (d.light) {
+      const light = hitLightState(t, j.hitTime);
+      d.light.visible = light.visible;
+      d.light.alpha = light.alpha;
+      d.light.scale.set(light.scale);
     }
 
     // Approach circle: shrinks from 4× to 1× over the preempt time. Hidden removes all but the first.
