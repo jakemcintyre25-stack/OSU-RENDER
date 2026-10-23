@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MAX_MIRROR_COOLDOWN_MS, MIRROR_COOLDOWN_MS, MIRROR_FAILURE_THRESHOLD, MirrorHealth, parseRetryAfter } from '../src/mirror-health';
+import { KvMirrorHealth, MAX_MIRROR_COOLDOWN_MS, MIRROR_COOLDOWN_MS, MIRROR_FAILURE_THRESHOLD, MirrorHealth, parseRetryAfter } from '../src/mirror-health';
 import { fetchBeatmapset } from '../src/mirrors';
 import { storedZip } from './zip-fixture';
 
@@ -130,5 +130,50 @@ describe('M11 rate-limiting repeated failing beatmap mirror hosts', () => {
     expect(h.status('catboy').unavailableUntil).toBe(1000 + 60 * 60 * 1000);
     h.recordFailure('catboy', 3000, 2 * 60 * 60 * 1000);
     expect(h.status('catboy').unavailableUntil).toBe(3000 + 2 * 60 * 60 * 1000);
+  });
+});
+
+class MemoryKv {
+  store = new Map<string, string>();
+  async get(key: string): Promise<string | null> { return this.store.get(key) ?? null; }
+  async put(key: string, value: string): Promise<void> { this.store.set(key, value); }
+  async delete(key: string): Promise<void> { this.store.delete(key); }
+}
+
+describe('M11 KV-backed global mirror health', () => {
+  it('shares a cooldown across instances and clears it on success', async () => {
+    const kv = new MemoryKv();
+    const writer = new KvMirrorHealth(kv as unknown as KVNamespace);
+    const reader = new KvMirrorHealth(kv as unknown as KVNamespace);
+    for (let i = 0; i < MIRROR_FAILURE_THRESHOLD; i++) await writer.recordFailure('catboy', 1000);
+    expect(await reader.canAttempt('catboy', 1000 + MIRROR_COOLDOWN_MS - 1)).toBe(false);
+    expect(await reader.canAttempt('catboy', 1000 + MIRROR_COOLDOWN_MS)).toBe(true);
+    await writer.recordFailure('catboy', 5000);
+    await writer.recordSuccess('catboy');
+    expect(await reader.canAttempt('catboy', 5000)).toBe(true);
+  });
+
+  it('honours Retry-After and treats a corrupt KV entry as unknown', async () => {
+    const kv = new MemoryKv();
+    const health = new KvMirrorHealth(kv as unknown as KVNamespace);
+    await health.recordFailure('nerinyan', 1000, 30 * 60 * 1000);
+    expect(await health.canAttempt('nerinyan', 1000 + 30 * 60 * 1000 - 1)).toBe(false);
+    kv.store.set('mirror:osu.direct', '{not json');
+    expect(await health.canAttempt('osu.direct', 1000)).toBe(true);
+  });
+
+  it('lets fetchBeatmapset skip a KV-blocked mirror', async () => {
+    const kv = new MemoryKv();
+    const health = new KvMirrorHealth(kv as unknown as KVNamespace);
+    await health.recordFailure('catboy', 1000, 60 * 60 * 1000);
+    const calls: string[] = [];
+    const mock = (async (url: string) => {
+      calls.push(url);
+      return new Response(responseZip);
+    }) as unknown as typeof fetch;
+    const out = await fetchBeatmapset('123', mock, health, () => 1000);
+    expect(out.mirror).toBe('nerinyan');
+    expect(calls.some((url) => url.includes('catboy'))).toBe(false);
+    expect(calls.some((url) => url.includes('nerinyan'))).toBe(true);
   });
 });
