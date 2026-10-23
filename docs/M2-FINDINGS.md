@@ -166,4 +166,6 @@ The judge now enforces that rule: only the earliest live head (circle or slider 
 
 Tests updated in `judge-matching.test.ts` and `judge-head.test.ts`: a later-object click during the lock is ignored, and the same click succeeds after the earlier object is judged.
 
-**Still open:** the narrow simultaneous-object (2B) tolerance used by stable for objects a few milliseconds apart is not specialised yet, and the previous synthetic/real-replay totals still need a fixture rerun. The round-2 tables above predate this correction.
+The narrow simultaneous-object (2B) tolerance is implemented as a 3 ms window: objects whose start times are at most 3 ms apart may be hit independently while the first is still open. Objects farther apart remain locked. `judge-matching.test.ts` covers both the locked 20 ms case and the 2 ms simultaneous case.
+
+**Still open:** the previous synthetic/real-replay totals still need a fixture rerun. The round-2 tables above predate this correction.

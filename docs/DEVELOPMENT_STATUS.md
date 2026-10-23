@@ -9,7 +9,7 @@ Updated: 23 October 2026. The 12-milestone specification in `osu-render-chatgpt-
 | Milestone | Status | Verification and outstanding work |
 |---|---|---|
 | M1 Judgement harness | **PASS** | `npm run judge-check`, verbose diagnostics and CI implemented. Empty optional fixtures exit zero. Real replay fixtures stay local. |
-| M2 Stable judgement parity | **IN PROGRESS** | Strict checksum matching rejects updated beatmaps with unchanged IDs; `.osu`-only fallback labels uncertainty. Strict parity mode fails when no stable replay is checked. Slider timing, combo breaks, hit-window edges and 2B autoplay have synthetic tests. Spinner judgement now uses stable's half-spin requirement, one-half-spin-per-frame accumulation and 300/100/50/miss thresholds. Note-lock now ignores input on later overlapping objects while the earliest head is unjudged; the narrow simultaneous-object tolerance and stable's spinner acceleration smoothing remain unverified. |
+| M2 Stable judgement parity | **IN PROGRESS** | Strict checksum matching rejects updated beatmaps with unchanged IDs; `.osu`-only fallback labels uncertainty. Strict parity mode fails when no stable replay is checked. Slider timing, combo breaks, hit-window edges and 2B autoplay have synthetic tests. Spinner judgement now uses stable's half-spin requirement, one-half-spin-per-frame accumulation and 300/100/50/miss thresholds. Note-lock now ignores input on later overlapping objects while the earliest head is unjudged, with stable's 3 ms simultaneous-object tolerance. Stable's spinner acceleration smoothing and exact real-replay parity remain unverified. |
 | M3 HP and fail | **IN PROGRESS** | Verified SD/PF failure timestamps from circle grades and slider-head/tick/repeat combo breaks, with NF precedence. `hp-stable.ts` now ports stable's drain search, normal/combo-end health gains, slider/spinner nested health, break pauses and negative-judgement HP-zero failure. A visible HP bar/player fail overlay is not wired yet because `main.ts`/`style.css` are owned by the concurrent M9 export work; real-replay HP parity remains unverified. |
 | M4 Score V1 | **IN PROGRESS** | Running ScoreV1, mod multipliers and slider/spinner part scoring exist; HUD now displays calculated score and details panel compares against the replay header. Spinner points now follow stable's half-spin ticks and 1.5-spin bonus gap. The difficulty multiplier now uses stable's summed-break drain length, banker's rounding and no 2–6 clamp. It is labelled provisional; real header parity remains unverified. |
 | M5 Audio timing and hitsounds | **IN PROGRESS** | Chart/user .osk hitsounds, successful spinner completion and judged tracked slider loops are scheduled on shared Web Audio time; independent music/FX gains, AudioLeadIn and map-before-skin WAV/MP3/OGG precedence are tested. Browser acoustic parity, spin/bonus sounds, licensed defaults and pitch-preserving DT/HT remain. See docs/M5-FINDINGS.md. |
@@ -260,9 +260,9 @@ The critical real-data acceptance command is now `npm run judge-check:strict` af
 - Reference: [Notelock wiki](https://osu.ppy.sh/wiki/en/Gameplay/Judgement/Notelock).
 - Reverted round 2's later-object matching. Only the earliest live head can receive a press; input on a later overlapping object or empty space is wasted until the earlier object's MEH window passes.
 - A hit slider head still releases the lock so later objects can be hit while the slider body is active.
-- Tests in `judge-matching.test.ts` and `judge-head.test.ts` now cover the lock, the release after judging, and the unchanged first-hit behaviour.
-- Automated evidence: **208 web tests passed, 12 skipped**, web typecheck passed, production build passed.
-- **M2 remains IN PROGRESS:** stable's narrow simultaneous-object/2B tolerance and spinner acceleration smoothing are not specialised, and no real-replay rerun was possible.
+- Tests in `judge-matching.test.ts` and `judge-head.test.ts` now cover the lock, the release after judging, the 3 ms simultaneous-object tolerance and the unchanged first-hit behaviour.
+- Automated evidence: **209 web tests passed, 12 skipped**, web typecheck passed, production build passed.
+- **M2 remains IN PROGRESS:** stable's spinner acceleration smoothing is not specialised, and no real-replay rerun was possible.
 
 ## Immediate next implementation work
 
