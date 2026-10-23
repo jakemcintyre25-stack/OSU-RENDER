@@ -75,6 +75,20 @@ footer { margin-top: 24px; text-align: center; }
 #player[hidden] { display: none; }
 #stage { flex: 1; min-height: 0; position: relative; overflow: hidden; }
 #stage canvas { display: block; }
+.hpbar {
+  position: absolute; top: 14px; left: 14px; width: min(280px, 42vw); height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.7); border-radius: 8px; overflow: hidden;
+  background: rgba(0, 0, 0, 0.65); z-index: 3; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+.hpbar[hidden], .fail[hidden] { display: none; }
+.hp-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #55d66a, #c9d94a); transition: width 80ms linear; }
+.hp-fill.low { background: linear-gradient(90deg, #d94f4f, #e07a3f); }
+.fail {
+  position: absolute; inset: 0; display: grid; place-items: center; z-index: 4;
+  background: rgba(0, 0, 0, 0.66); color: #fff; font-weight: 800;
+  font-size: clamp(28px, 6vw, 64px); letter-spacing: 0.12em; text-transform: uppercase;
+  pointer-events: none;
+}
 .controls {
   display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: rgba(11, 13, 18, 0.95); border-top: 1px solid var(--line);
 }

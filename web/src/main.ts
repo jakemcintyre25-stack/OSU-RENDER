@@ -16,6 +16,8 @@ import { checkedPlayerSpeed, effectivePlaybackRate } from './audio/speed';
 import { markerReviewTime } from './render/marker-review';
 import { storedToggle } from './render/preferences';
 import { ReplayVideoCapture, safeCaptureFilename } from './render/video-capture';
+import { hpAt } from './game/hp-engine';
+import { healthBarPercent, hpHasFailed, isLowHealth } from './render/hp-bar';
 import { createExportTimeline, exportFilename, exportPreset, type ExportPreset } from './render/export/timeline';
 import { describeCodecChoice, type ExportCodecChoice } from './render/export/codecs';
 import { renderOfflineMix } from './audio/offline-mix';
@@ -573,6 +575,7 @@ let clock: Clock | null = null;
 let session: Session | null = null;
 let raf = 0;
 let seeking = false;
+let hpFailed = false;
 let activeScoreId: number | null = null;
 
 let rendererInit: Promise<void> | null = null;
@@ -583,6 +586,9 @@ async function startPlayer(s: Session, scoreId: number | null = null, lease = pl
   activeScoreId = scoreId;
   ($('share-score') as HTMLButtonElement).disabled = scoreId === null;
   session = s;
+  hpFailed = false;
+  $('hpbar').hidden = false;
+  $('fail').hidden = true;
   $('home').hidden = true;
   $('player').hidden = false;
   loading('Decoding audio…');
@@ -637,6 +643,7 @@ async function startPlayer(s: Session, scoreId: number | null = null, lease = pl
     renderer.load(s.map, s.frames, s.judgement, { player: s.player });
     captureButton();
     playerClock.seek(initialPlaybackTime(s.map.firstObjectTime, s.map.audioLeadIn));
+    updateHpBar(s, playerClock.now(), false);
     buildMarkers(s);
     fillInfo(s);
     loading(null);
@@ -649,6 +656,7 @@ async function startPlayer(s: Session, scoreId: number | null = null, lease = pl
       raf = requestAnimationFrame(loop);
       const t = playerClock.now();
       playerClock.scheduleHitsounds();
+      updateHpBar(session, t, true);
       renderer.render(t);
       const end = endTime();
       if (!seeking) ($('seek') as HTMLInputElement).value = String(Math.round((clamp(t, 0, end) / end) * 1000));
@@ -672,6 +680,27 @@ async function startPlayer(s: Session, scoreId: number | null = null, lease = pl
 const clamp = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);
 const endTime = () => session ? playbackEndTime(session.map.lastObjectTime, clock?.duration ?? 0) : 1;
 
+function updateHpBar(s: Session, t: number, pauseOnFail: boolean) {
+  const maximum = s.hp.coefficients.maximum;
+  const hp = hpAt(s.hp.trace, t);
+  const fill = $('hpfill');
+  fill.style.width = `${healthBarPercent(hp, maximum)}%`;
+  fill.classList.toggle('low', isLowHealth(hp, maximum));
+  const bar = $('hpbar');
+  bar.setAttribute('aria-valuenow', String(Math.round(clamp(hp, 0, maximum))));
+  const failed = hpHasFailed(s.hp.failTime, t);
+  $('fail').hidden = !failed;
+  if (failed && !hpFailed) {
+    hpFailed = true;
+    if (pauseOnFail) {
+      clock?.pause();
+      updatePlayButton();
+    }
+  } else if (!failed) {
+    hpFailed = false;
+  }
+}
+
 function stopPlayer() {
   if (captureAutoStop) clearTimeout(captureAutoStop);
   captureAutoStop = null;
@@ -680,6 +709,9 @@ function stopPlayer() {
   if (exportDialog.open) exportDialog.close();
   currentSkinVisuals = {};
   currentSkinConfig = undefined;
+  hpFailed = false;
+  $('hpbar').hidden = true;
+  $('fail').hidden = true;
   activeScoreId = null;
   ($('share-score') as HTMLButtonElement).disabled = true;
   cancelAnimationFrame(raf);
@@ -706,6 +738,10 @@ async function togglePlay() {
   if (!clock) return;
   if (clock.isPlaying) clock.pause();
   else {
+    if (session && hpHasFailed(session.hp.failTime, clock.now())) {
+      toast('This replay failed here. Seek earlier to continue.');
+      return;
+    }
     if (clock.now() > endTime()) clock.seek(initialPlaybackTime(session?.map.firstObjectTime ?? 0, session?.map.audioLeadIn));
     await clock.play();
   }
@@ -772,7 +808,10 @@ $('share-score').addEventListener('click', async () => {
 const seek = $('seek') as HTMLInputElement;
 seek.addEventListener('input', () => {
   seeking = true;
-  if (clock) clock.seek((Number(seek.value) / 1000) * endTime());
+  if (clock) {
+    clock.seek((Number(seek.value) / 1000) * endTime());
+    if (session) updateHpBar(session, clock.now(), false);
+  }
 });
 seek.addEventListener('change', () => (seeking = false));
 $('dim').addEventListener('input', (e) => {
@@ -821,7 +860,10 @@ document.addEventListener('keydown', (e) => {
     void togglePlay();
   } else if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') {
     e.preventDefault();
-    if (clock) clock.seek(clock.now() + (e.code === 'ArrowRight' ? 5000 : -5000));
+    if (clock) {
+      clock.seek(clock.now() + (e.code === 'ArrowRight' ? 5000 : -5000));
+      if (session) updateHpBar(session, clock.now(), false);
+    }
   } else if (e.code === 'Escape') closePlayer();
 });
 
