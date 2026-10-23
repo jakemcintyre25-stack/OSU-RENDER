@@ -97,13 +97,17 @@ export class PlayfieldRenderer {
   private resultEvents: { t: number; x: number; y: number; result: number }[] = [];
   options: RenderOptions = { backgroundDim: 0.8, showCursorTrail: true, showKeyOverlay: true };
 
-  async init(host: HTMLElement) {
+  async init(host: HTMLElement, options: { resolution?: number } = {}) {
+    const resolution = options.resolution ?? Math.min(window.devicePixelRatio || 1, 2);
+    if (!Number.isFinite(resolution) || resolution <= 0 || resolution > 4) {
+      throw new RangeError('Invalid renderer resolution');
+    }
     await this.app.init({
       resizeTo: host,
       background: '#000000',
       antialias: true,
       autoDensity: true,
-      resolution: Math.min(window.devicePixelRatio || 1, 2),
+      resolution,
       preference: 'webgl',
       autoStart: false,
     });
@@ -154,6 +158,15 @@ export class PlayfieldRenderer {
 
   setBackground(img: ImageBitmap | HTMLImageElement | null) {
     this.bg.texture = img ? Texture.from(img) : Texture.EMPTY;
+    this.relayout();
+  }
+
+  /** Force an exact backing size, used by the deterministic export host. */
+  resize(width: number, height: number) {
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
+      throw new RangeError('Invalid renderer size');
+    }
+    this.app.renderer.resize(width, height);
     this.relayout();
   }
 

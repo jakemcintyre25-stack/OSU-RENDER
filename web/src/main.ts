@@ -5,7 +5,7 @@ import { assertLocalUploadSize } from './load/upload-limits';
 import { decodeReplay } from './load/replay';
 import { sessionFromReplay, sessionFromAutoplay, type Session } from './session';
 import { PlayfieldRenderer } from './render/renderer';
-import { decodeVisualSkin, visualSkinFiles, visualSkinConfig } from './render/skin-visuals';
+import { decodeVisualSkin, visualSkinFiles, visualSkinConfig, type VisualSkinConfig, type VisualSkinKey } from './render/skin-visuals';
 import { Clock } from './audio/clock';
 import { supportedSkinAudioFiles } from './audio/skin-assets';
 import { parseLaunchTarget, scoreShareUrl, userShareUrl } from './launch';
@@ -16,6 +16,9 @@ import { checkedPlayerSpeed, effectivePlaybackRate } from './audio/speed';
 import { markerReviewTime } from './render/marker-review';
 import { storedToggle } from './render/preferences';
 import { ReplayVideoCapture, safeCaptureFilename } from './render/video-capture';
+import { createExportTimeline, exportFilename, exportPreset, type ExportPreset } from './render/export/timeline';
+import { describeCodecChoice, type ExportCodecChoice } from './render/export/codecs';
+import { renderOfflineMix } from './audio/offline-mix';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -123,10 +126,18 @@ $('user-form').addEventListener('submit', (e) => {
 
 const videoCapture = new ReplayVideoCapture();
 let captureAutoStop: ReturnType<typeof setTimeout> | null = null;
+let currentSkinVisuals: Partial<Record<VisualSkinKey, ImageBitmap | HTMLImageElement>> = {};
+let currentSkinConfig: VisualSkinConfig | undefined;
+let exporting = false;
+let exportAbort: AbortController | null = null;
+let selectedCodecs: ExportCodecChoice | null = null;
+let exportModule: Promise<typeof import('./render/export/export-video')> | null = null;
 function captureButton() {
   const button = $('capture-video') as HTMLButtonElement;
-  button.disabled = !session || !renderer;
+  button.disabled = !session || !renderer || exporting;
   button.textContent = videoCapture.active ? 'Stop recording' : 'Record WebM';
+  const exportButton = $('export-video') as HTMLButtonElement;
+  exportButton.disabled = !session || !renderer || videoCapture.active || exporting;
 }
 
 async function toggleCapture() {
@@ -142,7 +153,7 @@ async function toggleCapture() {
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       toast(audio
-        ? 'WebM with synchronized audio saved (real-time capture; MP4 export is not implemented yet).'
+        ? 'Real-time WebM saved with synchronized audio. Use Export video for a deterministic MP4.'
         : 'Video-only WebM saved; this browser could not record audio.', true);
     } catch (error) {
       toast((error as Error).message);
@@ -172,6 +183,220 @@ async function toggleCapture() {
     toast((error as Error).message);
   }
 }
+
+// ------------------------------------------------------------------ deterministic export
+
+const exportDialog = $('export-dialog') as HTMLDialogElement;
+const exportResolution = $('export-resolution') as HTMLSelectElement;
+const exportFps = $('export-fps') as HTMLSelectElement;
+const exportProgress = $('export-progress') as HTMLProgressElement;
+const exportCapability = $('export-capability') as HTMLElement;
+const exportEstimate = $('export-estimate') as HTMLElement;
+const exportStatus = $('export-status') as HTMLElement;
+const exportStart = $('export-start') as HTMLButtonElement;
+const exportCancel = $('export-cancel') as HTMLButtonElement;
+const exportClose = $('export-close') as HTMLButtonElement;
+let capabilityRequest = 0;
+
+function chosenExportPreset(): ExportPreset {
+  const size = exportResolution.value === '1080p' ? '1080p' : '720p';
+  return exportPreset(`${size}${exportFps.value === '60' ? 60 : 30}`);
+}
+
+function loadExportModule() {
+  exportModule ??= import('./render/export/export-video');
+  return exportModule;
+}
+
+function exportTimelineFor(preset: ExportPreset) {
+  if (!session || !clock) throw new Error('Open a replay before exporting');
+  return createExportTimeline({
+    startMs: initialPlaybackTime(session.map.firstObjectTime, session.map.audioLeadIn),
+    endMs: playbackEndTime(session.map.lastObjectTime, clock.duration),
+    rate: session.map.rate,
+    fps: preset.fps,
+  });
+}
+
+function updateExportEstimate() {
+  const preset = chosenExportPreset();
+  try {
+    const timeline = exportTimelineFor(preset);
+    exportEstimate.textContent = `${preset.width}×${preset.height} · ${timeline.frameCount.toLocaleString()} frames · ${fmt(timeline.videoDurationSeconds * 1000)}`;
+  } catch {
+    exportEstimate.textContent = '';
+  }
+}
+
+async function refreshExportCapability() {
+  const request = ++capabilityRequest;
+  selectedCodecs = null;
+  exportStart.disabled = true;
+  exportCapability.textContent = 'Checking encoder support…';
+  updateExportEstimate();
+  const preset = chosenExportPreset();
+  try {
+    const module = await loadExportModule();
+    const codecs = await module.detectExportCodecs(preset.width, preset.height);
+    if (request !== capabilityRequest) return;
+    selectedCodecs = codecs;
+    if (!codecs) {
+      exportCapability.textContent = 'This browser cannot encode MP4 or WebM with WebCodecs. Use Record WebM for real-time capture instead.';
+      return;
+    }
+    exportCapability.textContent = `Will encode ${describeCodecChoice(codecs)}${codecs.audio ? '' : ' (no supported audio encoder; video only)'}.`;
+    exportStart.disabled = exporting;
+  } catch (error) {
+    if (request !== capabilityRequest) return;
+    exportCapability.textContent = `Encoder check failed: ${(error as Error).message}`;
+  }
+}
+
+function setExportBusy(busy: boolean) {
+  exporting = busy;
+  exportResolution.disabled = busy;
+  exportFps.disabled = busy;
+  exportStart.disabled = busy || !selectedCodecs;
+  exportCancel.disabled = !busy;
+  exportClose.disabled = busy;
+  ($('playpause') as HTMLButtonElement).disabled = busy;
+  ($('seek') as HTMLInputElement).disabled = busy;
+  captureButton();
+}
+
+function openExportDialog() {
+  if (!session || !renderer || exporting) return;
+  exportProgress.value = 0;
+  exportStatus.textContent = '';
+  if (!exportDialog.open) {
+    if (typeof exportDialog.showModal === 'function') exportDialog.showModal();
+    else exportDialog.setAttribute('open', '');
+  }
+  void refreshExportCapability();
+}
+
+function downloadExport(
+  buffer: ArrayBuffer, mime: string, extension: 'mp4' | 'webm',
+  preset: ExportPreset, player: string,
+): string {
+  const url = URL.createObjectURL(new Blob([buffer], { type: mime }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = exportFilename(player, preset, extension);
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return link.download;
+}
+
+async function startExport() {
+  if (exporting || !session || !clock || !renderer || !selectedCodecs) return;
+  const s = session;
+  const previewRenderer = renderer;
+  const preset = chosenExportPreset();
+  const codecs = selectedCodecs;
+  const controller = new AbortController();
+  exportAbort = controller;
+  const wasPlaying = clock.isPlaying;
+  if (wasPlaying) clock.pause();
+  setExportBusy(true);
+  exportProgress.value = 0;
+  exportStatus.textContent = 'Mixing music and hitsounds…';
+  let host: HTMLDivElement | null = null;
+  let exportRenderer: PlayfieldRenderer | null = null;
+  try {
+    const timeline = exportTimelineFor(preset);
+    let audio: AudioBuffer | null = null;
+    try {
+      audio = await renderOfflineMix({
+        audio: s.audio,
+        hitsounds: s.hitsounds,
+        startMs: timeline.startMs,
+        rate: timeline.rate,
+        durationSeconds: timeline.videoDurationSeconds,
+        musicVolume: Number(($('volume') as HTMLInputElement).value) / 100,
+        effectsVolume: Number(($('effects-volume') as HTMLInputElement).value) / 100,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') throw error;
+      // A corrupt soundtrack must not block a useful video export.
+      audio = null;
+    }
+    exportStatus.textContent = 'Preparing the export renderer…';
+    host = document.createElement('div');
+    host.className = 'export-stage';
+    host.style.width = `${preset.width}px`;
+    host.style.height = `${preset.height}px`;
+    document.body.append(host);
+    exportRenderer = new PlayfieldRenderer();
+    await exportRenderer.init(host, { resolution: 1 });
+    if (exportRenderer.app.canvas.width !== preset.width || exportRenderer.app.canvas.height !== preset.height) {
+      exportRenderer.resize(preset.width, preset.height);
+    }
+    exportRenderer.options = { ...previewRenderer.options };
+    exportRenderer.setSkinVisuals(currentSkinVisuals, currentSkinConfig);
+    exportRenderer.setBackground(s.background);
+    exportRenderer.load(s.map, s.frames, s.judgement, { player: s.player });
+    const module = await loadExportModule();
+    let lastUpdate = 0;
+    const result = await module.exportReplayVideo({
+      renderer: exportRenderer,
+      timeline,
+      preset,
+      codecs,
+      audio,
+      signal: controller.signal,
+      onProgress: (done, total) => {
+        const now = performance.now();
+        if (done !== total && now - lastUpdate < 100) return;
+        lastUpdate = now;
+        exportProgress.value = done / total;
+        exportStatus.textContent = `Encoding frame ${done.toLocaleString()} / ${total.toLocaleString()}…`;
+      },
+    });
+    const filename = downloadExport(result.buffer, result.mime, result.extension, preset, s.player);
+    exportStatus.textContent = `Saved ${filename} · ${(result.bytes / 1_000_000).toFixed(1)} MB · ${result.description}`;
+    toast(`Exported ${filename}.`, true);
+  } catch (error) {
+    const aborted = (error as Error).name === 'AbortError';
+    exportStatus.textContent = aborted ? 'Export cancelled.' : `Export failed: ${(error as Error).message}`;
+    if (!aborted) toast((error as Error).message);
+  } finally {
+    try {
+      exportRenderer?.destroy();
+    } catch {
+      /* renderer init may have failed before its stage existed */
+    }
+    host?.remove();
+    exportAbort = null;
+    setExportBusy(false);
+    // Pixi textures are cached by source image. If destroying the export app
+    // invalidated shared entries, rebuild the preview from the same session.
+    if (renderer === previewRenderer && session === s) {
+      previewRenderer.setSkinVisuals(currentSkinVisuals, currentSkinConfig);
+      previewRenderer.setBackground(s.background);
+      previewRenderer.load(s.map, s.frames, s.judgement, { player: s.player });
+    }
+    if (wasPlaying && clock) void clock.play();
+  }
+}
+
+$('export-video').addEventListener('click', openExportDialog);
+exportStart.addEventListener('click', () => void startExport());
+exportCancel.addEventListener('click', () => {
+  exportAbort?.abort();
+  exportStatus.textContent = 'Cancelling…';
+});
+exportClose.addEventListener('click', () => {
+  if (!exporting) exportDialog.close();
+});
+exportResolution.addEventListener('change', () => void refreshExportCapability());
+exportFps.addEventListener('change', () => void refreshExportCapability());
+exportDialog.addEventListener('cancel', (event) => {
+  if (!exporting) return;
+  event.preventDefault();
+  exportAbort?.abort();
+});
 
 const playbackGate = new PlaybackRequestGate();
 
@@ -404,7 +629,10 @@ async function startPlayer(s: Session, scoreId: number | null = null, lease = pl
           createImageBitmap(new Blob([Uint8Array.from(bytes)], { type: 'image/png' })))
       : {};
     if (!active() || !renderer) return;
-    renderer.setSkinVisuals(visuals, localSkin ? visualSkinConfig(localSkin) : undefined);
+    const skinConfig = localSkin ? visualSkinConfig(localSkin) : undefined;
+    currentSkinVisuals = visuals;
+    currentSkinConfig = skinConfig;
+    renderer.setSkinVisuals(visuals, skinConfig);
     renderer.setBackground(s.background);
     renderer.load(s.map, s.frames, s.judgement, { player: s.player });
     captureButton();
@@ -448,6 +676,10 @@ function stopPlayer() {
   if (captureAutoStop) clearTimeout(captureAutoStop);
   captureAutoStop = null;
   videoCapture.cancel();
+  exportAbort?.abort();
+  if (exportDialog.open) exportDialog.close();
+  currentSkinVisuals = {};
+  currentSkinConfig = undefined;
   activeScoreId = null;
   ($('share-score') as HTMLButtonElement).disabled = true;
   cancelAnimationFrame(raf);

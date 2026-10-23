@@ -88,12 +88,40 @@
         </label>
         <label class="ctl option-ctl" title="Show the recent cursor trail"><input type="checkbox" id="cursor-trail" checked />Trail</label>
         <label class="ctl option-ctl" title="Show keyboard and mouse input overlay"><input type="checkbox" id="key-overlay" checked />Keys</label>
-        <button id="capture-video" title="Record up to 60 seconds of video-only WebM from the current replay" disabled>Record WebM</button>
+        <button id="capture-video" title="Record up to 60 seconds of the current replay in real time" disabled>Record WebM</button>
+        <button id="export-video" title="Render the full replay to a deterministic video file" disabled>Export video</button>
         <button id="share-score" title="Copy a shareable link to this osu! score" disabled>Share replay</button>
         <button id="info-btn" title="Details">i</button>
       </div>
       <div id="info" class="info" hidden></div>
     </div>
+
+    <dialog id="export-dialog" class="export-dialog" aria-labelledby="export-title">
+      <h2 id="export-title">Export video</h2>
+      <p id="export-capability" class="muted small">Checking encoder support…</p>
+      <div class="export-options">
+        <label>Resolution
+          <select id="export-resolution">
+            <option value="720p" selected>720p</option>
+            <option value="1080p">1080p</option>
+          </select>
+        </label>
+        <label>Frame rate
+          <select id="export-fps">
+            <option value="30" selected>30 fps</option>
+            <option value="60">60 fps</option>
+          </select>
+        </label>
+      </div>
+      <p id="export-estimate" class="muted small"></p>
+      <progress id="export-progress" max="1" value="0"></progress>
+      <p id="export-status" class="muted small" role="status" aria-live="polite"></p>
+      <div class="export-actions">
+        <button type="button" id="export-start">Export</button>
+        <button type="button" id="export-cancel" disabled>Cancel</button>
+        <button type="button" id="export-close">Close</button>
+      </div>
+    </dialog>
 
     <div id="loading" class="loading" hidden>
       <div class="loading-box">

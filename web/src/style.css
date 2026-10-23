@@ -117,3 +117,17 @@ footer { margin-top: 24px; text-align: center; }
   background: #2a1414; border: 1px solid #5a2323; color: #ffd6d6; padding: 10px 14px; border-radius: 10px; font-size: 14px;
 }
 .toast.ok { background: #10242a; border-color: #1d4a55; color: #d6f6ff; }
+
+.export-stage { position: fixed; left: -10000px; top: 0; pointer-events: none; overflow: hidden; }
+.export-dialog {
+  width: min(440px, 92vw); border: 1px solid var(--line); border-radius: 14px;
+  background: var(--panel); color: var(--text); padding: 20px;
+}
+.export-dialog::backdrop { background: rgba(0, 0, 0, 0.66); }
+.export-dialog h2 { margin: 0 0 6px; font-size: 18px; }
+.export-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+.export-options label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
+.export-options select { width: 100%; }
+.export-dialog progress { width: 100%; height: 10px; accent-color: var(--accent); }
+.export-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+.export-actions #export-close { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); }
