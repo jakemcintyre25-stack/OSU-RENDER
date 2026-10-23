@@ -16,6 +16,7 @@ import { PlaybackRequestGate, type PlaybackLease } from './playback-gate';
 import { checkedPlayerSpeed, effectivePlaybackRate } from './audio/speed';
 import { markerReviewTime } from './render/marker-review';
 import { hitErrorSamples, hitErrorSummary } from './render/hit-error';
+import { recentScorePlayability } from './playability';
 import { storedToggle } from './render/preferences';
 import { ReplayVideoCapture, safeCaptureFilename } from './render/video-capture';
 import { hpAt } from './game/hp-engine';
@@ -93,8 +94,9 @@ function playItem(p: RecentPlay): HTMLLIElement {
   if (!p.hasReplay) side.append(Object.assign(document.createElement('span'), { className: 'tag', textContent: 'no replay' }));
   else if (p.isLazer) side.append(Object.assign(document.createElement('span'), { className: 'tag warn', textContent: 'lazer' }));
   btn.append(img, mid, side);
-  btn.disabled = !p.hasReplay;
-  btn.title = p.hasReplay ? 'Watch this replay' : 'osu! did not keep a replay for this play';
+  const playability = recentScorePlayability(p);
+  btn.disabled = !playability.playable;
+  btn.title = playability.reason ?? 'Watch this replay';
   btn.addEventListener('click', () => void openPlay(p));
   li.append(btn);
   return li;
@@ -405,6 +407,11 @@ exportDialog.addEventListener('cancel', (event) => {
 const playbackGate = new PlaybackRequestGate();
 
 async function openPlay(p: RecentPlay) {
+  const playability = recentScorePlayability(p);
+  if (!playability.playable) {
+    toast(playability.reason ?? 'This replay cannot be played');
+    return;
+  }
   const lease = playbackGate.begin();
   try {
     loading('Downloading replay…');
