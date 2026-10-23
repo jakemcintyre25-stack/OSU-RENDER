@@ -2,6 +2,7 @@
 // With no audio (e.g. .osu-only fallback), AudioContext still runs as a silent clock.
 import { HitSoundPlayer } from './sample-player';
 import type { HitSoundPlan } from './hitsounds';
+import { stretchChannels } from './time-stretch';
 
 /** A live tap of the music and hit-effect buses for browser video capture. */
 export interface CaptureAudio {
@@ -16,6 +17,8 @@ export class Clock {
   private effectsGain: GainNode;
   private hitsounds: HitSoundPlayer;
   private buffer: AudioBuffer | null = null;
+  private stretched = new Map<number, AudioBuffer>();
+  private preparing = new Map<number, Promise<void>>();
   private source: AudioBufferSourceNode | null = null;
   private captureTaps = new Set<{ dest: MediaStreamAudioDestinationNode; track: MediaStreamTrack }>();
   /** Map time (ms) when playback last (re)started. */
@@ -45,6 +48,53 @@ export class Clock {
   async load(data: ArrayBuffer | null) {
     this.buffer = data ? await this.ctx.decodeAudioData(data.slice(0)) : null;
     this.duration = this.buffer ? this.buffer.duration * 1000 : 0;
+    this.stretched.clear();
+    this.preparing.clear();
+  }
+
+  private rateKey(rate: number): number {
+    return Math.round(rate * 1000) / 1000;
+  }
+
+  /** Build and cache a pitch-preserving version of the music for `rate`.
+   * Returns false when no audio or no usable stretch could be produced, in
+   * which case playback falls back to pitch-changing `playbackRate`.
+   */
+  async prepareRate(rate: number): Promise<boolean> {
+    const key = this.rateKey(rate);
+    if (!Number.isFinite(key) || key <= 0) return false;
+    if (Math.abs(key - 1) < 1e-6) return true;
+    if (!this.buffer) return false;
+    if (this.stretched.has(key)) return true;
+    const pending = this.preparing.get(key);
+    if (pending) {
+      await pending.catch(() => {});
+      return this.stretched.has(key);
+    }
+    const source = this.buffer;
+    const promise = (async () => {
+      const channels: Float32Array[] = [];
+      for (let c = 0; c < source.numberOfChannels; c++) channels.push(source.getChannelData(c).slice());
+      const stretched = stretchChannels(channels, key);
+      const output = this.ctx.createBuffer(source.numberOfChannels, stretched[0].length, source.sampleRate);
+      for (let c = 0; c < stretched.length; c++) output.getChannelData(c).set(stretched[c]);
+      this.stretched.set(key, output);
+    })();
+    this.preparing.set(key, promise);
+    try {
+      await promise;
+    } catch {
+      return false;
+    } finally {
+      this.preparing.delete(key);
+    }
+    if (this.playing && Math.abs(this.rate - key) < 1e-6) {
+      const at = this.now();
+      this.pause();
+      this.seek(at);
+      await this.play();
+    }
+    return this.stretched.has(key);
   }
 
   /** Decode beatmap-provided samples on the same audio device as the music. */
@@ -190,14 +240,18 @@ export class Clock {
 
   private startSource(fromMapTime: number) {
     if (!this.buffer) return;
+    const stretched = this.stretched.get(this.rateKey(this.rate)) ?? null;
+    const buffer = stretched ?? this.buffer;
     const src = this.ctx.createBufferSource();
-    src.buffer = this.buffer;
-    src.playbackRate.value = this.rate;
+    src.buffer = buffer;
+    src.playbackRate.value = stretched ? 1 : this.rate;
     src.connect(this.gain);
     // Map time before 0 (lead-in) means the song starts a little later.
     const delay = Math.max(0, -fromMapTime) / 1000 / this.rate;
-    const offset = Math.max(0, fromMapTime) / 1000;
-    if (offset < this.buffer.duration) src.start(this.startCtxTime + delay, offset);
+    // A stretched buffer already contains the rate change, so map-time offsets
+    // are divided by the rate as well.
+    const offset = Math.max(0, fromMapTime) / 1000 / (stretched ? this.rate : 1);
+    if (offset < buffer.duration) src.start(this.startCtxTime + delay, offset);
     src.onended = () => {
       if (this.source === src) this.onEnded?.();
     };

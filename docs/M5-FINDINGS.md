@@ -10,7 +10,7 @@ Updated 23 October 2026. **Status: IN PROGRESS, not full osu!stable audio parity
 - Real chart/skin `sliderslide` and `sliderwhistle` clips now loop **only over actual judge tracking intervals**. A seek into an existing interval resumes its loop at the appropriate clip phase and aligns with the music source's 50ms startup scheduling lead-in. Loop voice nodes stop at the tracked interval boundary.
 - The selected map's `[General] AudioLeadIn` is parsed with an explicit operational input ceiling and honored at playback start. Existing synthetic PreparedMap fixtures can omit this optional field; actual prepared beatmaps set it.
 - An optional user-imported .osk supplies real root-level WAV/MP3/OGG hit sounds and slider loops when absent from the map. Limited `skin.ini` `LayeredHitSounds` is applied. No default skin sounds, skins, replays or beatmaps are distributed in this repository.
-- The music Web Audio clock schedules voices using a 250ms lookahead, DT/HT rates and visual sync offsets; it cancels abandoned sounds after pause, seek, speed change and disposal. Independent music and effects gain buses provide separate volume controls. Pending asynchronous AudioContext resume is invalidated on seek, pause, speed change or dispose. Four concurrent decoders, 48 live voices, unique-sample and byte/event bounds limit resources.
+- The music Web Audio clock schedules voices using a 250ms lookahead, DT/HT rates and visual sync offsets. For DT/HT/map-speed changes it precomputes a WSOLA time-stretched music buffer so pitch is preserved while the clock still advances map time at the effective rate; the stretched buffer is cached per rate and falls back to pitch-changing playbackRate if stretching fails; it cancels abandoned sounds after pause, seek, speed change and disposal. Independent music and effects gain buses provide separate volume controls. Pending asynchronous AudioContext resume is invalidated on seek, pause, speed change or dispose. Four concurrent decoders, 48 live voices, unique-sample and byte/event bounds limit resources.
 
 ## Verification passes
 
@@ -24,7 +24,7 @@ Updated 23 October 2026. **Status: IN PROGRESS, not full osu!stable audio parity
 
 - A licence-approved set of distributable default skin samples; complete user skin.ini sound options, visual skin sprites and persistence.
 - Spinner bonus-tick sounds (the spin loop itself is implemented); slider tracking exact audible parity on varied real osu!stable replays, sound panning, volume weighting, fade behaviour and sample timestamp edge cases.
-- Pitch-preserving DT/HT time stretching. The current `AudioBufferSourceNode.playbackRate` changes pitch along with playback speed; 0.25×–2× viewer speed has the same limitation.
+- WSOLA is a compact dependency-free stretcher, not a mastering-grade time-stretch: real music has not been acoustically compared, transient/phase artifacts are unmeasured, and very large maps pay a one-off preprocessing cost. The 0.25×–2× viewer-speed path uses the same stretcher when preparation succeeds.
 - Real browser/Windows audio latency, decode support, MP3 padding/acoustic sync, skin visual integration and offline MP4 audio mix.
 - Real osu! API replay access and real private fixture parity. The normal CI-friendly judgement check is not proof of real parity.
 

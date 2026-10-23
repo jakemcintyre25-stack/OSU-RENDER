@@ -25,6 +25,13 @@ class TestAudioContext {
     this.gains.push(gain);
     return gain as unknown as GainNode;
   }
+  createBuffer(channels: number, length: number, sampleRate: number): AudioBuffer {
+    const data = Array.from({ length: channels }, () => new Float32Array(length));
+    return {
+      numberOfChannels: channels, length, sampleRate, duration: length / sampleRate,
+      getChannelData: (channel: number) => data[channel],
+    } as unknown as AudioBuffer;
+  }
   createBufferSource(): AudioBufferSourceNode {
     const source = {
       playbackRate: { value: 1 }, buffer: null, connect: vi.fn(),
@@ -129,6 +136,24 @@ describe('Web Audio master clock seek, rate, pause and visual offset', () => {
     expect(audio.gains[1].gain.value).toBe(0);
     clock.seek(1000);
     expect(clock.now()).toBe(1000);
+    clock.dispose();
+  });
+
+  it('uses a pitch-stretched music buffer for DT/HT playback', async () => {
+    const clock = new Clock();
+    audio.decodeAudioData.mockResolvedValue(audio.createBuffer(2, 12_000, 48_000));
+    await clock.load(new ArrayBuffer(8));
+    expect(await clock.prepareRate(1.5)).toBe(true);
+    clock.rate = 1.5;
+    clock.seek(150);
+    await clock.play();
+    const source = audio.sources.at(-1) as unknown as {
+      playbackRate: { value: number };
+      start: ReturnType<typeof vi.fn>;
+    };
+    expect(source.playbackRate.value).toBe(1);
+    // 150 ms of map time is 100 ms inside the stretched buffer.
+    expect(source.start.mock.calls[0][1]).toBeCloseTo(0.1, 6);
     clock.dispose();
   });
 
